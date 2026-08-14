@@ -371,6 +371,8 @@
     .cta-phone { margin-top: 18px; }
     .cta-phone a { color: #fff; font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 26px; text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
     .cta-phone a .ic { color: var(--safety); }
+    .cta-phone-note { margin-top: 18px; color: #dfe6ee; font-weight: 600; font-size: 15px; line-height: 1.4; }
+    .cta-phone-note .ic { color: var(--safety); margin-right: 6px; }
     .cta-form { background: var(--paper); border-radius: 12px; padding: 22px; }
     .cta-form h3 { font-size: 23px; margin-bottom: 4px; }
     .cta-form .sub { font-size: 13px; color: var(--text-soft); margin-bottom: 14px; }
@@ -540,15 +542,13 @@
 
       <!-- CALL TO ACTION -->
       <!--
-        NOTE: The lead form below is a DESIGN MOCKUP with a safe interim.
-        Until you connect a form service, the button opens the visitor's email
-        app addressed to CONTACT_EMAIL (set in the script) with their calculator
-        numbers pre-filled, so no lead is silently lost.
-        TO COLLECT LEADS AUTOMATICALLY (recommended), do ONE of:
-          A) Formspree: give the form below an action + method and delete the JS submit handler.
-             Example: action="https://formspree.io/f/XXXXXXX" method="POST"
-          B) Google Form: swap this whole block for your embedded form iframe.
-        Also replace the phone number and CONTACT_EMAIL placeholders below.
+        Lead form is wired to Formspree. Submissions are sent by AJAX (visitor
+        stays on this page) to the endpoint in the form's action, and each lead
+        email includes the visitor's calculator numbers via the hidden fields,
+        kept in sync by setLeadFields() in the script.
+        To change where leads go, update the form ID in the action URL below
+        (and/or the target email inside your Formspree dashboard).
+        TODO: to add a click-to-call number, drop it into the .cta-phone-note line.
       -->
       <section class="cta" id="cta">
         <div class="hazard-thin" aria-hidden="true"></div>
@@ -561,19 +561,18 @@
               <li>Built for home services owners</li>
               <li>Know your number before you ever list</li>
             </ul>
-            <div class="cta-phone">
-              <!-- TODO: replace with your real phone number -->
-              <a href="tel:+15551234567"><span class="ic" aria-hidden="true">&#128222;</span> (555) 123-4567</a>
+            <div class="cta-phone-note">
+              <span class="ic" aria-hidden="true">&#128222;</span> Prefer to talk it through? Drop your number below and we'll call you back.
             </div>
           </div>
 
           <div class="cta-form">
             <h3>Get my free valuation</h3>
             <div class="sub">Takes 30 seconds. A real person reviews your numbers and reaches out &mdash; no obligation.</div>
-            <form id="leadForm" novalidate>
+            <form id="leadForm" action="https://formspree.io/f/xrpzlqep" method="POST" novalidate>
               <div class="row">
                 <label for="lf-name">Name</label>
-                <input id="lf-name" name="name" autocomplete="name" placeholder="Your name" />
+                <input id="lf-name" name="name" autocomplete="name" placeholder="Your name" required />
               </div>
               <div class="row">
                 <label for="lf-phone">Phone</label>
@@ -581,11 +580,26 @@
               </div>
               <div class="row">
                 <label for="lf-email">Email</label>
-                <input id="lf-email" name="email" type="email" autocomplete="email" placeholder="you@email.com" />
+                <input id="lf-email" name="email" type="email" autocomplete="email" placeholder="you@email.com" required />
               </div>
+
+              <!-- spam honeypot: bots fill this, humans never see it -->
+              <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />
+              <!-- email subject + the visitor's calculator numbers, kept in sync by the script -->
+              <input type="hidden" name="_subject" id="hf-subject" value="New valuation lead" />
+              <input type="hidden" name="Trade" id="hf-trade" />
+              <input type="hidden" name="Revenue" id="hf-revenue" />
+              <input type="hidden" name="Operating expenses" id="hf-expenses" />
+              <input type="hidden" name="Owner pay &amp; perks" id="hf-owner" />
+              <input type="hidden" name="One-time costs" id="hf-onetime" />
+              <input type="hidden" name="EBITDA" id="hf-ebitda" />
+              <input type="hidden" name="Adjusted EBITDA" id="hf-adj" />
+              <input type="hidden" name="Multiple" id="hf-multiple" />
+              <input type="hidden" name="Estimated value" id="hf-value" />
+
               <button class="btn btn-primary" type="submit" id="lf-submit">Get My Free Valuation &rarr;</button>
               <div class="formnote">Your calculator numbers are included automatically. We never share your info.</div>
-              <div class="cta-confirm" id="lf-confirm">Thanks! Your email app should open with your details ready to send.</div>
+              <div class="cta-confirm" id="lf-confirm">Thanks &mdash; we've got your numbers and we'll reach out shortly.</div>
             </form>
           </div>
         </div>
@@ -764,42 +778,75 @@
         ebitda: ebitda, adjEbitda: adjEbitda, margin: margin, multiple: m,
         value: base, low: low, high: high
       };
+      setLeadFields(state.result);
     }
 
-    // ---- lead form: interim mailto so no live lead is lost. ----
-    // TODO: replace with your real inbox, or connect Formspree/Google (see form comment).
-    var CONTACT_EMAIL = "you@totalityventures.com";
-    el("leadForm").addEventListener("submit", function (e) {
+    // ---- lead form: submits to Formspree via AJAX; visitor stays on the page ----
+    // Keep the form's hidden fields in sync with the latest calculator results,
+    // so every lead email includes the visitor's numbers.
+    function setLeadFields(r) {
+      if (!r || !el("leadForm")) return;
+      el("hf-trade").value    = r.trade || "";
+      el("hf-revenue").value  = fmtMoney(r.revenue || 0);
+      el("hf-expenses").value = fmtMoney(r.expenses || 0);
+      el("hf-owner").value    = fmtMoney(r.owner || 0);
+      el("hf-onetime").value  = fmtMoney(r.onetime || 0);
+      el("hf-ebitda").value   = fmtMoney(r.ebitda || 0);
+      el("hf-adj").value      = fmtMoney(r.adjEbitda || 0);
+      el("hf-multiple").value = r.multiple ? r.multiple.toFixed(1) + "x" : "";
+      el("hf-value").value    = fmtMoney(r.value || 0) +
+        " (range " + fmtMoney(r.low || 0) + " - " + fmtMoney(r.high || 0) + ")";
+    }
+
+    function showConfirm(msg, isError) {
+      var c = el("lf-confirm");
+      if (msg) c.textContent = msg;
+      c.style.display = "block";
+      if (isError) {
+        c.style.background = "rgba(229,98,10,.12)";
+        c.style.borderColor = "var(--safety)";
+        c.style.color = "#a4430a";
+      }
+    }
+
+    var leadForm = el("leadForm");
+    leadForm.addEventListener("submit", function (e) {
       e.preventDefault();
-      var r = state.result || {};
-      var name  = el("lf-name").value.trim();
-      var phone = el("lf-phone").value.trim();
-      var email = el("lf-email").value.trim();
-      var lines = [
-        "New valuation lead from the calculator:",
-        "",
-        "Name:  " + (name || "-"),
-        "Phone: " + (phone || "-"),
-        "Email: " + (email || "-"),
-        "",
-        "--- Their calculator inputs ---",
-        "Trade: " + (r.trade || "-"),
-        "Revenue: " + fmtMoney(r.revenue || 0),
-        "Operating expenses: " + fmtMoney(r.expenses || 0),
-        "Owner pay & perks: " + fmtMoney(r.owner || 0),
-        "One-time costs: " + fmtMoney(r.onetime || 0),
-        "",
-        "EBITDA: " + fmtMoney(r.ebitda || 0),
-        "Adjusted EBITDA: " + fmtMoney(r.adjEbitda || 0),
-        "Multiple: " + (r.multiple ? r.multiple.toFixed(1) + "x" : "-"),
-        "Estimated value: " + fmtMoney(r.value || 0) +
-          "  (range " + fmtMoney(r.low || 0) + " - " + fmtMoney(r.high || 0) + ")"
-      ];
-      var subject = "Free valuation request" + (name ? " - " + name : "");
-      window.location.href = "mailto:" + CONTACT_EMAIL +
-        "?subject=" + encodeURIComponent(subject) +
-        "&body="    + encodeURIComponent(lines.join("\n"));
-      el("lf-confirm").style.display = "block";
+      setLeadFields(state.result);
+      var name = el("lf-name").value.trim();
+      el("hf-subject").value = "New valuation lead" + (name ? " - " + name : "");
+
+      var btn = el("lf-submit");
+      var original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Sending…";
+
+      fetch(leadForm.action, {
+        method: "POST",
+        body: new FormData(leadForm),
+        headers: { "Accept": "application/json" }
+      }).then(function (res) {
+        if (res.ok) {
+          leadForm.reset();
+          btn.textContent = "Sent ✓";
+          showConfirm("Thanks — we've got your numbers and we'll reach out shortly.", false);
+        } else {
+          res.json().then(function (data) {
+            var msg = (data && data.errors && data.errors.length)
+              ? data.errors.map(function (x) { return x.message; }).join(", ")
+              : "Something went wrong — please try again in a moment.";
+            showConfirm(msg, true);
+          }).catch(function () {
+            showConfirm("Something went wrong — please try again in a moment.", true);
+          });
+          btn.disabled = false;
+          btn.textContent = original;
+        }
+      }).catch(function () {
+        showConfirm("Network hiccup — please try again.", true);
+        btn.disabled = false;
+        btn.textContent = original;
+      });
     });
 
     // stamp
