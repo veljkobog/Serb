@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>What's My Business Worth? — Home Services EBITDA Valuation Calculator</title>
+  <meta name="description" content="A plain-English EBITDA valuation calculator built for home services businesses — HVAC, plumbing, electrical, roofing, landscaping and more. See what your company could sell for." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --steel:        #1b2430;   /* deep charcoal steel */
+      --steel-2:      #232f3d;
+      --steel-3:      #2e3d4f;
+      --ink:          #10161e;
+      --safety:       #ff7a1a;   /* safety orange */
+      --safety-dark:  #e5620a;
+      --hi-vis:       #ffd21f;   /* hi-vis yellow */
+      --steel-blue:   #3f7cad;
+      --line:         #3a4a5c;
+      --paper:        #f4f1ea;   /* off-white worksite paper */
+      --paper-2:      #ffffff;
+      --text:         #1b2430;
+      --text-soft:    #55606d;
+      --good:         #2e9e5b;
+      --shadow:       0 10px 30px rgba(0,0,0,.25);
+      --radius:       14px;
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Barlow', system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      background: var(--steel);
+      background-image:
+        linear-gradient(180deg, var(--steel) 0%, var(--ink) 100%);
+      line-height: 1.5;
+    }
+
+    h1, h2, h3, .display {
+      font-family: 'Barlow Condensed', 'Barlow', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      margin: 0;
+    }
+
+    .wrap { max-width: 1140px; margin: 0 auto; padding: 0 20px; }
+
+    /* ---------- Top hazard stripe ---------- */
+    .hazard {
+      height: 10px;
+      background: repeating-linear-gradient(
+        -45deg, var(--hi-vis) 0 22px, var(--ink) 22px 44px);
+    }
+
+    /* ---------- Header ---------- */
+    header {
+      padding: 34px 0 26px;
+      border-bottom: 3px solid var(--safety);
+    }
+    .brand { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .badge {
+      width: 58px; height: 58px; flex: 0 0 auto;
+      background: var(--safety);
+      border-radius: 12px;
+      display: grid; place-items: center;
+      box-shadow: 0 4px 0 var(--safety-dark);
+      transform: rotate(-3deg);
+    }
+    .badge svg { width: 34px; height: 34px; }
+    header h1 {
+      color: #fff;
+      font-size: clamp(30px, 5.5vw, 52px);
+      font-weight: 800;
+      line-height: .98;
+    }
+    header h1 .accent { color: var(--hi-vis); }
+    .subhead {
+      color: #b9c4d0;
+      font-size: clamp(15px, 2.2vw, 19px);
+      margin-top: 12px;
+      max-width: 640px;
+      font-weight: 500;
+    }
+
+    /* ---------- Layout ---------- */
+    main { padding: 30px 0 60px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 26px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--paper);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,.15);
+    }
+    .card-head {
+      background: var(--steel-2);
+      color: #fff;
+      padding: 16px 22px;
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 3px solid var(--safety);
+    }
+    .card-head .num {
+      background: var(--safety);
+      color: var(--ink);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      width: 30px; height: 30px; border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 20px;
+      flex: 0 0 auto;
+    }
+    .card-head h2 { font-size: 24px; font-weight: 700; }
+    .card-body { padding: 22px; }
+
+    /* ---------- Industry chips ---------- */
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip {
+      cursor: pointer;
+      border: 2px solid var(--line);
+      background: var(--paper-2);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 9px 16px;
+      font-weight: 600;
+      font-size: 15px;
+      display: inline-flex; align-items: center; gap: 8px;
+      transition: transform .06s ease, border-color .12s, background .12s;
+      user-select: none;
+    }
+    .chip:hover { border-color: var(--safety); }
+    .chip:active { transform: translateY(1px); }
+    .chip.active {
+      background: var(--safety);
+      border-color: var(--safety-dark);
+      color: var(--ink);
+      box-shadow: 0 3px 0 var(--safety-dark);
+    }
+    .chip .ic { font-size: 17px; line-height: 1; }
+
+    /* ---------- Inputs ---------- */
+    .field { margin-bottom: 20px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: block;
+      font-weight: 700;
+      font-size: 15px;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .field .hint {
+      font-size: 13px;
+      color: var(--text-soft);
+      margin: 2px 0 8px;
+    }
+    .money-input {
+      position: relative;
+      display: flex; align-items: center;
+    }
+    .money-input .dollar {
+      position: absolute; left: 14px;
+      font-weight: 700; font-size: 20px; color: var(--text-soft);
+      pointer-events: none;
+    }
+    .money-input input {
+      width: 100%;
+      font-family: 'Barlow', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      padding: 14px 14px 14px 32px;
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      background: var(--paper-2);
+      color: var(--text);
+      transition: border-color .12s, box-shadow .12s;
+      -moz-appearance: textfield;
+    }
+    .money-input input::-webkit-outer-spin-button,
+    .money-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .money-input input:focus {
+      outline: none;
+      border-color: var(--safety);
+      box-shadow: 0 0 0 4px rgba(255,122,26,.18);
+    }
+    .addback-tag {
+      display: inline-block;
+      background: rgba(46,158,91,.14);
+      color: var(--good);
+      font-weight: 700;
+      font-size: 12px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ---------- Slider ---------- */
+    .slider-row { margin-top: 6px; }
+    .slider-top {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .slider-top .mult {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800; font-size: 30px; color: var(--safety-dark);
+    }
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 10px; border-radius: 999px;
+      background: linear-gradient(90deg, var(--steel-blue), var(--safety));
+      outline: none; margin: 4px 0;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--ink);
+      border: 4px solid var(--hi-vis);
+      cursor: grab; box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--ink); border: 4px solid var(--hi-vis);
+      cursor: grab;
+    }
+    .scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-soft); font-weight: 600; }
+    .range-note {
+      margin-top: 10px; font-size: 13px; color: var(--text-soft);
+      background: rgba(63,124,173,.1);
+      border-left: 3px solid var(--steel-blue);
+      padding: 8px 12px; border-radius: 0 8px 8px 0;
+    }
+
+    /* ---------- Results panel ---------- */
+    .result-card { position: sticky; top: 18px; }
+    .result-card .card-head { background: var(--ink); }
+    .headline {
+      text-align: center;
+      padding: 26px 18px 22px;
+      background:
+        radial-gradient(120% 120% at 50% 0%, var(--steel-3), var(--steel-2));
+      color: #fff;
+    }
+    .headline .label {
+      font-family: 'Barlow Condensed', sans-serif;
+      text-transform: uppercase; letter-spacing: .08em;
+      font-size: 15px; color: var(--hi-vis); font-weight: 700;
+    }
+    .headline .value {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      font-size: clamp(40px, 8vw, 60px);
+      line-height: 1;
+      margin: 6px 0 4px;
+    }
+    .headline .rangeline {
+      font-size: 15px; color: #c6d1dc; font-weight: 600;
+    }
+    .headline .rangeline b { color: #fff; }
+
+    .stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+      background: var(--line);
+    }
+    .stat {
+      background: var(--paper-2);
+      padding: 16px 18px;
+    }
+    .stat .k {
+      font-size: 12.5px; font-weight: 700; color: var(--text-soft);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .stat .v {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800; font-size: 27px; color: var(--text);
+      margin-top: 2px;
+    }
+    .stat.wide { grid-column: 1 / -1; }
+    .stat .v.pos { color: var(--good); }
+    .stat .v.neg { color: var(--safety-dark); }
+
+    .meter { margin-top: 10px; height: 8px; border-radius: 999px; background: #e3ddd0; overflow: hidden; }
+    .meter > span { display: block; height: 100%; background: var(--good); border-radius: 999px; transition: width .25s; }
+
+    .disclaimer {
+      padding: 16px 18px;
+      font-size: 12.5px; color: var(--text-soft);
+      background: var(--paper);
+      border-top: 1px dashed var(--line);
+    }
+
+    /* ---------- Explainer ---------- */
+    .explainer { margin-top: 30px; }
+    .explainer .card-body { padding: 8px 22px 8px; }
+    details {
+      border-bottom: 1px solid rgba(0,0,0,.12);
+      padding: 4px 0;
+    }
+    details:last-child { border-bottom: none; }
+    summary {
+      cursor: pointer; list-style: none;
+      font-weight: 700; font-size: 17px;
+      padding: 14px 30px 14px 4px;
+      position: relative;
+      color: var(--text);
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: "+"; position: absolute; right: 6px; top: 11px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 26px; font-weight: 800; color: var(--safety-dark);
+      transition: transform .15s;
+    }
+    details[open] summary::after { content: "–"; }
+    details p { margin: 0 0 14px; color: var(--text-soft); font-size: 15px; }
+
+    .cta-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
+    .btn {
+      appearance: none; border: none; cursor: pointer;
+      font-family: 'Barlow Condensed', sans-serif;
+      text-transform: uppercase; letter-spacing: .03em;
+      font-weight: 800; font-size: 18px;
+      padding: 14px 22px; border-radius: 10px;
+      display: inline-flex; align-items: center; gap: 8px;
+      transition: transform .06s, filter .12s;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--safety); color: var(--ink); box-shadow: 0 4px 0 var(--safety-dark); }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-ghost { background: transparent; color: #fff; border: 2px solid var(--line); }
+    .btn-ghost:hover { border-color: var(--safety); }
+
+    footer {
+      text-align: center; color: #8a97a4; font-size: 13px;
+      padding: 30px 20px 46px;
+    }
+    footer a { color: var(--hi-vis); text-decoration: none; }
+
+    .print-only { display: none; }
+    @media print {
+      body { background: #fff; color: #000; }
+      .hazard, .chips, .cta-row, .explainer, footer, .btn { display: none !important; }
+      .card { box-shadow: none; border: 1px solid #999; }
+    }
+  </style>
+</head>
+<body>
+  <div class="hazard" aria-hidden="true"></div>
+
+  <header>
+    <div class="wrap">
+      <div class="brand">
+        <div class="badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#10161e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/>
+          </svg>
+        </div>
+        <h1>What's My <span class="accent">Business</span> Worth?</h1>
+      </div>
+      <p class="subhead">A no-nonsense EBITDA valuation tool built for home services owners — HVAC, plumbing, electrical, roofing, landscaping and more. Plug in your numbers, see a real ballpark.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <div class="grid">
+
+        <!-- LEFT: INPUTS -->
+        <div class="col-inputs">
+
+          <!-- 1. Trade -->
+          <section class="card">
+            <div class="card-head"><span class="num">1</span><h2>Pick Your Trade</h2></div>
+            <div class="card-body">
+              <p class="hint" style="margin-top:0">Buyers pay more for some trades than others. This sets your starting multiple — you can fine-tune it in step&nbsp;3.</p>
+              <div class="chips" id="trades" role="listbox" aria-label="Trade"></div>
+            </div>
+          </section>
+
+          <!-- 2. Numbers -->
+          <section class="card" style="margin-top:26px">
+            <div class="card-head"><span class="num">2</span><h2>Your Numbers</h2></div>
+            <div class="card-body">
+              <p class="hint" style="margin-top:0">Use last year's totals. Round numbers are fine — this is a ballpark.</p>
+
+              <div class="field">
+                <label for="revenue">Annual Revenue</label>
+                <div class="hint">Total sales / collections for the year, before any costs.</div>
+                <div class="money-input">
+                  <span class="dollar">$</span>
+                  <input id="revenue" inputmode="numeric" placeholder="1,200,000" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="expenses">Operating Expenses</label>
+                <div class="hint">Everything it costs to run the business: crew wages, materials, fuel, trucks, rent, insurance, marketing. <b>Leave out</b> your own pay, loan interest, taxes, and depreciation.</div>
+                <div class="money-input">
+                  <span class="dollar">$</span>
+                  <input id="expenses" inputmode="numeric" placeholder="900,000" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="owner">Owner's Pay & Perks <span class="addback-tag">Add-back</span></label>
+                <div class="hint">What you pay yourself plus personal perks run through the business (vehicle, phone, health, etc.). A buyer adds this back because they'd run the shop differently.</div>
+                <div class="money-input">
+                  <span class="dollar">$</span>
+                  <input id="owner" inputmode="numeric" placeholder="120,000" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="onetime">One-Time / Non-Recurring Costs <span class="addback-tag">Add-back</span></label>
+                <div class="hint">Stuff that won't repeat: a lawsuit, a big one-off repair, startup costs, a bad-year write-off. Optional.</div>
+                <div class="money-input">
+                  <span class="dollar">$</span>
+                  <input id="onetime" inputmode="numeric" placeholder="0" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. Multiple -->
+          <section class="card" style="margin-top:26px">
+            <div class="card-head"><span class="num">3</span><h2>The Multiple</h2></div>
+            <div class="card-body">
+              <p class="hint" style="margin-top:0">Your business is worth its adjusted EBITDA times a multiple. Bigger, cleaner, recurring-revenue shops earn a higher one. We set a starting point for your trade — nudge it if you know your business runs stronger or weaker.</p>
+              <div class="slider-row">
+                <div class="slider-top">
+                  <span style="font-weight:700">Valuation multiple</span>
+                  <span class="mult" id="multLabel">3.5×</span>
+                </div>
+                <input type="range" id="multiple" min="1.5" max="7" step="0.1" value="3.5" />
+                <div class="scale"><span>1.5×</span><span>7.0×</span></div>
+                <div class="range-note" id="rangeNote"></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="cta-row">
+            <button class="btn btn-primary" id="printBtn" type="button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Save / Print Result
+            </button>
+            <button class="btn btn-ghost" id="resetBtn" type="button">Start Over</button>
+          </div>
+        </div>
+
+        <!-- RIGHT: RESULT -->
+        <aside class="col-result">
+          <section class="card result-card">
+            <div class="card-head"><span class="num">$</span><h2>Estimated Value</h2></div>
+
+            <div class="headline">
+              <div class="label">What your business could sell for</div>
+              <div class="value" id="valMain">$0</div>
+              <div class="rangeline">Range: <b id="valLow">$0</b> &nbsp;–&nbsp; <b id="valHigh">$0</b></div>
+            </div>
+
+            <div class="stats">
+              <div class="stat">
+                <div class="k">EBITDA</div>
+                <div class="v" id="ebitda">$0</div>
+              </div>
+              <div class="stat">
+                <div class="k">Adjusted EBITDA</div>
+                <div class="v" id="adjEbitda">$0</div>
+              </div>
+              <div class="stat wide">
+                <div class="k">EBITDA Margin <span style="font-weight:600;text-transform:none;letter-spacing:0">(healthy home services ≈ 10–20%)</span></div>
+                <div class="v" id="margin">0%</div>
+                <div class="meter"><span id="marginBar" style="width:0%"></span></div>
+              </div>
+            </div>
+
+            <div class="disclaimer">
+              <b>Ballpark only.</b> This is an educational estimate, not a formal appraisal or an offer. Real deals swing on customer mix, recurring contracts, equipment, backlog, owner dependence and the books. Talk to a business broker or M&amp;A advisor before you sell.
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <!-- EXPLAINER -->
+      <section class="card explainer">
+        <div class="card-head" style="border-bottom-color:var(--steel-blue)"><h2 style="font-size:22px">Straight Talk: How This Works</h2></div>
+        <div class="card-body">
+          <details open>
+            <summary>What the heck is EBITDA?</summary>
+            <p>It stands for <b>Earnings Before Interest, Taxes, Depreciation &amp; Amortization</b>. Big words for a simple idea: how much money the business actually makes from doing the work, before the accountant and the bank take their cut. It's the number buyers care about because it strips out things that change from owner to owner.</p>
+          </details>
+          <details>
+            <summary>Why "add back" my own pay?</summary>
+            <p>When someone buys your shop, they're buying the profit <i>after</i> paying a manager to run it — not after paying <i>you</i> specifically. So the salary and perks you take out get added back to show the true earning power. Same goes for one-time costs that a new owner will never see again.</p>
+          </details>
+          <details>
+            <summary>Where does the multiple come from?</summary>
+            <p>Home services businesses typically sell for somewhere between <b>2.5× and 5× adjusted EBITDA</b>. Recurring maintenance contracts, a strong brand, trained crews that don't need you day-to-day, and clean books push it higher. Heavy owner-dependence, choppy revenue, or a single big customer push it lower. Pest control and HVAC with service agreements tend to top the range; one-truck operations sit at the bottom.</p>
+          </details>
+          <details>
+            <summary>What makes MY number go up?</summary>
+            <p>Recurring revenue (memberships, maintenance plans), a book of repeat customers, documented systems, a management layer so the business runs without you, well-maintained trucks and equipment, and two-plus years of clean financials. Fix those before you sell and you can move the multiple — and the price — meaningfully.</p>
+          </details>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      Built for the trades. Estimates are for education only — not financial, tax, or legal advice.<br />
+      <span id="stamp"></span>
+    </div>
+  </footer>
+
+  <script>
+    "use strict";
+
+    // Trade → suggested multiple + range. Ranges reflect typical small home-services deals.
+    var TRADES = [
+      { id: "hvac",       name: "HVAC",            ic: "❄️", base: 4.0, lo: 3.0, hi: 5.5, note: "Service agreements and recurring maintenance make HVAC a buyer favorite." },
+      { id: "plumbing",   name: "Plumbing",        ic: "🔧", base: 3.7, lo: 3.0, hi: 5.0, note: "Steady demand and emergency work keep plumbing shops in solid demand." },
+      { id: "electrical", name: "Electrical",      ic: "⚡", base: 3.7, lo: 3.0, hi: 5.0, note: "Licensed trades with repeat commercial work earn stronger multiples." },
+      { id: "roofing",    name: "Roofing",         ic: "🏠", base: 3.2, lo: 2.5, hi: 4.5, note: "Project-based and weather-driven, so recurring revenue is the key lever." },
+      { id: "landscape",  name: "Landscaping",     ic: "🌳", base: 3.2, lo: 2.5, hi: 4.5, note: "Maintenance contracts lift value; pure install/mow work sits lower." },
+      { id: "cleaning",   name: "Cleaning",        ic: "🧽", base: 2.9, lo: 2.0, hi: 4.0, note: "Recurring residential/commercial routes are what buyers pay up for." },
+      { id: "pest",       name: "Pest Control",    ic: "🐜", base: 4.3, lo: 3.5, hi: 6.0, note: "Subscription-style recurring revenue makes pest control a premium trade." },
+      { id: "garage",     name: "Garage / Doors",  ic: "🚪", base: 3.3, lo: 2.5, hi: 4.5, note: "Repair + install mix with good margins; brand and reviews matter." },
+      { id: "paint",      name: "Painting",        ic: "🎨", base: 2.8, lo: 2.0, hi: 3.8, note: "Labor-heavy and project-based; systems and crews drive the multiple." },
+      { id: "general",    name: "General / Other", ic: "🛠️", base: 3.3, lo: 2.5, hi: 4.5, note: "A blended home-services benchmark. Adjust for your recurring revenue." }
+    ];
+
+    var state = { trade: TRADES[0], multiple: TRADES[0].base, touchedMultiple: false };
+
+    // ---- helpers ----
+    function fmtMoney(n) {
+      if (!isFinite(n)) n = 0;
+      var neg = n < 0;
+      n = Math.round(Math.abs(n));
+      var s = "$" + n.toLocaleString("en-US");
+      return neg ? "-" + s : s;
+    }
+    function parseNum(v) {
+      var n = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
+      return isNaN(n) ? 0 : n;
+    }
+    function el(id) { return document.getElementById(id); }
+
+    // ---- build trade chips ----
+    (function buildTrades() {
+      var box = el("trades");
+      TRADES.forEach(function (t, i) {
+        var c = document.createElement("button");
+        c.className = "chip" + (i === 0 ? " active" : "");
+        c.type = "button";
+        c.setAttribute("role", "option");
+        c.setAttribute("aria-selected", i === 0 ? "true" : "false");
+        c.dataset.id = t.id;
+        c.innerHTML = '<span class="ic">' + t.ic + '</span>' + t.name;
+        c.addEventListener("click", function () { selectTrade(t.id); });
+        box.appendChild(c);
+      });
+    })();
+
+    function selectTrade(id) {
+      var t = TRADES.filter(function (x) { return x.id === id; })[0];
+      if (!t) return;
+      state.trade = t;
+      // Reset multiple to the trade's base whenever they switch trades.
+      state.multiple = t.base;
+      state.touchedMultiple = false;
+      el("multiple").min = Math.max(1.5, t.lo - 1);
+      el("multiple").max = Math.min(8, t.hi + 1.5);
+      el("multiple").value = t.base;
+      document.querySelectorAll(".chip").forEach(function (c) {
+        var on = c.dataset.id === id;
+        c.classList.toggle("active", on);
+        c.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      compute();
+    }
+
+    // ---- money input formatting (thousands separators, live) ----
+    ["revenue", "expenses", "owner", "onetime"].forEach(function (id) {
+      var input = el(id);
+      input.addEventListener("input", function () {
+        var caretFromEnd = input.value.length - input.selectionStart;
+        var num = parseNum(input.value);
+        input.value = num ? num.toLocaleString("en-US") : "";
+        var pos = input.value.length - caretFromEnd;
+        try { input.setSelectionRange(pos, pos); } catch (e) {}
+        compute();
+      });
+    });
+
+    el("multiple").addEventListener("input", function () {
+      state.multiple = parseFloat(this.value);
+      state.touchedMultiple = true;
+      compute();
+    });
+
+    el("printBtn").addEventListener("click", function () { window.print(); });
+    el("resetBtn").addEventListener("click", function () {
+      ["revenue", "expenses", "owner", "onetime"].forEach(function (id) { el(id).value = ""; });
+      selectTrade(TRADES[0].id);
+    });
+
+    // ---- core calculation ----
+    function compute() {
+      var revenue  = parseNum(el("revenue").value);
+      var expenses = parseNum(el("expenses").value);
+      var owner    = parseNum(el("owner").value);
+      var onetime  = parseNum(el("onetime").value);
+
+      var ebitda    = revenue - expenses;
+      var adjEbitda = ebitda + owner + onetime;
+      var margin    = revenue > 0 ? (adjEbitda / revenue) * 100 : 0;
+
+      var m   = state.multiple;
+      var mLo = Math.max(1, m - 0.5);
+      var mHi = m + 0.5;
+
+      var base = Math.max(0, adjEbitda) * m;
+      var low  = Math.max(0, adjEbitda) * mLo;
+      var high = Math.max(0, adjEbitda) * mHi;
+
+      // multiple label + range note
+      el("multLabel").textContent = m.toFixed(1) + "×";
+      var t = state.trade;
+      el("rangeNote").innerHTML =
+        "<b>" + t.name + "</b> shops usually trade around <b>" +
+        t.lo.toFixed(1) + "×–" + t.hi.toFixed(1) + "×</b>. " + t.note;
+
+      // stats
+      el("ebitda").textContent = fmtMoney(ebitda);
+      el("adjEbitda").textContent = fmtMoney(adjEbitda);
+      var adjNode = el("adjEbitda");
+      adjNode.className = "v " + (adjEbitda > 0 ? "pos" : (adjEbitda < 0 ? "neg" : ""));
+
+      el("margin").textContent = (revenue > 0 ? margin.toFixed(1) : "0") + "%";
+      var barPct = Math.max(0, Math.min(100, (margin / 25) * 100)); // 25% margin fills the bar
+      var bar = el("marginBar");
+      bar.style.width = barPct + "%";
+      bar.style.background = margin >= 12 ? "var(--good)" : (margin >= 6 ? "var(--hi-vis)" : "var(--safety)");
+
+      // headline
+      el("valMain").textContent = fmtMoney(base);
+      el("valLow").textContent  = fmtMoney(low);
+      el("valHigh").textContent = fmtMoney(high);
+    }
+
+    // stamp
+    el("stamp").textContent = "Multiples are general home-services benchmarks and update as you tune step 3.";
+
+    compute();
+  </script>
+</body>
+</html>
