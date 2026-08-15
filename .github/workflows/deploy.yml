@@ -33,10 +33,25 @@ jobs:
           # Enable Pages for the repo automatically if it isn't already.
           enablement: true
 
+      # Stage only the public site. Anything under internal/ is an internal tool
+      # and must never be published to GitHub Pages.
+      - name: Stage public files
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp .nojekyll _site/ 2>/dev/null || true
+          echo "Publishing:"; ls -A _site
+
+      - name: Fail if internal files leaked into the artifact
+        run: |
+          if [ -e _site/internal ]; then
+            echo "::error::internal/ must not be published to GitHub Pages"; exit 1
+          fi
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

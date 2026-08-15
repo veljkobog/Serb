@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow, noarchive" />
+<title>Partner Sourcing Desk — Internal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --steel:#1b2430; --steel-2:#232f3d; --steel-3:#2e3d4f; --ink:#10161e;
+  --safety:#ff7a1a; --safety-dark:#e5620a; --hi-vis:#ffd21f; --steel-blue:#3f7cad;
+  --line:#33445780; --paper:#f4f1ea; --text:#e8edf3; --text-soft:#9fb0c2;
+  --good:#2e9e5b; --warn:#e0a80f; --bad:#d9534f;
+  --radius:12px; --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; font-family:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color:var(--text); background:var(--ink); line-height:1.45; font-size:15px;
+}
+h1,h2,h3,h4,.display{font-family:'Barlow Condensed','Barlow Semi Condensed',system-ui,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0;font-weight:700}
+a{color:var(--steel-blue)}
+button{font-family:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#37485c;border-radius:6px}
+::-webkit-scrollbar-track{background:#131b24}
+
+/* ---------- shell ---------- */
+.hazard{height:6px;background:repeating-linear-gradient(-45deg,var(--hi-vis) 0 18px,var(--ink) 18px 36px)}
+.topbar{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:14px 22px;background:var(--steel);border-bottom:3px solid var(--safety);
+}
+.logo{display:flex;align-items:center;gap:12px}
+.logo .mark{
+  width:40px;height:40px;background:var(--safety);border-radius:10px;display:grid;place-items:center;
+  box-shadow:0 3px 0 var(--safety-dark);transform:rotate(-3deg);flex:0 0 auto;
+}
+.logo .mark svg{width:24px;height:24px}
+.logo h1{font-size:23px;line-height:1;color:#fff}
+.logo h1 .accent{color:var(--hi-vis)}
+.logo .sub{font-size:11px;color:var(--text-soft);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.private-tag{
+  font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  background:#3a2a10;color:var(--hi-vis);border:1px solid #6b5218;padding:4px 9px;border-radius:20px;
+}
+.topbar .spacer{flex:1}
+.search{
+  display:flex;align-items:center;gap:8px;background:var(--ink);border:1px solid #3a4a5c;
+  border-radius:10px;padding:8px 12px;min-width:250px;flex:1;max-width:400px;
+}
+.search input{background:none;border:0;color:var(--text);font-size:14px;width:100%;outline:none}
+.search svg{width:16px;height:16px;flex:0 0 auto;opacity:.6}
+.viewtabs{display:flex;background:var(--ink);border:1px solid #3a4a5c;border-radius:10px;padding:3px;gap:3px}
+.viewtabs button{
+  background:none;border:0;color:var(--text-soft);padding:7px 14px;border-radius:7px;cursor:pointer;
+  font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+}
+.viewtabs button.on{background:var(--safety);color:#1b1206}
+.ghost-btn{
+  background:none;border:1px solid #3a4a5c;color:var(--text-soft);border-radius:9px;
+  padding:8px 13px;cursor:pointer;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+}
+.ghost-btn:hover{border-color:var(--safety);color:var(--safety)}
+.ghost-btn.on{background:var(--safety);border-color:var(--safety);color:#1b1206}
+
+.layout{display:flex;align-items:flex-start;min-height:calc(100vh - 76px)}
+
+/* ---------- vertical rail ---------- */
+.rail{
+  width:262px;flex:0 0 262px;background:var(--steel);border-right:1px solid #2b3948;
+  padding:16px 12px 40px;position:sticky;top:0;max-height:100vh;overflow-y:auto;
+}
+.rail h3{font-size:12px;letter-spacing:.16em;color:var(--text-soft);margin:6px 6px 10px}
+.vbtn{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;
+  color:var(--text);padding:9px 10px;border-radius:9px;cursor:pointer;font-size:14px;line-height:1.25;
+  border-left:3px solid transparent;
+}
+.vbtn:hover{background:#2a3746}
+.vbtn.on{background:#2e3d4f;border-left-color:var(--safety);font-weight:600}
+.vbtn .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.vbtn .n{margin-left:auto;font-size:11px;font-weight:700;color:var(--text-soft);background:#1b2430;border-radius:20px;padding:2px 8px;min-width:26px;text-align:center}
+.vbtn.on .n{background:var(--safety);color:#1b1206}
+.rail .divider{height:1px;background:#2b3948;margin:14px 6px}
+
+/* ---------- main ---------- */
+.main{flex:1;min-width:0;padding:18px 22px 60px}
+.filters{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+select,.filters input{
+  background:var(--steel);color:var(--text);border:1px solid #3a4a5c;border-radius:9px;
+  padding:8px 11px;font-size:13px;font-family:inherit;outline:none;
+}
+.chipbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.chip{
+  background:#2a3746;border:1px solid #3a4a5c;color:var(--text-soft);border-radius:20px;
+  padding:5px 11px;font-size:11.5px;cursor:pointer;font-weight:600;
+}
+.chip.on{background:var(--safety);border-color:var(--safety);color:#1b1206}
+.resultline{font-size:12.5px;color:var(--text-soft);margin:0 0 12px;letter-spacing:.04em}
+.resultline b{color:var(--hi-vis)}
+
+/* ---------- cards ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.card{
+  background:var(--steel);border:1px solid #2f3e4e;border-left:4px solid var(--steel-3);
+  border-radius:var(--radius);padding:15px 16px;cursor:pointer;position:relative;
+  transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease;
+}
+.card:hover{transform:translateY(-2px);border-color:#4a5f76;box-shadow:var(--shadow)}
+.card h4{font-size:19px;color:#fff;line-height:1.1}
+.card .kind{
+  display:inline-block;margin-bottom:7px;font-size:9.5px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 8px;border-radius:5px;
+}
+.k-platform{background:#123324;color:#5fd693;border:1px solid #1e5c40}
+.k-sponsor{background:#1a2740;color:#7fb0e8;border:1px solid #2c4570}
+.k-both{background:#33240f;color:var(--hi-vis);border:1px solid #6b5218}
+.card .meta{font-size:12.5px;color:var(--text-soft);margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.card .meta .sep{opacity:.35}
+.card .verts{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+.vtag{font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:5px;letter-spacing:.03em;white-space:nowrap}
+.card .geo{margin-top:11px;font-size:11.5px;color:var(--text-soft);display:flex;gap:4px;flex-wrap:wrap}
+.st{background:#26333f;border-radius:4px;padding:2px 6px;font-weight:600;font-size:10.5px;letter-spacing:.04em}
+.st.more{background:none;color:#66788c}
+.card .conf{margin-top:11px;font-size:10px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:flex;align-items:center;gap:6px}
+.c-verified{color:var(--good)} .c-partial{color:var(--warn)} .c-unverified{color:#e0715f}
+.conf .bulb{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:rgba(6,10,14,.72);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;height:100vh;width:min(620px,100%);background:var(--steel);
+  border-left:3px solid var(--safety);z-index:50;transform:translateX(102%);
+  transition:transform .22s cubic-bezier(.3,.8,.4,1);overflow-y:auto;box-shadow:-20px 0 50px rgba(0,0,0,.5);
+}
+.drawer.on{transform:none}
+.dhead{padding:20px 24px 16px;border-bottom:1px solid #2f3e4e;position:sticky;top:0;background:var(--steel);z-index:2}
+.dhead h2{font-size:29px;color:#fff;line-height:1.02;padding-right:44px}
+.dclose{position:absolute;top:18px;right:20px;background:#2a3746;border:0;color:var(--text);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:19px;line-height:1}
+.dclose:hover{background:var(--safety);color:#1b1206}
+.dbody{padding:6px 24px 60px}
+.sec{padding:17px 0;border-bottom:1px solid #2a3746}
+.sec:last-child{border-bottom:0}
+.sec h4{font-size:12px;letter-spacing:.16em;color:var(--safety);margin-bottom:9px}
+.kv{display:grid;grid-template-columns:118px 1fr;gap:7px 14px;font-size:14px}
+.kv dt{color:var(--text-soft);font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;padding-top:2px}
+.kv dd{margin:0}
+.deal{display:flex;gap:11px;padding:8px 0;border-bottom:1px dashed #2a3746;font-size:13.5px}
+.deal:last-child{border-bottom:0}
+.deal .when{flex:0 0 78px;color:var(--hi-vis);font-weight:700;font-size:11.5px;letter-spacing:.04em;padding-top:2px}
+.deal .what b{color:#fff}
+.deal .what span{color:var(--text-soft);display:block;font-size:12.5px}
+.linkrow{display:flex;gap:8px;flex-wrap:wrap}
+.linkbtn{
+  display:inline-flex;align-items:center;gap:6px;background:#2a3746;border:1px solid #3a4a5c;
+  color:var(--text);text-decoration:none;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:600;
+}
+.linkbtn:hover{border-color:var(--safety);color:var(--safety)}
+.linkbtn.primary{background:var(--safety);border-color:var(--safety);color:#1b1206}
+.linkbtn.primary:hover{background:var(--hi-vis);border-color:var(--hi-vis);color:#1b1206}
+.notebox{
+  width:100%;min-height:90px;background:var(--ink);border:1px solid #3a4a5c;border-radius:9px;
+  color:var(--text);padding:11px;font-family:inherit;font-size:13.5px;resize:vertical;outline:none;
+}
+.notebox:focus{border-color:var(--safety)}
+.savedtag{font-size:11px;color:var(--good);margin-left:8px;opacity:0;transition:opacity .2s}
+.savedtag.on{opacity:1}
+.banner{
+  background:#33240f;border:1px solid #6b5218;color:var(--hi-vis);border-radius:9px;
+  padding:10px 13px;font-size:12.5px;margin-bottom:14px;line-height:1.4;
+}
+.banner b{color:#fff}
+
+/* ---------- map ---------- */
+.mapwrap{background:var(--steel);border:1px solid #2f3e4e;border-radius:var(--radius);padding:20px}
+.tilegrid{display:grid;grid-template-columns:repeat(12,1fr);gap:5px;max-width:820px;margin:0 auto}
+.tile{
+  aspect-ratio:1;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;
+  letter-spacing:.03em;cursor:pointer;border:1px solid #2b3948;background:#1c2530;color:#4d5f73;
+  transition:transform .1s ease;position:relative;
+}
+.tile:hover{transform:scale(1.09);z-index:3;border-color:var(--hi-vis)}
+.tile.sel{outline:2px solid var(--hi-vis);outline-offset:1px}
+.tile .cnt{position:absolute;bottom:2px;right:4px;font-size:8.5px;opacity:.75;font-weight:700}
+.legend{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:18px;font-size:11.5px;color:var(--text-soft);flex-wrap:wrap}
+.legend .sw{display:inline-block;width:15px;height:15px;border-radius:4px;margin-right:5px;vertical-align:-3px;border:1px solid #2b3948}
+.statepanel{margin-top:20px;background:var(--ink);border:1px solid #2f3e4e;border-radius:10px;padding:16px}
+.statepanel h4{font-size:15px;color:#fff;margin-bottom:10px}
+.plist{display:flex;flex-wrap:wrap;gap:7px}
+.pill{
+  background:#2a3746;border:1px solid #3a4a5c;border-radius:7px;padding:6px 11px;font-size:12.5px;
+  cursor:pointer;font-weight:600;
+}
+.pill:hover{border-color:var(--safety);color:var(--safety)}
+
+/* ---------- gaps ---------- */
+.gapgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.gapcard{background:var(--steel);border:1px solid #2f3e4e;border-radius:var(--radius);padding:16px}
+.gapcard h4{font-size:16px;color:#fff;margin-bottom:4px}
+.gapcard .lead{font-size:12.5px;color:var(--text-soft);margin-bottom:11px}
+.gaplist{display:flex;flex-wrap:wrap;gap:5px}
+.gaplist .st{background:#3a2020;color:#e8a396}
+.gaplist .st.thin{background:#3a3320;color:var(--hi-vis)}
+.empty{text-align:center;padding:70px 20px;color:var(--text-soft)}
+.empty h3{font-size:22px;color:#fff;margin-bottom:8px}
+@media(max-width:900px){
+  .layout{flex-direction:column}
+  .rail{width:100%;flex:none;position:static;max-height:none;border-right:0;border-bottom:1px solid #2b3948;display:flex;flex-wrap:wrap;gap:6px;padding:12px}
+  .rail h3,.rail .divider{width:100%}
+  .vbtn{width:auto;border-left:0;border:1px solid #3a4a5c;border-radius:20px;padding:6px 12px}
+  .vbtn.on{border-color:var(--safety)}
+  .tilegrid{max-width:100%}
+  .tile{font-size:8.5px}
+}
+</style>
+</head>
+<body>
+<div class="hazard"></div>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1b1206" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-5h6v5"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Partner <span class="accent">Sourcing Desk</span></h1>
+      <div class="sub">EL Internal &mdash; Buyer Coverage &amp; Deal Targeting</div>
+    </div>
+  </div>
+  <span class="private-tag">Internal only</span>
+  <div class="spacer"></div>
+  <label class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Search partner, sponsor, brand, state, city&hellip;" autocomplete="off" />
+  </label>
+  <div class="viewtabs">
+    <button data-view="directory" class="on">Directory</button>
+    <button data-view="map">Coverage</button>
+    <button data-view="gaps">White Space</button>
+  </div>
+  <button class="ghost-btn" id="exportBtn" title="Download the dataset with your edits and notes merged in">Export</button>
+</div>
+
+<div class="layout">
+  <nav class="rail">
+    <h3>Verticals</h3>
+    <div id="rail"></div>
+    <div class="divider"></div>
+    <h3>Buyer type</h3>
+    <div id="kindRail"></div>
+  </nav>
+
+  <main class="main">
+    <div id="viewDirectory">
+      <div class="filters">
+        <select id="stateFilter"><option value="">All geographies</option></select>
+        <select id="sponsorFilter"><option value="">All sponsors / backers</option></select>
+        <select id="sortBy">
+          <option value="name">Sort: A&ndash;Z</option>
+          <option value="activity">Sort: Deal activity</option>
+          <option value="coverage">Sort: Geographic reach</option>
+          <option value="confidence">Sort: Needs verification first</option>
+        </select>
+        <div class="chipbar">
+          <button class="chip" data-conf="verified">Verified</button>
+          <button class="chip" data-conf="partial">Partial</button>
+          <button class="chip" data-conf="unverified">Needs research</button>
+        </div>
+      </div>
+      <p class="resultline" id="resultline"></p>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div id="viewMap" hidden>
+      <div class="banner">
+        <b>Where our buyers already are.</b> Darker states = more partners active in that vertical.
+        Click any state to see who is there. Use this to match a seller to the buyers who already
+        operate in their market &mdash; and <b>White Space</b> to find the states they are paying to enter.
+      </div>
+      <div class="mapwrap">
+        <div class="tilegrid" id="tilegrid"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="statepanel" id="statepanel" hidden></div>
+    </div>
+
+    <div id="viewGaps" hidden>
+      <div class="banner">
+        <b>White space = sourcing priority.</b> For each vertical, these are the states where our
+        partners have <b>no</b> disclosed presence (red) or only a single partner (yellow).
+        A seller in a red state is a first-mover entry for every buyer in that vertical &mdash; that is
+        where the competitive tension, and the multiple, is highest.
+      </div>
+      <div class="gapgrid" id="gapgrid"></div>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+<script>
+/* =====================================================================
+   PARTNER DATASET
+   ---------------------------------------------------------------------
+   confidence:  "verified"   - sourced from a press release / sponsor site
+                "partial"    - platform confirmed, some fields still thin
+                "unverified" - on the list, not yet researched. FILL THESE IN.
+   Edit notes in the app (saved to your browser) then hit Export to get a
+   merged JSON you can paste back into this file.
+   ===================================================================== */
+const VERTICALS = {
+  hvac:    {label:"HVAC / Plumbing / Electrical", color:"#3f7cad"},
+  comm:    {label:"Commercial Mechanical & Facility Services", color:"#2f8f8f"},
+  roof:    {label:"Roofing & Exteriors", color:"#c9622f"},
+  land:    {label:"Landscaping & Grounds", color:"#4f9e46"},
+  tree:    {label:"Tree Care", color:"#6d9b3a"},
+  fire:    {label:"Fire, Life Safety & Security", color:"#c0392b"},
+  it:      {label:"IT / MSP / Cybersecurity", color:"#7a5cc4"},
+  pave:    {label:"Paving & Site Work", color:"#8a8a8a"},
+  restore: {label:"Restoration", color:"#b5893a"},
+  facil:   {label:"Facilities Maintenance & Janitorial", color:"#4a7fa8"},
+  capital: {label:"Capital / Sponsor", color:"#5b6b7d"},
+  other:   {label:"Unclassified &mdash; needs research", color:"#7d5a5a"}
+};
+
+const PARTNERS = [
+/* ---------- HVAC / P / E residential ---------- */
+{id:"apex", name:"Apex Service Partners", kind:"platform", sponsor:"Alpine Investors (Apollo minority, announced May 2026)",
+ verticals:["hvac"], hq:"Tampa, FL", founded:2019,
+ footprint:"National — 75 brands across 46 states, ~13,000 employees, ~$1.3B revenue",
+ states:["FL","TX","CA","AZ","NV","CO","UT","GA","NC","SC","TN","VA","MD","PA","NY","NJ","OH","IN","IL","MI","WI","MN","MO","KS","OK","AR","LA","AL","MS","KY","WA","OR","ID","NM","IA","NE","CT","MA","DE","WV"],
+ brands:["~300 local operating businesses under 75 brands"],
+ buyBox:"Residential HVAC, plumbing, electrical. The most acquisitive platform in the trade — ~60 add-ons closed in 2025 alone. Will look at a wide size band.",
+ sourcingNotes:"Highest-volume buyer on our list by a wide margin. Good home for solid residential operators that are too small for a standalone process. Expect speed, and expect them to already know the market.",
+ deals:[{when:"May 2026",what:"Apollo Funds minority investment",note:"Alpine also adding capital; close expected Q4 2026"},
+        {when:"2025",what:"~60 add-on acquisitions",note:"Brought platform to ~300 businesses"}],
+ links:[{label:"Alpine Investors",url:"https://alpineinvestors.com/"}],
+ confidence:"verified"},
+
+{id:"champions", name:"Champions Group", kind:"platform", sponsor:"Blackstone (agreed Feb 2026, from Odyssey Investment Partners)",
+ verticals:["hvac"], hq:"Brea, CA",
+ footprint:"Multi-metro — 1,800+ field technicians, ~150,000 active membership customers",
+ states:["CA","TX","AZ","NV","GA","FL","CO"],
+ brands:[],
+ buyBox:"Residential HVAC, plumbing and electrical in major metros. Membership/recurring-revenue heavy.",
+ sourcingNotes:"Just recapped at roughly $2.5B EV / ~18.5x EBITDA — fresh Blackstone capital and a mandate to deploy. Strong fit for large metro operators with real membership bases. Time-sensitive: new sponsors buy hardest in the first 18 months.",
+ deals:[{when:"Feb 2026",what:"Blackstone to acquire from Odyssey Investment Partners",note:"~$2.5B implied EV, ~18.5x EBITDA; Odyssey + mgmt retain minority"}],
+ links:[],
+ confidence:"verified"},
+
+{id:"sila", name:"SILA Services", kind:"platform", sponsor:"Goldman Sachs Alternatives (majority, from Morgan Stanley Capital Partners, Nov 2024)",
+ verticals:["hvac"], hq:"King of Prussia, PA",
+ footprint:"30+ brands across the Northeast, Mid-Atlantic and Midwest",
+ states:["PA","NJ","NY","MD","VA","DE","CT","MA","OH","IN","DC"],
+ brands:["My Plumber Plus","TriState Home Services","Triangle Heating, Cooling, Plumbing & Electrical"],
+ buyBox:"Residential + light commercial HVAC, plumbing, electrical, water treatment, indoor air quality, home performance.",
+ sourcingNotes:"The default call for anything in the I-95 corridor from Richmond to Boston, plus Ohio Valley. Water treatment and IAQ bolt-ons are in scope, which widens the target set beyond core trades.",
+ deals:[{when:"Nov 2024",what:"Goldman Sachs Alternatives majority investment",note:"Bought from Morgan Stanley Capital Partners, which backed Sila from 2021"},
+        {when:"Nov 2023",what:"Triangle Heating, Cooling, Plumbing & Electrical",note:"Entry into Central Pennsylvania"},
+        {when:"2022–24",what:"My Plumber Plus / TriState Home Services",note:"DMV and Frederick County, MD"}],
+ links:[{label:"silaservices.com",url:"https://silaservices.com/"}],
+ confidence:"verified"},
+
+{id:"anyhour", name:"Any Hour Group", kind:"platform", sponsor:"Knox Lane (July 2021)",
+ verticals:["hvac"], hq:"Orem / Salt Lake City, UT",
+ footprint:"Mountain West leader, expanding into the West Coast and Midwest",
+ states:["UT","ID","AZ","NM","NV","CO","CA","OR","MN"],
+ brands:["Any Hour Services","Magic Electric","Perfect Plumbing","Strongbuilt USA"],
+ buyBox:"Residential HVAC, plumbing, electrical. Brands and management stay in place.",
+ sourcingNotes:"Owns the Mountain West. Best fit for Intermountain and Southwest sellers who want to keep their name on the truck. Recent moves into CA, OR and MN mean they are actively buying outside their home region.",
+ deals:[{when:"2024–25",what:"Multiple multi-business partnership rounds",note:"Extended into CO, NV, CA, OR, MN; leadership extended in UT and NV"},
+        {when:"Jul 2021",what:"Knox Lane investment forms Any Hour Group",note:"Built on Any Hour Services, greater Salt Lake City"}],
+ links:[{label:"anyhourgroup.com",url:"https://anyhourgroup.com/press/"}],
+ confidence:"verified"},
+
+{id:"goettl", name:"Goettl", kind:"platform", sponsor:"Cortec Group (Dec 2021)",
+ verticals:["hvac"], hq:"Las Vegas, NV", founded:1939,
+ footprint:"Southwest — Arizona, Nevada, Texas",
+ states:["NV","AZ","TX"],
+ brands:["Goettl Air Conditioning & Plumbing"],
+ buyBox:"Residential HVAC and plumbing — maintenance, repair, replacement. Regional and local providers.",
+ sourcingNotes:"Tight, deep geographic focus rather than national sprawl. If the seller is in Phoenix, Tucson, Las Vegas or a Texas metro, Goettl should be on the list. Ken Goodrich is a known operator-buyer; founder-to-founder conversations land well here.",
+ deals:[{when:"Dec 2021",what:"Cortec Group Fund VII growth recapitalization",note:"Partnership with CEO Ken Goodrich and management"}],
+ links:[{label:"goettl.com",url:"https://www.goettl.com/locations/"}],
+ confidence:"verified"},
+
+{id:"southern", name:"Southern Home Services", kind:"platform", sponsor:"",
+ verticals:["hvac"], hq:"", founded:2022,
+ footprint:"Southern U.S. tri-trade platform",
+ states:["TX","GA","FL","TN","NC","SC","AL"],
+ brands:[],
+ buyBox:"Residential HVAC, plumbing and electrical in the Southern U.S. Local brands preserved.",
+ sourcingNotes:"Formed 2022 and already multi-deal. Confirm current sponsor and exact metro list before pitching — footprint below is inferred from their stated Southern focus, not from a disclosed location list.",
+ deals:[],
+ links:[],
+ confidence:"partial"},
+
+{id:"redwood", name:"Redwood Services", kind:"platform", sponsor:"",
+ verticals:["hvac"], hq:"Memphis, TN",
+ footprint:"Multi-state residential services platform",
+ states:["TN","MS","AR","AL","MO","TX"],
+ brands:[],
+ buyBox:"Residential repair, replacement and maintenance. People-first partnership model with local brand preservation.",
+ sourcingNotes:"Known for an aggressive acquisition cadence and a culture-forward pitch — good match for owners whose main worry is what happens to their people. Verify the current state list before it goes in front of a seller.",
+ deals:[],
+ links:[],
+ confidence:"partial"},
+
+{id:"columbia", name:"Columbia Home Services", kind:"platform", sponsor:"Oxbow Equity Partners; Tenex Capital Management",
+ verticals:["hvac"], hq:"",
+ footprint:"Secondary but growing U.S. markets",
+ states:[],
+ brands:[],
+ buyBox:"Residential and light commercial repair, maintenance, replacement and installation — deliberately in secondary markets rather than top-10 metros.",
+ sourcingNotes:"The useful one for sellers outside major metros, where most platforms will not go. If a deal is getting no traction because the market is 'too small', start here.",
+ deals:[],
+ links:[],
+ confidence:"partial"},
+
+{id:"seer", name:"The SEER Group", kind:"platform", sponsor:"",
+ verticals:["hvac","comm"], hq:"",
+ footprint:"Residential and commercial trade services",
+ states:[],
+ brands:[],
+ buyBox:"Residential and commercial HVAC, electrical and plumbing. Notably flexible structures — will buy all or part of a business.",
+ sourcingNotes:"The partial-sale option is the differentiator. Route owners here who are not ready for a full exit or who want a second bite — that is a real objection-handler no one else on this list offers as openly.",
+ deals:[],
+ links:[],
+ confidence:"partial"},
+
+{id:"comfortconnect", name:"Comfort Connect", kind:"platform", sponsor:"", verticals:["hvac"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"servicecountry", name:"Service Country", kind:"platform", sponsor:"", verticals:["hvac"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"solidaire", name:"Solidaire", kind:"platform", sponsor:"", verticals:["hvac"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
+ deals:[], links:[], confidence:"unverified"},
+
+/* ---------- Commercial mechanical / facility ---------- */
+{id:"orion", name:"Orion Services Group", kind:"platform", sponsor:"Alpine Investors",
+ verticals:["comm"], hq:"Oklahoma City, OK",
+ footprint:"National commercial facility services platform, incl. Astra Service Partners division",
+ states:["OK","MO","MD","VA","DC","TX","CA","IL","PA","DE"],
+ brands:["Jackson Mechanical Service","Astra Service Partners","Air Comfort Service Group","Knott Mechanical"],
+ buyBox:"Commercial and industrial HVACR, boiler and plumbing services. Family-owned businesses are the stated target.",
+ sourcingNotes:"The commercial counterpart to Apex — same sponsor, different lane. Any commercial mechanical contractor that gets pitched to a residential platform should come here instead. Eight acquisitions in 2025 and still moving in 2026.",
+ deals:[{when:"Mar 2026",what:"Air Comfort Service Group → Astra Service Partners",note:"Senior leadership retained"},
+        {when:"2026",what:"Knott Mechanical",note:"Mid-Atlantic; services 1,700+ buildings"},
+        {when:"2025",what:"Eight acquisitions across North America",note:""}],
+ links:[{label:"Alpine — Orion",url:"https://alpineinvestors.com/update/alpine-launches-orion-group/"}],
+ confidence:"verified"},
+
+{id:"pine", name:"Pine Services Group", kind:"platform", sponsor:"Evergreen Services Group",
+ verticals:["comm","facil","it"], hq:"",
+ footprint:"North America — permanent-hold holding company",
+ states:[],
+ brands:[],
+ buyBox:"Essential residential and commercial field service businesses; also ERP and technology-enabled services.",
+ sourcingNotes:"Permanent ownership, no fund life, no forced exit. That is the pitch for owners who hate the idea of being flipped in five years. Genuinely different from every sponsor-backed platform on this list.",
+ deals:[],
+ links:[{label:"pineservicesgroup.com",url:"https://pineservicesgroup.com/"}],
+ confidence:"partial"},
+
+{id:"atlas", name:"Atlas Facilities Maintenance", kind:"platform", sponsor:"",
+ verticals:["facil","land"], hq:"Portland, OR",
+ footprint:"16+ states, 100+ commercial accounts",
+ states:["OR","WA","CA","ID","NV","UT","AZ","CO","TX","IL","GA","FL","NC","VA","NY","PA"],
+ brands:[],
+ buyBox:"Commercial cleaning, building services, landscaping, general maintenance, specialized exterior cleaning. Schools, healthcare, government and retail properties. Explicitly looking for property-management partners.",
+ sourcingNotes:"Built by commercial real estate operators, so they underwrite like landlords, not like trades buyers. Best fit for janitorial/facilities businesses with institutional contracts rather than route-density residential work.",
+ deals:[],
+ links:[{label:"atlasfacilities.com",url:"https://atlasfacilities.com/acquisitions/"}],
+ confidence:"partial"},
+
+{id:"cobalt", name:"Cobalt Service Partners", kind:"platform", sponsor:"Alpine Investors",
+ verticals:["fire","comm"], hq:"",
+ footprint:"West Coast, Midwest and Gulf South",
+ states:["CA","WA","OR","IL","MI","LA","TX"],
+ brands:["Automated Door Ways","Toepfer Security","Industrial Door Company","Homeland Safety Systems"],
+ buyBox:"Commercial access solutions — overhead and automatic doors, access control, video surveillance, security integration.",
+ sourcingNotes:"A category most sourcing lists miss entirely. Commercial door and gate businesses are routinely mispriced because owners do not know an institutional buyer exists for them. High-conviction outbound target for us.",
+ deals:[{when:"Recent",what:"ADW, Toepfer Security, IDC and Homeland Safety Systems",note:"Four businesses; added West Coast and Midwest plus access control, video surveillance, overhead doors"}],
+ links:[],
+ confidence:"verified"},
+
+{id:"centerpoint", name:"CenterPoint Companies", kind:"platform", sponsor:"", verticals:["comm"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+/* ---------- Roofing & exteriors ---------- */
+{id:"raftrx", name:"RAFTRx Roofing + Exteriors", kind:"platform", sponsor:"Saw Mill Capital (with Everberg Capital)",
+ verticals:["roof"], hq:"Duluth, GA", founded:2023,
+ footprint:"35+ local offices across 15–16 states, 8 brands",
+ states:["GA","FL","TX","NC","SC","TN","AL","IL","WI","MO","OK","CO","VA","KY","IN"],
+ brands:["Gold Medal Roofing","Apex General Contracting"],
+ buyBox:"Residential and commercial roofing and exteriors, with a primary focus on insurance-claim demand.",
+ sourcingNotes:"The insurance-restoration angle is the filter here. Storm/claims-driven roofers that scare off retail-focused buyers are exactly what RAFTRx wants. Pair this with Stronghouse when a seller is storm-heavy.",
+ deals:[{when:"Sep 2025",what:"Apex General Contracting",note:"Added Illinois and Wisconsin"},
+        {when:"Jul 2025",what:"Gold Medal Roofing",note:"Market expansion"},
+        {when:"2023",what:"Platform launched by Saw Mill Capital",note:""}],
+ links:[{label:"raftrxroofing.com",url:"https://raftrxroofing.com/acquisition/"}],
+ confidence:"verified"},
+
+{id:"stonegrove", name:"Stonegrove Roofing Partners", kind:"platform", sponsor:"Strand Equity (minority disclosed May 2025)",
+ verticals:["roof"], hq:"", founded:2024,
+ footprint:"14 partner locations across 9 states, 7 distinct roofing brands",
+ states:["KS","IN","MO","OH","TX","IL","KY","TN","MI"],
+ brands:["AR Roofing","Moss Roofing","TEC","Guns N Hoses"],
+ buyBox:"Residential roofing. Each partner keeps its local identity, brand and culture.",
+ sourcingNotes:"Young platform (founded 2024) still assembling its map — that usually means a more motivated buyer and less competition on price than the mature roll-ups. Midwest-weighted so far.",
+ deals:[{when:"Mar 2026",what:"Guns N Hoses",note:""},
+        {when:"Sep 2025",what:"Moss Roofing",note:"Indianapolis / Central Indiana"},
+        {when:"Feb 2025",what:"AR Roofing",note:"Kansas"}],
+ links:[{label:"stonegroveroofing.com",url:"https://stonegroveroofing.com/our-process/"}],
+ confidence:"verified"},
+
+{id:"alloy", name:"Alloy Roofing", kind:"platform", sponsor:"Percheron Capital",
+ verticals:["roof"], hq:"Atlanta, GA", founded:2024,
+ footprint:"National ambition, launched from a Houston base",
+ states:["GA","TX"],
+ brands:["Amstill Roofing"],
+ buyBox:"Residential roofing repair and replacement services businesses, nationwide.",
+ sourcingNotes:"Launched Nov 2024 with fresh capital, a national mandate and only a handful of platforms done — so nearly every good residential roofer in the country is white space for them. CEO Greg Weller came from ServiceMaster, so expect institutional process and real speed.",
+ deals:[{when:"Nov 2024",what:"Percheron Capital launches Alloy Roofing",note:"Initial partnership with Amstill Roofing, Houston, TX"}],
+ links:[{label:"percheron.com",url:"https://percheron.com/media/percheron-capital-launches-alloy-roofing/"}],
+ confidence:"verified"},
+
+{id:"infinity", name:"Infinity Home Services", kind:"platform", sponsor:"LightBay Capital & Freeman Spogli (Dec 2022)",
+ verticals:["roof"], hq:"New Berlin, WI", founded:1997,
+ footprint:"14+ partner brands across new and existing markets",
+ states:["WI","MN","IL","MI","IN","OH","IA","MO","CO","TX"],
+ brands:["14 partner brands"],
+ buyBox:"Non-discretionary roofing replacement and other exterior home services.",
+ sourcingNotes:"Note the emphasis on non-discretionary replacement rather than storm/insurance work — a different underwriting lens from RAFTRx. Retail replacement roofers with steady lead flow fit best.",
+ deals:[{when:"2025",what:"13th and 14th partner brands added",note:"Continued expansion in new and existing markets"},
+        {when:"Dec 2022",what:"LightBay Capital and Freeman Spogli partnership",note:""}],
+ links:[{label:"infinityhomeservices.com",url:"https://www.infinityhomeservices.com/why-ihs"}],
+ confidence:"verified"},
+
+{id:"stronghouse", name:"Stronghouse Brands / Stronghouse Solutions", kind:"platform", sponsor:"O2 Investment Partners (2021)",
+ verticals:["roof"], hq:"Addison, TX",
+ footprint:"59 locations across 30 states",
+ states:["TX","OK","KS","MO","AR","LA","CO","NM","AZ","NV","UT","NE","IA","MN","WI","IL","IN","OH","MI","KY","TN","GA","FL","AL","NC","SC","VA","PA","NY","NJ"],
+ brands:["Formed from 8 regional brands, now consolidating under one name"],
+ buyBox:"Roofing, siding, gutters, windows, doors and storm restoration for homeowners and property managers.",
+ sourcingNotes:"Broadest exterior product set on the list and a genuinely national footprint — they can absorb a mixed roofing/siding/window business that pure roofers would discount. Storm-response capability is a core competency, not a side line.",
+ deals:[{when:"Recent",what:"Rebrand from Capital Construction Holdings to Stronghouse Solutions",note:"Simplifying multiple regional brands into one national brand"},
+        {when:"2021",what:"O2 Investment Partners foundational investment",note:"Eight regional brands at formation"}],
+ links:[{label:"stronghousebrands.com",url:"https://stronghousebrands.com/brands/"}],
+ confidence:"verified"},
+
+{id:"rca", name:"Roofing Corp of America", kind:"platform", sponsor:"FirstService Corporation (controlling interest, Dec 2023)",
+ verticals:["roof","comm"], hq:"Atlanta, GA",
+ footprint:"16 regional branches across 11 states, 900+ employees, ~$400M revenue",
+ states:["GA","FL","TX","NC","SC","TN","AL","CO","VA","OH","AZ"],
+ brands:["Innovative Roofing Group","Front Range Roofing Systems","Springer-Peterson Roofing & Sheet Metal"],
+ buyBox:"Commercial roofing and sheet metal contractors.",
+ sourcingNotes:"Commercial, not residential — do not confuse the two when routing a lead. Now owned by a strategic (FirstService) rather than a fund, which means permanent capital and no exit clock. Strong fit for established commercial roofers with service departments.",
+ deals:[{when:"Dec 2023",what:"FirstService acquires controlling interest from Soundcore Capital",note:"Soundcore built the platform through 10 acquisitions from 2020"},
+        {when:"Recent",what:"Springer-Peterson Roofing & Sheet Metal; Front Range Roofing Systems",note:""}],
+ links:[],
+ confidence:"verified"},
+
+{id:"ridgeline", name:"Ridgeline Roofing & Restoration", kind:"platform", sponsor:"Bertram Capital",
+ verticals:["roof","restore"], hq:"",
+ footprint:"Residential and commercial roofing",
+ states:["AL","GA","TN","FL"],
+ brands:[],
+ buyBox:"Residential and commercial roofing solutions, plus restoration.",
+ sourcingNotes:"Bertram-backed and buys across both residential and commercial, which is unusual and useful — a mixed-book roofer does not have to split itself to fit. Confirm current state coverage before pitching.",
+ deals:[],
+ links:[{label:"Bertram portfolio",url:"https://www.bertramcapital.com/portfolio/ridgeline-roofing-restoration"}],
+ confidence:"partial"},
+
+{id:"valor", name:"Valor Exterior Partners", kind:"platform", sponsor:"Osceola Capital",
+ verticals:["roof"], hq:"Ohio",
+ footprint:"Roofing and exterior home services",
+ states:["OH"],
+ brands:[],
+ buyBox:"Roofing and exterior home services companies with proven operators.",
+ sourcingNotes:"Veteran-owned and leans hard on service and accountability in its pitch — that framing resonates with a lot of trade owners. Smaller and earlier than the national roofers, so a mid-size Midwest roofer is a meaningful deal to them rather than a rounding error.",
+ deals:[],
+ links:[{label:"valorexteriorpartners.com",url:"https://valorexteriorpartners.com/"}],
+ confidence:"partial"},
+
+{id:"harley", name:"Harley Exteriors", kind:"platform", sponsor:"O2 Investment Partners (Aug 2024)",
+ verticals:["roof"], hq:"Bothell, WA", founded:2002,
+ footprint:"Greater Seattle region",
+ states:["WA"],
+ brands:["Harley Exteriors"],
+ buyBox:"Replacement windows, doors and gutters; residential renovation services.",
+ sourcingNotes:"Single-region operator with a fresh recap — the natural consolidator for the Pacific Northwest. Any Puget Sound window/door/gutter business should be shown here first.",
+ deals:[{when:"Aug 2024",what:"O2 Investment Partners recapitalization",note:"Partnership with founder Christian Daher"}],
+ links:[],
+ confidence:"verified"},
+
+{id:"avi", name:"AVI Roofing", kind:"platform", sponsor:"", verticals:["roof"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+/* ---------- Landscaping / grounds / tree ---------- */
+{id:"alp", name:"American Landscaping Partners", kind:"platform", sponsor:"Shoreline Equity Partners (Aug 2023)",
+ verticals:["land"], hq:"",
+ footprint:"Seven acquisitions since Aug 2023; Mid-Atlantic weighted",
+ states:["MD","VA","PA","WV","NC","DE"],
+ brands:["Landscape Detail","Ultralawn","Ready Field Solutions","Maxalea","Swift Lawn & Land","Precision Landscape Management","Appalachia Landscaping"],
+ buyBox:"Commercial landscaping and grounds maintenance.",
+ sourcingNotes:"Seven deals in roughly two years is a fast clip for landscaping. Mid-Atlantic concentration means an owner in MD/VA/PA gets a strategic premium; outside that band, expect them to want scale.",
+ deals:[{when:"Since Aug 2023",what:"Seven acquisitions",note:"Landscape Detail, Ultralawn, Ready Field Solutions, Maxalea, Swift Lawn & Land, Precision Landscape Management, Appalachia Landscaping"}],
+ links:[{label:"Shoreline Equity",url:"https://shorelineequitypartners.com/"}],
+ confidence:"verified"},
+
+{id:"riverview", name:"Riverview Landscapes", kind:"platform", sponsor:"",
+ verticals:["land"], hq:"",
+ footprint:"21 acquisitions since 2022; Northeast weighted",
+ states:["NY","NJ","CT","PA","MA","VT","NH"],
+ brands:["Nature Scape","Cleveland Brothers Landscaping"],
+ buyBox:"Commercial and residential landscaping and grounds maintenance.",
+ sourcingNotes:"21 deals since 2022 makes this the highest-velocity landscaping buyer we track. Northeast operators should hear this name early. Confirm the current sponsor before pitching.",
+ deals:[{when:"Feb 2026",what:"Cleveland Brothers Landscaping",note:"Corinth, New York"},
+        {when:"Since 2022",what:"21 acquisitions",note:"Including Nature Scape"}],
+ links:[],
+ confidence:"partial"},
+
+{id:"ethoscapes", name:"Ethoscapes", kind:"platform", sponsor:"Evolution Strategy Partners; Genesis Park",
+ verticals:["land"], hq:"Texas",
+ footprint:"Six acquisitions over four years; Texas and Gulf weighted",
+ states:["TX","LA","OK"],
+ brands:["Westco Grounds Maintenance","Champions Hydro-Lawn","Houston Landscapes Unlimited"],
+ buyBox:"Commercial landscaping.",
+ sourcingNotes:"Houston and Texas Gulf Coast is home turf. Competes head-on with Clean Scapes for Texas commercial landscape deals — running both gets us real tension on price.",
+ deals:[{when:"2024",what:"Houston Landscapes Unlimited",note:""},
+        {when:"2023",what:"Champions Hydro-Lawn; Westco Grounds Maintenance",note:""}],
+ links:[],
+ confidence:"verified"},
+
+{id:"cleanscapes", name:"Clean Scapes", kind:"platform", sponsor:"Blue Sage Capital (July 2025)",
+ verticals:["land"], hq:"Austin, TX", founded:2005,
+ footprint:"Largest Texas-based commercial landscape contractor — Austin, Dallas, Fort Worth, San Antonio, Houston",
+ states:["TX"],
+ brands:["Clean Scapes"],
+ buyBox:"Commercial landscape design, installation, maintenance and enhancement across commercial property types.",
+ sourcingNotes:"Brand-new sponsor capital (July 2025) with a stated plan to expand across Texas and beyond — the most motivated landscaping buyer on the board right now. Texas sellers first, but they are explicitly looking past the state line.",
+ deals:[{when:"Jul 2025",what:"Blue Sage Capital investment",note:"Partnership with leadership to accelerate expansion across Texas and beyond"}],
+ links:[{label:"cleanscapes.net",url:"https://cleanscapes.net/"}],
+ confidence:"verified"},
+
+{id:"ruppert", name:"Ruppert Landscape", kind:"platform", sponsor:"Knox Lane",
+ verticals:["land"], hq:"Laytonsville, MD",
+ footprint:"Mid-Atlantic and Southeast, expanding into Florida and the Carolinas",
+ states:["MD","VA","DC","PA","DE","NC","SC","GA","TN","TX","FL"],
+ brands:["Lawnscapes","Ocean Woods Landscaping","Landscapes Unlimited","Greatscapes Property Management Group"],
+ buyBox:"Commercial landscape management and construction.",
+ sourcingNotes:"One of the most respected names in commercial landscaping — the Ruppert name alone will get a seller to take the meeting. Actively pushing south into the Carolinas and Florida, so coastal Southeast operators are in demand.",
+ deals:[{when:"2025",what:"Lawnscapes, Inc.",note:"Florida market expansion"},
+        {when:"2025",what:"Landscapes Unlimited",note:"Wilmington, North Carolina"},
+        {when:"Recent",what:"Ocean Woods Landscaping; Greatscapes Property Management Group",note:"South Carolina"}],
+ links:[{label:"Acquisitions",url:"https://www.ruppertlandscape.com/about/acquisitions-partnerships/"}],
+ confidence:"verified"},
+
+{id:"canopy", name:"Canopy Service Partners", kind:"platform", sponsor:"",
+ verticals:["tree"], hq:"",
+ footprint:"North America",
+ states:[],
+ brands:[],
+ buyBox:"Tree care services businesses.",
+ sourcingNotes:"The only dedicated tree care buyer on our list — so every tree service lead we get should route here by default. Worth a call to get their buy box and target geographies documented properly.",
+ deals:[],
+ links:[{label:"LinkedIn",url:"https://www.linkedin.com/company/canopy-service-partners"}],
+ confidence:"partial"},
+
+/* ---------- Paving ---------- */
+{id:"heartland", name:"Heartland Paving Partners", kind:"platform", sponsor:"Soundcore Capital Partners",
+ verticals:["pave"], hq:"",
+ footprint:"Eight-plus acquisitions across the Midwest, Northeast and Mid-Atlantic",
+ states:["IL","WI","OH","IN","MI","NJ","NY","PA","MD","VA","MO","KY"],
+ brands:["ACI Asphalt & Concrete","S&K Asphalt and Concrete","Klekamp & Company","Asphalt Solutions","ProCru","Professional Paving and Concrete","Garden State Pavement Solutions","Poblocki Paving","Macadam Company"],
+ buyBox:"Commercial paving — pavement maintenance, rehabilitation, repair, milling, resurfacing and new construction. Acquired companies keep their own brand and leadership.",
+ sourcingNotes:"Paving is under-covered by most intermediaries, and Heartland has closed nine deals in about two years. Any commercial paving or pavement-maintenance business from Chicago to the Mid-Atlantic is a live target.",
+ deals:[{when:"2025",what:"Macadam Company",note:"Mid-Atlantic, ~40 years in business"},
+        {when:"May 2025",what:"Poblocki Paving",note:"Wisconsin / Midwest"},
+        {when:"Jan 2025",what:"Garden State Pavement Solutions",note:"New Jersey"},
+        {when:"Jul 2024",what:"Professional Paving and Concrete",note:"Entry into Chicagoland"}],
+ links:[{label:"heartlandpavingpartners.com",url:"https://heartlandpavingpartners.com/"}],
+ confidence:"verified"},
+
+/* ---------- Fire / life safety ---------- */
+{id:"zeus", name:"Zeus", kind:"platform", sponsor:"",
+ verticals:["fire"], hq:"",
+ footprint:"",
+ states:[],
+ brands:[],
+ buyBox:"",
+ sourcingNotes:"Believed to be Zeus Fire & Security, but not confirmed. Do not pitch until the entity, sponsor and buy box are verified — there are several 'Zeus' entities in adjacent markets.",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"cfp", name:"Commercial Fire Protection", kind:"platform", sponsor:"",
+ verticals:["fire"], hq:"",
+ footprint:"", states:[], brands:[],
+ buyBox:"Fire protection and life safety services.",
+ sourcingNotes:"Fire and life safety is one of the cleanest recurring-revenue theses in building services — inspection contracts drive 80%+ recurring revenue at the best platforms, and $5–20M businesses have been trading at roughly 5–9x EBITDA. Worth confirming this partner's specifics quickly.",
+ deals:[], links:[], confidence:"unverified"},
+
+/* ---------- IT / MSP / cyber ---------- */
+{id:"evergreen", name:"Evergreen Services Group", kind:"platform", sponsor:"Alpine Investors",
+ verticals:["it"], hq:"San Francisco, CA",
+ footprint:"160+ businesses globally across 10+ separately-branded regional platforms",
+ states:["CA","WA","OR","TX","IL","NY","MA","GA","FL","CO","MN","PA","NC","AZ","MI"],
+ brands:["10+ regional MSP platforms","Pine Services Group"],
+ buyBox:"Founder-owned managed service providers and IT services businesses. Decentralized model — regional brands stay intact.",
+ sourcingNotes:"The largest acquisition machine in the MSP market: 47 acquisitions confirmed in 2025. Deliberately targets smaller founder-owned MSPs that other buyers consider sub-scale, which makes them the right home for a $1–3M EBITDA IT shop.",
+ deals:[{when:"2025",what:"47 acquisitions confirmed",note:"Across its regional platforms"}],
+ links:[{label:"Recent deals",url:"https://www.evergreensg.com/recent-deals/"}],
+ confidence:"verified"},
+
+{id:"worklyn", name:"Worklyn Partners", kind:"platform+sponsor", sponsor:"Independent — ~$50M capital base",
+ verticals:["it"], hq:"New York, NY",
+ footprint:"Seven acquisitions; New England and Mountain West presence",
+ states:["NY","MA","CT","RI","NH","CO"],
+ brands:["IT Management Solutions (ITMS)","NOYNIM"],
+ buyBox:"Managed IT, cloud services and cybersecurity businesses. Combines cybersecurity venture investing with MSP roll-up.",
+ sourcingNotes:"Cybersecurity capability is the differentiator — an MSP with a real security practice gets valued properly here rather than being underwritten as generic IT support.",
+ deals:[{when:"Recent",what:"IT Management Solutions (ITMS)",note:"Expanded New England footprint"},
+        {when:"Recent",what:"NOYNIM LLC",note:"Denver, CO; Microsoft- and Cisco-certified managed IT"}],
+ links:[{label:"worklynpartners.com",url:"https://www.worklynpartners.com/insights/tag/acquisition"}],
+ confidence:"verified"},
+
+{id:"netsurit", name:"Netsurit", kind:"platform", sponsor:"",
+ verticals:["it"], hq:"New York, NY",
+ footprint:"Seven acquisitions to date; NYC plus South Central U.S.",
+ states:["NY","NJ","TX"],
+ brands:["OMNIPOTECH","U.S. Computer Connection"],
+ buyBox:"Managed service providers serving small and medium businesses.",
+ sourcingNotes:"Actively publishes an acquisition page and closed two deals in 2025. Good fit for NYC-metro and Texas MSPs in the lower-middle market.",
+ deals:[{when:"Apr 2025",what:"OMNIPOTECH",note:"South Central U.S. / Houston-area MSP"},
+        {when:"Jan 2025",what:"U.S. Computer Connection",note:"Multi-category IT services"}],
+ links:[{label:"Acquisitions",url:"https://netsurit.com/en-us/acquisition/"}],
+ confidence:"verified"},
+
+{id:"procern", name:"ProCern Technology Solutions", kind:"platform", sponsor:"",
+ verticals:["it"], hq:"",
+ footprint:"",
+ states:[],
+ brands:["Aldrich Technology"],
+ buyBox:"Managed IT services with a healthcare and long-term-care specialization; also finance, education and manufacturing.",
+ sourcingNotes:"Healthcare/long-term-care IT vertical focus is narrow but valuable — an MSP with a senior-living or clinic book is worth more here than to a generalist.",
+ deals:[{when:"Aug 2023",what:"Aldrich Technology managed IT services business",note:"Buyout / LBO"}],
+ links:[{label:"procern.com",url:"https://procern.com/"}],
+ confidence:"partial"},
+
+{id:"netstock", name:"Netstock", kind:"platform", sponsor:"",
+ verticals:["other"], hq:"",
+ footprint:"",
+ states:[], brands:[],
+ buyBox:"",
+ sourcingNotes:"Flag: public information points to Netstock being an inventory-optimization SaaS product (demand forecasting, replenishment, ERP integration), not a services acquirer. Confirm which entity is actually our partner before routing any deal here.",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"aphix", name:"APHIX", kind:"platform", sponsor:"", verticals:["it"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"subsplit", name:"SubSplit", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"allyservices", name:"Ally Services", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"nexcore", name:"Nexcore", kind:"platform", sponsor:"",
+ verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[],
+ buyBox:"",
+ sourcingNotes:"Flag: the well-known NexCore Group is a healthcare real estate developer, not a services acquirer. Confirm whether our partner is that entity or a different Nexcore before routing anything.",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"ios", name:"IOS", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"4m", name:"4M", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"ironclad", name:"Ironclad Holdings", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"skycrest", name:"Skycrest", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"bakery", name:"Baxter's Bakery", kind:"platform", sponsor:"",
+ verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[],
+ buyBox:"",
+ sourcingNotes:"Flag: sits outside every services vertical on this list. Confirm whether this belongs on the partner roster or landed here by mistake.",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"bluefox", name:"Blue Fox", kind:"platform", sponsor:"Walk On Capital", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"",
+ sourcingNotes:"Walk On Capital portfolio company. Vertical and geography not yet confirmed.",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"link1", name:"Link 1", kind:"platform", sponsor:"Walk On Capital", verticals:["other"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"",
+ sourcingNotes:"Walk On Capital portfolio company. Vertical and geography not yet confirmed.",
+ deals:[], links:[], confidence:"unverified"},
+
+/* ---------- Sponsors / capital ---------- */
+{id:"alpine", name:"Alpine Investors", kind:"sponsor", sponsor:"",
+ verticals:["capital","hvac","comm","it"], hq:"San Francisco, CA",
+ footprint:"Backs Apex Service Partners, Orion Services Group, Cobalt Service Partners and Evergreen Services Group",
+ states:[],
+ brands:["Apex Service Partners","Orion Services Group","Cobalt Service Partners","Evergreen Services Group"],
+ buyBox:"People-first PE building large service platforms across residential trades, commercial mechanical, access solutions and IT.",
+ sourcingNotes:"Four separate platforms on our roster. Route the deal to the right platform rather than the fund — but knowing they are all Alpine tells us capital is not the constraint on any of them.",
+ deals:[{when:"May 2026",what:"Apollo minority investment in Apex",note:""},
+        {when:"Recent",what:"$3.4B single-asset continuation vehicle for Apex",note:""}],
+ links:[{label:"alpineinvestors.com",url:"https://alpineinvestors.com/"}],
+ confidence:"verified"},
+
+{id:"knoxlane", name:"Knox Lane", kind:"sponsor", sponsor:"",
+ verticals:["capital","hvac","land"], hq:"San Francisco, CA",
+ footprint:"Consumer and services investing; backs Any Hour Group and Ruppert Landscape",
+ states:[],
+ brands:["Any Hour Group","Ruppert Landscape"],
+ buyBox:"Growth-oriented investments in consumer and services businesses.",
+ sourcingNotes:"Two strong platforms in two different verticals. A landscaping lead and an HVAC lead can both go to Knox Lane companies — useful when we want one relationship to carry more than one deal.",
+ deals:[{when:"Jul 2021",what:"Any Hour Services investment forms Any Hour Group",note:""},
+        {when:"Recent",what:"Acquired Ruppert Landscape",note:""}],
+ links:[{label:"knoxlane.com",url:"https://www.knoxlane.com/"}],
+ confidence:"verified"},
+
+{id:"o2", name:"O2 Investment Partners", kind:"sponsor", sponsor:"",
+ verticals:["capital","roof"], hq:"Bloomfield Hills, MI",
+ footprint:"Lower middle market; backs Stronghouse Solutions and Harley Exteriors",
+ states:[],
+ brands:["Stronghouse Solutions","Harley Exteriors","Options Exteriors"],
+ buyBox:"Lower-middle-market buyouts, strong exterior home services concentration.",
+ sourcingNotes:"Two exterior platforms at different scales — Stronghouse for national scale, Harley for the Pacific Northwest. Pitch the platform, not the fund.",
+ deals:[{when:"Aug 2024",what:"Harley Exteriors",note:""},
+        {when:"2021",what:"Founded Capital Construction Holdings, now Stronghouse Solutions",note:""}],
+ links:[{label:"o2investment.com",url:"https://o2investment.com/"}],
+ confidence:"verified"},
+
+{id:"percheron", name:"Percheron Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital","roof"], hq:"San Francisco, CA",
+ footprint:"Essential services businesses; launched Alloy Roofing",
+ states:[], brands:["Alloy Roofing"],
+ buyBox:"High-quality essential services businesses.",
+ sourcingNotes:"Launches platforms rather than buying built ones — which means the first few sellers into a Percheron platform get founder-level economics and influence. Alloy is still early.",
+ deals:[{when:"Nov 2024",what:"Launched Alloy Roofing",note:""}],
+ links:[{label:"percheron.com",url:"https://percheron.com/"}],
+ confidence:"verified"},
+
+{id:"bertram", name:"Bertram Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital","roof"], hq:"Foster City, CA",
+ footprint:"Lower middle market; backs Ridgeline Roofing & Restoration",
+ states:[], brands:["Ridgeline Roofing & Restoration"],
+ buyBox:"Lower-middle-market buyouts across services and industrials.",
+ sourcingNotes:"",
+ deals:[], links:[{label:"bertramcapital.com",url:"https://www.bertramcapital.com/"}], confidence:"partial"},
+
+{id:"sawmill", name:"Saw Mill Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital","roof"], hq:"Briarcliff Manor, NY",
+ footprint:"Launched RAFTRx Roofing + Exteriors",
+ states:[], brands:["RAFTRx Roofing + Exteriors"],
+ buyBox:"Founder-led, high-growth businesses; built RAFTRx around insurance-claim roofing.",
+ sourcingNotes:"",
+ deals:[{when:"2023",what:"Launched RAFTR Roofing + Exteriors",note:""}],
+ links:[], confidence:"verified"},
+
+{id:"osceola", name:"Osceola Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital","roof"], hq:"Tampa, FL",
+ footprint:"Lower middle market services; backs Valor Exterior Partners",
+ states:[], brands:["Valor Exterior Partners","Flotilla Partners","Trauma Services"],
+ buyBox:"Lower-middle-market services roll-ups — roofing/exteriors, water treatment, biohazard remediation.",
+ sourcingNotes:"Flotilla (water treatment) and Trauma Services (biohazard) are two niches nobody else on our list covers. Keep them in mind for odd leads that do not fit a standard trade.",
+ deals:[], links:[{label:"Portfolio",url:"https://osceola.com/investments/"}], confidence:"verified"},
+
+{id:"garnett", name:"Garnett Station Partners", kind:"sponsor", sponsor:"",
+ verticals:["capital","roof"], hq:"New York, NY",
+ footprint:"Backs Skybound Service Partners plus roofing investments",
+ states:[], brands:["Skybound Service Partners","Technique Roofing Systems","Unicoat Industrial Roofing"],
+ buyBox:"Residential roofing and exterior services; commercial/industrial roofing.",
+ sourcingNotes:"Skybound launched June 2025 — a brand-new residential roofing and exteriors platform actively looking for its first wave of partners. Early-platform economics apply.",
+ deals:[{when:"Jun 2025",what:"Launched Skybound Service Partners",note:"Residential roofing and exterior services platform"}],
+ links:[{label:"Partnerships",url:"https://garnettstation.com/partnerships/"}], confidence:"verified"},
+
+{id:"timoneer", name:"Timoneer Strategic Partners", kind:"sponsor", sponsor:"",
+ verticals:["capital","restore"], hq:"", founded:2019,
+ footprint:"Control investments in lower- and middle-market essential services",
+ states:[], brands:["Solid Restoration","DRC Restoration"],
+ buyBox:"$1–10M EBITDA. Essential services across business, commercial, consumer, environmental, healthcare, industrial, infrastructure and residential.",
+ sourcingNotes:"The clearest published size band on our whole roster: $1–10M EBITDA. That makes Timoneer an easy first screen for smaller sellers. Restoration is their demonstrated lane — insurance-driven water, fire, mold.",
+ deals:[{when:"Dec 2024",what:"DRC Restoration",note:""},
+        {when:"2024",what:"Solid Restoration, LLC",note:"Majority stake; insurance-based water/fire mitigation, mold remediation"}],
+ links:[{label:"timoneersp.com",url:"https://www.timoneersp.com/"}], confidence:"verified"},
+
+{id:"alphi", name:"Alphi Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital","hvac"], hq:"Toronto, ON",
+ footprint:"Lower middle market; Canadian home services",
+ states:[], brands:["RedBlue HeatPumps & Refrigeration"],
+ buyBox:"Lower-middle-market partnerships; HVAC, plumbing and electrical, residential and commercial.",
+ sourcingNotes:"The Canadian option. If a lead comes in from BC or Ontario, this is the partner who can actually transact there — most of our U.S. platforms cannot.",
+ deals:[{when:"Recent",what:"RedBlue HeatPumps & Refrigeration",note:"Victoria, BC; founded 2013"}],
+ links:[{label:"alphicapital.com",url:"https://www.alphicapital.com/"}], confidence:"verified"},
+
+{id:"gauge", name:"Gauge Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital"], hq:"Southlake, TX", founded:2013,
+ footprint:"Business services, technology, healthcare, food and consumer, financial services",
+ states:[], brands:[],
+ buyBox:"Middle-market buyouts across business services and adjacent sectors.",
+ sourcingNotes:"Broad mandate rather than a single trade platform. Worth a direct conversation to pin down which service verticals they are actively hunting right now.",
+ deals:[], links:[], confidence:"partial"},
+
+{id:"strattam", name:"Strattam Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital","it"], hq:"Austin, TX",
+ footprint:"B2B software and IT",
+ states:[], brands:[],
+ buyBox:"Founder-led B2B software and technology businesses.",
+ sourcingNotes:"Software, not trades. Route SaaS and tech-enabled leads here rather than to the MSP platforms.",
+ deals:[], links:[], confidence:"partial"},
+
+{id:"seaside", name:"Seaside Equity Partners", kind:"sponsor", sponsor:"",
+ verticals:["capital"], hq:"San Diego, CA",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"centeroak", name:"CenterOak Partners", kind:"sponsor", sponsor:"",
+ verticals:["capital"], hq:"Dallas, TX",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"walkon", name:"Walk On Capital", kind:"sponsor", sponsor:"",
+ verticals:["capital"], hq:"",
+ footprint:"Backs Blue Fox and Link 1",
+ states:[], brands:["Blue Fox","Link 1"], buyBox:"", sourcingNotes:"Two portfolio companies on our roster but neither is documented yet. One call to Walk On would fill in three rows at once — high-value, low-effort.",
+ deals:[], links:[], confidence:"unverified"},
+
+{id:"koa", name:"Koa Capital", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"clarion", name:"Clarion", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"Likely Clarion Capital Partners — confirm.", deals:[], links:[], confidence:"unverified"},
+
+{id:"flint", name:"Flint Group", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"isla", name:"ISLA Partners", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+
+{id:"highground", name:"High Ground", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"}
+];
+
+/* ---------- US tile-grid layout (col,row) ---------- */
+const TILES = {
+  AK:[1,1], ME:[12,1],
+  VT:[11,2], NH:[12,2],
+  WA:[2,3], ID:[3,3], MT:[4,3], ND:[5,3], MN:[6,3], IL:[7,3], WI:[8,3], MI:[9,3], NY:[10,3], RI:[11,3], MA:[12,3],
+  OR:[2,4], NV:[3,4], WY:[4,4], SD:[5,4], IA:[6,4], IN:[7,4], OH:[8,4], PA:[9,4], NJ:[10,4], CT:[11,4],
+  CA:[2,5], UT:[3,5], CO:[4,5], NE:[5,5], MO:[6,5], KY:[7,5], WV:[8,5], VA:[9,5], MD:[10,5], DE:[11,5],
+  AZ:[3,6], NM:[4,6], KS:[5,6], AR:[6,6], TN:[7,6], NC:[8,6], SC:[9,6], DC:[10,6],
+  OK:[5,7], LA:[6,7], MS:[7,7], AL:[8,7], GA:[9,7],
+  HI:[1,8], TX:[5,8], FL:[10,8]
+};
+const ALL_STATES = Object.keys(TILES);
+
+/* ---------- local overlay (notes + edits), stored per browser ---------- */
+const STORE_KEY = "el_partner_desk_v1";
+let overlay = {};
+try { overlay = JSON.parse(localStorage.getItem(STORE_KEY) || "{}"); } catch(e){ overlay = {}; }
+const saveOverlay = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(overlay)); } catch(e){} };
+const note = id => (overlay[id] && overlay[id].note) || "";
+
+/* ---------- state ---------- */
+const S = { vertical:"all", kind:"all", q:"", state:"", sponsor:"", sort:"name", conf:new Set(), view:"directory", mapState:null };
+
+/* ---------- helpers ---------- */
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const el = (t,c,h) => { const n=document.createElement(t); if(c) n.className=c; if(h!=null) n.innerHTML=h; return n; };
+const dealCount = p => (p.deals||[]).length;
+const primaryVertical = p => (p.verticals||[]).find(v => v!=="capital") || p.verticals[0] || "other";
+const kindClass = k => k==="sponsor" ? "k-sponsor" : k==="platform+sponsor" ? "k-both" : "k-platform";
+const kindLabel = k => k==="sponsor" ? "Capital" : k==="platform+sponsor" ? "Platform + Capital" : "Platform";
+const newsUrl = p => "https://news.google.com/search?q=" + encodeURIComponent('"'+p.name+'" (acquisition OR acquires OR partners OR platform)') + "&hl=en-US&gl=US&ceid=US:en";
+const webUrl  = p => "https://www.google.com/search?q=" + encodeURIComponent('"'+p.name+'" acquisition news');
+const liUrl   = p => "https://www.linkedin.com/search/results/companies/?keywords=" + encodeURIComponent(p.name);
+
+/* ---------- filtering ---------- */
+function visible(){
+  const q = S.q.trim().toLowerCase();
+  return PARTNERS.filter(p=>{
+    if(S.vertical!=="all" && !(p.verticals||[]).includes(S.vertical)) return false;
+    if(S.kind!=="all"){
+      if(S.kind==="platform" && p.kind==="sponsor") return false;
+      if(S.kind==="sponsor" && p.kind==="platform") return false;
+    }
+    if(S.state && !(p.states||[]).includes(S.state)) return false;
+    if(S.sponsor && p.sponsor !== S.sponsor) return false;
+    if(S.conf.size && !S.conf.has(p.confidence)) return false;
+    if(q){
+      const hay = [p.name,p.sponsor,p.hq,p.footprint,p.buyBox,p.sourcingNotes,note(p.id),
+                   (p.brands||[]).join(" "),(p.states||[]).join(" "),
+                   (p.verticals||[]).map(v=>VERTICALS[v]?VERTICALS[v].label:"").join(" "),
+                   (p.deals||[]).map(d=>d.what+" "+(d.note||"")).join(" ")].join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+function sortList(list){
+  const c = {verified:0, partial:1, unverified:2};
+  const by = {
+    name:(a,b)=>a.name.localeCompare(b.name),
+    activity:(a,b)=>dealCount(b)-dealCount(a) || a.name.localeCompare(b.name),
+    coverage:(a,b)=>(b.states||[]).length-(a.states||[]).length || a.name.localeCompare(b.name),
+    confidence:(a,b)=>c[b.confidence]-c[a.confidence] || a.name.localeCompare(b.name)
+  }[S.sort];
+  return list.slice().sort(by);
+}
+
+/* ---------- rail ---------- */
+function renderRail(){
+  const rail = document.getElementById("rail");
+  rail.innerHTML = "";
+  const counts = {};
+  PARTNERS.forEach(p => (p.verticals||[]).forEach(v => counts[v]=(counts[v]||0)+1));
+
+  const mk = (key,label,color,n) => {
+    const b = el("button","vbtn"+(S.vertical===key?" on":""));
+    b.innerHTML = '<span class="dot" style="background:'+color+'"></span><span>'+label+'</span><span class="n">'+n+'</span>';
+    b.onclick = ()=>{ S.vertical=key; S.mapState=null; render(); };
+    return b;
+  };
+  rail.appendChild(mk("all","All partners","#ff7a1a",PARTNERS.length));
+  Object.entries(VERTICALS)
+    .filter(([k])=>counts[k])
+    .sort((a,b)=>counts[b[0]]-counts[a[0]])
+    .forEach(([k,v]) => rail.appendChild(mk(k,v.label,v.color,counts[k])));
+
+  const kr = document.getElementById("kindRail");
+  kr.innerHTML="";
+  [["all","Everyone"],["platform","Operating platforms"],["sponsor","Capital / sponsors"]].forEach(([k,l])=>{
+    const b = el("button","vbtn"+(S.kind===k?" on":""));
+    b.innerHTML = '<span>'+l+'</span>';
+    b.onclick = ()=>{ S.kind=k; render(); };
+    kr.appendChild(b);
+  });
+}
+
+/* ---------- directory ---------- */
+function vtagHtml(v){
+  const cfg = VERTICALS[v]; if(!cfg) return "";
+  return '<span class="vtag" style="background:'+cfg.color+'22;color:'+cfg.color+';border:1px solid '+cfg.color+'55">'+cfg.label+'</span>';
+}
+function renderGrid(){
+  const list = sortList(visible());
+  const grid = document.getElementById("grid");
+  const rl = document.getElementById("resultline");
+  const vLabel = S.vertical==="all" ? "all verticals" : VERTICALS[S.vertical].label;
+  rl.innerHTML = '<b>'+list.length+'</b> partner'+(list.length===1?"":"s")+' &middot; '+vLabel
+    + (S.state? ' &middot; active in <b>'+S.state+'</b>':'')
+    + (S.sponsor? ' &middot; backed by <b>'+esc(S.sponsor)+'</b>':'');
+
+  grid.innerHTML="";
+  if(!list.length){
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>Nothing matches</h3><p>Loosen a filter or clear the search.</p></div>';
+    return;
+  }
+  list.forEach(p=>{
+    const pv = primaryVertical(p);
+    const card = el("div","card");
+    card.style.borderLeftColor = (VERTICALS[pv]||{}).color || "#2e3d4f";
+    const sts = (p.states||[]);
+    const shown = sts.slice(0,10).map(s=>'<span class="st">'+s+'</span>').join("");
+    const more = sts.length>10 ? '<span class="st more">+'+(sts.length-10)+' more</span>' : "";
+    card.innerHTML =
+      '<span class="kind '+kindClass(p.kind)+'">'+kindLabel(p.kind)+'</span>'+
+      '<h4>'+esc(p.name)+'</h4>'+
+      '<div class="meta">'+
+        (p.hq? '<span>'+esc(p.hq)+'</span>':'<span style="opacity:.5">HQ not confirmed</span>')+
+        (p.sponsor? '<span class="sep">&bull;</span><span>'+esc(p.sponsor.split("(")[0].trim())+'</span>':'')+
+      '</div>'+
+      '<div class="verts">'+(p.verticals||[]).map(vtagHtml).join("")+'</div>'+
+      (sts.length? '<div class="geo">'+shown+more+'</div>' : '<div class="geo" style="opacity:.5">No geography on file</div>')+
+      '<div class="conf c-'+p.confidence+'"><span class="bulb"></span>'+
+        (p.confidence==="verified"?"Verified":p.confidence==="partial"?"Partial — verify before pitching":"Needs research")+
+        (dealCount(p)? ' &nbsp;&middot;&nbsp; '+dealCount(p)+' deal note'+(dealCount(p)===1?"":"s"):"")+
+        (note(p.id)? ' &nbsp;&middot;&nbsp; <span style="color:var(--hi-vis)">has team note</span>':"")+
+      '</div>';
+    card.onclick = ()=>openDrawer(p.id);
+    grid.appendChild(card);
+  });
+}
+
+/* ---------- drawer ---------- */
+function openDrawer(id){
+  const p = PARTNERS.find(x=>x.id===id); if(!p) return;
+  const d = document.getElementById("drawer");
+  const sts = (p.states||[]);
+  const sec = (title, body) => body ? '<div class="sec"><h4>'+title+'</h4>'+body+'</div>' : "";
+
+  d.innerHTML =
+    '<div class="dhead">'+
+      '<button class="dclose" aria-label="Close">&times;</button>'+
+      '<h2>'+esc(p.name)+'</h2>'+
+      '<div class="meta" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<span class="kind '+kindClass(p.kind)+'" style="position:static">'+kindLabel(p.kind)+'</span>'+
+        '<span class="conf c-'+p.confidence+'" style="margin:0"><span class="bulb"></span>'+
+          (p.confidence==="verified"?"Verified":p.confidence==="partial"?"Partial":"Needs research")+'</span>'+
+      '</div>'+
+      '<div class="verts" style="margin-top:10px">'+(p.verticals||[]).map(vtagHtml).join("")+'</div>'+
+    '</div>'+
+    '<div class="dbody">'+
+
+    (p.confidence==="unverified" ?
+      '<div class="banner" style="margin-top:14px"><b>Not researched yet.</b> This partner is on the roster but we have no confirmed vertical, geography or buy box. '+
+      'Use the research links below, then write what you learn into the team note so the next person does not repeat the work.</div>' : '')+
+
+    sec("Profile",
+      '<dl class="kv">'+
+      (p.hq? '<dt>HQ</dt><dd>'+esc(p.hq)+'</dd>':'')+
+      (p.founded? '<dt>Founded</dt><dd>'+p.founded+'</dd>':'')+
+      (p.sponsor? '<dt>Backed by</dt><dd>'+esc(p.sponsor)+'</dd>':'')+
+      (p.footprint? '<dt>Footprint</dt><dd>'+esc(p.footprint)+'</dd>':'')+
+      '</dl>')+
+
+    (sts.length ? sec("Where they operate ("+sts.length+" states)",
+      '<div class="geo" style="display:flex;gap:5px;flex-wrap:wrap">'+
+      sts.map(s=>'<span class="st" style="cursor:pointer" data-jump="'+s+'">'+s+'</span>').join("")+'</div>'+
+      '<p style="font-size:12px;color:var(--text-soft);margin:9px 0 0">Click a state to filter the directory to every partner active there.</p>') : "")+
+
+    ((p.brands||[]).length ? sec("Brands &amp; operating companies",
+      '<div class="plist">'+p.brands.map(b=>'<span class="pill" style="cursor:default">'+esc(b)+'</span>').join("")+'</div>') : "")+
+
+    (p.buyBox ? sec("What they buy", '<p style="margin:0;font-size:14.5px">'+esc(p.buyBox)+'</p>') : "")+
+
+    (p.sourcingNotes ? sec("How to source for them",
+      '<p style="margin:0;font-size:14.5px;color:#dfe7ef">'+esc(p.sourcingNotes)+'</p>') : "")+
+
+    ((p.deals||[]).length ? sec("Recent activity on file",
+      p.deals.map(x=>'<div class="deal"><div class="when">'+esc(x.when)+'</div><div class="what"><b>'+esc(x.what)+'</b>'+
+        (x.note?'<span>'+esc(x.note)+'</span>':'')+'</div></div>').join("")+
+      '<p style="font-size:11.5px;color:var(--text-soft);margin:10px 0 0">Snapshot as of 15 Aug 2026 — always confirm against live news before a seller call.</p>') : "")+
+
+    sec("Latest news &amp; research",
+      '<div class="linkrow">'+
+      '<a class="linkbtn primary" target="_blank" rel="noopener" href="'+newsUrl(p)+'">Latest acquisition news</a>'+
+      '<a class="linkbtn" target="_blank" rel="noopener" href="'+webUrl(p)+'">Web search</a>'+
+      '<a class="linkbtn" target="_blank" rel="noopener" href="'+liUrl(p)+'">LinkedIn</a>'+
+      (p.links||[]).map(l=>'<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(l.url)+'">'+esc(l.label)+'</a>').join("")+
+      '</div>'+
+      '<p style="font-size:11.5px;color:var(--text-soft);margin:10px 0 0">News opens a live Google News query, so it is current every time you click it — nothing here goes stale.</p>')+
+
+    sec("Team note <span class=\"savedtag\" id=\"savedtag\">Saved</span>",
+      '<textarea class="notebox" id="notebox" placeholder="Who owns this relationship? What did they say they want? Live deals in flight? Anything the next person on the desk should know.">'+esc(note(p.id))+'</textarea>'+
+      '<p style="font-size:11.5px;color:var(--text-soft);margin:8px 0 0">Saved in your browser only. Hit <b>Export</b> in the header to produce a merged file you can commit and share with the team.</p>')+
+
+    '</div>';
+
+  d.classList.add("on"); d.setAttribute("aria-hidden","false");
+  document.getElementById("scrim").classList.add("on");
+
+  d.querySelector(".dclose").onclick = closeDrawer;
+  d.querySelectorAll("[data-jump]").forEach(n=>{
+    n.onclick = ()=>{ S.state = n.getAttribute("data-jump"); S.vertical="all"; closeDrawer(); document.getElementById("stateFilter").value=S.state; render(); };
+  });
+  const nb = d.querySelector("#notebox"), tag = d.querySelector("#savedtag");
+  let t=null;
+  nb.oninput = ()=>{
+    overlay[p.id] = overlay[p.id]||{}; overlay[p.id].note = nb.value; saveOverlay();
+    tag.classList.add("on"); clearTimeout(t); t=setTimeout(()=>tag.classList.remove("on"),1200);
+  };
+}
+function closeDrawer(){
+  document.getElementById("drawer").classList.remove("on");
+  document.getElementById("drawer").setAttribute("aria-hidden","true");
+  document.getElementById("scrim").classList.remove("on");
+  renderGrid();
+}
+
+/* ---------- coverage map ---------- */
+function renderMap(){
+  const list = visible();
+  const byState = {};
+  ALL_STATES.forEach(s=>byState[s]=[]);
+  list.forEach(p => (p.states||[]).forEach(s => { if(byState[s]) byState[s].push(p); }));
+  const peak = Math.max(0, ...ALL_STATES.map(s=>byState[s].length));
+  const max = Math.max(1, peak);
+  const noGeo = peak === 0;
+
+  const shade = n => {
+    if(!n) return {bg:"#1c2530", fg:"#4d5f73"};
+    const t = n/max;
+    const alpha = 0.22 + t*0.78;
+    const base = S.vertical==="all" ? "255,122,26" : hexToRgb((VERTICALS[S.vertical]||{}).color || "#ff7a1a");
+    return {bg:"rgba("+base+","+alpha.toFixed(2)+")", fg: t>0.45 ? "#0f1620" : "#dfe7ef"};
+  };
+
+  const g = document.getElementById("tilegrid");
+  g.innerHTML="";
+  ALL_STATES.forEach(s=>{
+    const [c,r] = TILES[s];
+    const n = byState[s].length;
+    const sh = shade(n);
+    const t = el("div","tile"+(S.mapState===s?" sel":""));
+    t.style.gridColumn = c; t.style.gridRow = r;
+    t.style.background = sh.bg; t.style.color = sh.fg;
+    if(n) t.style.borderColor = "transparent";
+    t.innerHTML = s + (n? '<span class="cnt">'+n+'</span>' : '');
+    t.title = s + " — " + n + " partner" + (n===1?"":"s");
+    t.onclick = ()=>{ S.mapState = S.mapState===s ? null : s; renderMap(); };
+    g.appendChild(t);
+  });
+
+  const vName = S.vertical==="all" ? "All verticals" : VERTICALS[S.vertical].label;
+  const legend = document.getElementById("legend");
+  legend.innerHTML = noGeo
+    ? '<span style="opacity:.8">No mapped geography for '+vName+'</span>'
+    : '<span><span class="sw" style="background:#1c2530"></span>No partner on file</span>'+
+      '<span><span class="sw" style="background:'+shade(Math.max(1,Math.round(max*0.25))).bg+'"></span>Thin coverage</span>'+
+      '<span><span class="sw" style="background:'+shade(max).bg+'"></span>'+max+' partner'+(max===1?"":"s")+' (deepest)</span>'+
+      '<span style="opacity:.7">'+vName+'</span>';
+
+  const panel = document.getElementById("statepanel");
+
+  if(noGeo){
+    panel.hidden = false;
+    const withoutGeo = list.length;
+    panel.innerHTML = '<h4>Nothing to map for '+esc(vName)+'</h4>'+
+      '<p style="color:var(--text-soft);margin:0;font-size:13.5px">'+
+      (S.vertical==="capital"
+        ? 'Sponsors and capital partners are deliberately unmapped &mdash; they invest through platforms rather than operating in a territory. Pick an operating vertical to see coverage, or open a sponsor to see which platforms it backs.'
+        : 'None of the '+withoutGeo+' partner'+(withoutGeo===1?"":"s")+' matching these filters has a geography on file yet. Open them from the Directory and use the research links to fill in where they operate &mdash; coverage and white space become usable as soon as that is done.')+
+      '</p>';
+    return;
+  }
+
+  if(!S.mapState){ panel.hidden = true; return; }
+  panel.hidden = false;
+  const ps = byState[S.mapState];
+  panel.innerHTML = '<h4>'+S.mapState+' &mdash; '+ps.length+' partner'+(ps.length===1?"":"s")+
+      (S.vertical==="all"?"":" in "+VERTICALS[S.vertical].label)+'</h4>'+
+    (ps.length ?
+      '<div class="plist">'+ps.map(p=>'<button class="pill" data-open="'+p.id+'">'+esc(p.name)+'</button>').join("")+'</div>'
+      : '<p style="color:var(--text-soft);margin:0;font-size:13.5px">No partner on file here. That makes '+S.mapState+
+        ' a first-mover market &mdash; a credible seller in this state should draw competitive interest from every buyer in the vertical looking to plant a flag. '+
+        'Bear in mind this reflects only what we have documented, not a guarantee that no buyer is present.</p>');
+  panel.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openDrawer(b.getAttribute("data-open")));
+}
+function hexToRgb(h){
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
+  return m ? [parseInt(m[1],16),parseInt(m[2],16),parseInt(m[3],16)].join(",") : "255,122,26";
+}
+
+/* ---------- white space ---------- */
+function renderGaps(){
+  const wrap = document.getElementById("gapgrid");
+  wrap.innerHTML="";
+  const keys = S.vertical==="all"
+    ? Object.keys(VERTICALS).filter(k=>k!=="capital" && k!=="other")
+    : [S.vertical];
+
+  if(S.vertical==="capital" || S.vertical==="other"){
+    wrap.innerHTML = '<div class="gapcard" style="grid-column:1/-1"><h4>White space does not apply here</h4>'+
+      '<p class="lead" style="margin:0">'+
+      (S.vertical==="capital"
+        ? 'Sponsors invest through platforms rather than holding territory, so there is no geographic gap to chase. Switch to an operating vertical.'
+        : 'These partners have not been classified into a vertical yet. Research them from the Directory first.')+
+      '</p></div>';
+    return;
+  }
+
+  keys.forEach(k=>{
+    const ps = PARTNERS.filter(p=>(p.verticals||[]).includes(k) && (p.states||[]).length);
+    if(!ps.length){
+      wrap.appendChild(el("div","gapcard",
+        '<h4>'+VERTICALS[k].label+'</h4>'+
+        '<p class="lead">No geography on file for any partner in this vertical &mdash; we cannot target it yet. '+
+        'Filling in these partners is the highest-value research on the board.</p>'));
+      return;
+    }
+    const cnt={}; ALL_STATES.forEach(s=>cnt[s]=0);
+    ps.forEach(p=>p.states.forEach(s=>{ if(cnt[s]!=null) cnt[s]++; }));
+    const zero = ALL_STATES.filter(s=>cnt[s]===0 && s!=="DC");
+    const thin = ALL_STATES.filter(s=>cnt[s]===1);
+    const card = el("div","gapcard",
+      '<h4>'+VERTICALS[k].label+'</h4>'+
+      '<p class="lead">'+ps.length+' partner'+(ps.length===1?"":"s")+' with mapped geography &middot; '+
+        (ALL_STATES.length-zero.length-1)+' states covered</p>'+
+      (thin.length? '<p style="font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--hi-vis);font-weight:700;margin:0 0 5px">Single partner only</p>'+
+        '<div class="gaplist" style="margin-bottom:12px">'+thin.map(s=>'<span class="st thin">'+s+'</span>').join("")+'</div>' : '')+
+      (zero.length? '<p style="font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#e8a396;font-weight:700;margin:0 0 5px">No coverage</p>'+
+        '<div class="gaplist">'+zero.map(s=>'<span class="st">'+s+'</span>').join("")+'</div>'
+        : '<p style="color:var(--good);font-size:13px;margin:0">Full national coverage on file.</p>'));
+    wrap.appendChild(card);
+  });
+}
+
+/* ---------- export ---------- */
+function exportData(){
+  const merged = PARTNERS.map(p => {
+    const o = overlay[p.id]||{};
+    return o.note ? Object.assign({}, p, {teamNote:o.note}) : p;
+  });
+  const payload = {
+    exported: new Date().toISOString(),
+    source: "EL Partner Sourcing Desk",
+    verticals: VERTICALS,
+    partners: merged
+  };
+  const text = JSON.stringify(payload, null, 2);
+  const blob = new Blob([text], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "el-partners-export.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+/* ---------- render + wiring ---------- */
+function render(){
+  renderRail();
+  document.getElementById("viewDirectory").hidden = S.view!=="directory";
+  document.getElementById("viewMap").hidden       = S.view!=="map";
+  document.getElementById("viewGaps").hidden      = S.view!=="gaps";
+  if(S.view==="directory") renderGrid();
+  if(S.view==="map") renderMap();
+  if(S.view==="gaps") renderGaps();
+}
+
+(function init(){
+  const sf = document.getElementById("stateFilter");
+  const covered = [...new Set(PARTNERS.flatMap(p=>p.states||[]))].sort();
+  covered.forEach(s=>{ const o=el("option"); o.value=s; o.textContent=s; sf.appendChild(o); });
+  sf.onchange = ()=>{ S.state=sf.value; render(); };
+
+  const spf = document.getElementById("sponsorFilter");
+  [...new Set(PARTNERS.map(p=>p.sponsor).filter(Boolean))].sort().forEach(s=>{
+    const o=el("option"); o.value=s; o.textContent=s.length>52? s.slice(0,50)+"…" : s; spf.appendChild(o);
+  });
+  spf.onchange = ()=>{ S.sponsor=spf.value; render(); };
+
+  document.getElementById("sortBy").onchange = e =>{ S.sort=e.target.value; render(); };
+  document.getElementById("q").oninput = e =>{ S.q=e.target.value; render(); };
+
+  document.querySelectorAll(".chip[data-conf]").forEach(c=>{
+    c.onclick = ()=>{ const k=c.dataset.conf; S.conf.has(k)?S.conf.delete(k):S.conf.add(k); c.classList.toggle("on"); render(); };
+  });
+  document.querySelectorAll(".viewtabs button").forEach(b=>{
+    b.onclick = ()=>{
+      document.querySelectorAll(".viewtabs button").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on"); S.view=b.dataset.view; render();
+    };
+  });
+  document.getElementById("exportBtn").onclick = exportData;
+  document.getElementById("scrim").onclick = closeDrawer;
+  document.addEventListener("keydown", e=>{
+    if(e.key==="Escape") closeDrawer();
+    if(e.key==="/" && document.activeElement.id!=="q" && document.activeElement.tagName!=="TEXTAREA"){
+      e.preventDefault(); document.getElementById("q").focus();
+    }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
