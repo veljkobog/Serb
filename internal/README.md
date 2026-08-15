@@ -43,7 +43,9 @@ no server, no dependencies, works offline.
 - **White Space** — per vertical, the states where we have no partner (red) or only
   one (yellow). That is the sourcing priority list.
 - **Latest news** — every partner has a live Google News button. Nothing is cached,
-  so it never goes stale.
+  so it never goes stale. Opened from a local file the link opens a tab normally; in
+  the hosted copy the frame is sandboxed without `allow-popups`, so the page copies
+  the URL to your clipboard and says so instead of failing silently.
 - **Team notes** — free-text note per partner, saved in your browser. Notes are
   searchable alongside everything else.
 

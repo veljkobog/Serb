@@ -219,6 +219,17 @@ select,.filters input{
 .gaplist{display:flex;flex-wrap:wrap;gap:5px}
 .gaplist .st{background:#3a2020;color:#e8a396}
 .gaplist .st.thin{background:#3a3320;color:var(--hi-vis)}
+#toast{
+  position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+  background:var(--steel-3);border:1px solid var(--safety);color:#fff;
+  padding:11px 17px;border-radius:10px;font-size:13.5px;font-weight:600;
+  box-shadow:var(--shadow);z-index:80;opacity:0;pointer-events:none;
+  transition:opacity .18s ease,transform .18s ease;max-width:min(520px,90vw);
+}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#toast .u{display:block;font-weight:400;font-size:12px;color:var(--text-soft);
+  margin-top:3px;word-break:break-all}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
 .empty{text-align:center;padding:70px 20px;color:var(--text-soft)}
 .empty h3{font-size:22px;color:#fff;margin-bottom:8px}
 @media(max-width:900px){
@@ -323,6 +334,7 @@ select,.filters input{
   </main>
 </div>
 
+<div id="toast" role="status" aria-live="polite"></div>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
@@ -1485,6 +1497,33 @@ function render(){
     };
   });
   document.getElementById("exportBtn").onclick = exportData;
+
+  /* Opening links.
+     Run from a local file the anchors behave normally. Embedded in a host page
+     that sandboxes the frame without allow-popups, the browser silently drops
+     both target=_blank and window.open - the click looks like it did nothing.
+     So: try to open, and when the host blocks it, put the URL on the clipboard
+     and say so, rather than failing quietly. */
+  let toastT=null;
+  function toast(msg, url){
+    const t=document.getElementById("toast");
+    t.innerHTML = esc(msg) + (url? '<span class="u">'+esc(url)+'</span>' : '');
+    t.classList.add("on"); clearTimeout(toastT);
+    toastT=setTimeout(()=>t.classList.remove("on"), url?4200:2000);
+  }
+  document.addEventListener("click", e=>{
+    const a = e.target.closest('a[target="_blank"]');
+    if(!a || !a.href) return;
+    e.preventDefault(); e.stopPropagation();
+    let w=null;
+    // No 'noopener' in the feature string - it forces a null return and would
+    // read as blocked. Sever the opener afterwards instead.
+    try { w = window.open(a.href, "_blank"); } catch(err) { w = null; }
+    if(w){ try { w.opener = null; } catch(err){} return; }
+    navigator.clipboard.writeText(a.href)
+      .then(()=>toast("This page can't open tabs \u2014 link copied, paste it in a new tab:", a.href))
+      .catch(()=>toast("This page can't open tabs. Copy the link:", a.href));
+  }, true);
   document.getElementById("scrim").onclick = closeDrawer;
   document.addEventListener("keydown", e=>{
     if(e.key==="Escape") closeDrawer();
