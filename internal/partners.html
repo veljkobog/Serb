@@ -139,6 +139,7 @@ select,.filters input{
 .card .geo{margin-top:11px;font-size:11.5px;color:var(--text-soft);display:flex;gap:4px;flex-wrap:wrap}
 .st{background:#26333f;border-radius:4px;padding:2px 6px;font-weight:600;font-size:10.5px;letter-spacing:.04em}
 .st.more{background:none;color:#66788c}
+.st.intl{background:#1f3340;color:#8fc4dd}
 .card .conf{margin-top:11px;font-size:10px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;row-gap:3px}
 .c-verified{color:var(--good)} .c-partial{color:var(--warn)} .c-unverified{color:#e0715f}
 .conf .bulb{width:7px;height:7px;border-radius:50%;background:currentColor}
@@ -277,9 +278,6 @@ select,.filters input{
     <h3>Verticals</h3>
     <div id="rail"></div>
     <div class="divider"></div>
-    <h3>Engagement</h3>
-    <div id="elRail"></div>
-    <div class="divider"></div>
     <h3>Buyer type</h3>
     <div id="kindRail"></div>
   </nav>
@@ -375,7 +373,6 @@ const VERTICALS = {
 const COVERAGE_THRESHOLD = 3;
 
 const PARTNERS = [
-/* ---------- HVAC / P / E residential ---------- */
 {id:"apex", name:"Apex Service Partners", kind:"platform", el:{via:"Alpine Investors; Apex & Orion"}, hsId:37100145992, url:"https://apexservicepartners.com", hsLinkedin:"https://linkedin.com/company/apex-service-partners", hsVertical:"Capital Partners", hsName:"Apex Service Partners", hsLoc:"Tampa, Florida", sponsor:"Alpine Investors (Apollo minority, announced May 2026)",
  verticals:["hvac","plumbing","electrical"], hq:"Tampa, FL", founded:2019,
  footprint:"National — 75 brands across 46 states, ~13,000 employees, ~$1.3B revenue",
@@ -457,35 +454,35 @@ const PARTNERS = [
  links:[],
  confidence:"partial"},
 
-{id:"columbia", name:"Columbia Home Services", kind:"platform", el:{d:"2025-09-24",deal:44462153865}, hsId:40165583237, url:"https://columbiahomeservices.com", hsLinkedin:"https://linkedin.com/company/columbia-home-services", hsVertical:"Capital Partners", hsName:"Columbia Home Services", hsLoc:"Dallas, Texas", sponsor:"Oxbow Equity Partners; Tenex Capital Management",
- verticals:["hvac","plumbing","electrical"], hq:"",
- footprint:"Secondary but growing U.S. markets",
- states:[],
- brands:[],
+{id:"columbia", name:"Columbia Home Services", kind:"platform", el:{d:"2025-09-24",deal:44462153865}, hsId:40165583237, url:"https://columbiahomeservices.com", hsLinkedin:"https://linkedin.com/company/columbia-home-services", hsVertical:"Capital Partners", hsName:"Columbia Home Services", hsLoc:"Dallas, Texas", sponsor:"Tenex Capital Management (Sept 2023); Oxbow Equity Partners",
+ verticals:["hvac","plumbing","electrical"], hq:"Dallas, TX",
+ footprint:"21 partners across 7 states, 600+ employees, $170M+ revenue",
+ states:["TX", "NC"],
+ brands:["Anderson Air (Wilmington, NC)"],
  buyBox:"Residential and light commercial repair, maintenance, replacement and installation — deliberately in secondary markets rather than top-10 metros.",
- sourcingNotes:"The useful one for sellers outside major metros, where most platforms will not go. If a deal is getting no traction because the market is 'too small', start here.",
- deals:[],
+ sourcingNotes:"21 partners in about two years. Deliberately targets legacy mom-and-pop operators in secondary markets, which makes it the right first call for a seller other platforms consider sub-scale. Seven states are claimed but only Texas and North Carolina are publicly confirmed — worth asking them directly for the full map.",
+ deals:[{when:"Sep 2023",what:"Tenex Capital Management acquires Columbia Home Services",note:""},{when:"2023",what:"Anderson Air, Wilmington NC",note:"First acquisition"}],
  links:[],
- confidence:"partial"},
+ confidence:"verified"},
 
 {id:"seer", name:"The SEER Group", kind:"platform", el:{d:"2025-10-07",deal:44617039795}, hsId:40290018845, url:"https://www.theseergroup.com", hsLinkedin:"https://linkedin.com/company/the-seer-group-llc", hsVertical:"Capital Partners", hsName:"The SEER Group", hsLoc:"Lynnwood, Washington", sponsor:"",
- verticals:["hvac","plumbing","electrical","mep"], hq:"",
- footprint:"Residential and commercial trade services",
- states:[],
- brands:[],
+ verticals:["hvac","plumbing","electrical","mep"], hq:"Boise, ID",
+ footprint:"42 partner brands across the Mountain West, Pacific Northwest and Texas",
+ states:["ID", "WA", "OR", "UT", "CO", "TX"],
+ brands:["Swan Electric, Plumbing, Heating & Air (Dallas, TX)", "S&S Mechanical (UT)", "Mike's Mechanical Services (ID)", "Western Heating & Air Conditioning (Boise, ID)", "Lifetime Heating, Cooling & Electric (Snohomish, WA)", "Tuscan Electric, Heating & Plumbing (Denver, CO)", "Alpine Heating & Air Conditioning (Eugene, OR)", "Kilowatt Heating, Air Conditioning and Electric"],
  buyBox:"Residential and commercial HVAC, electrical and plumbing. Notably flexible structures — will buy all or part of a business.",
- sourcingNotes:"The partial-sale option is the differentiator. Route owners here who are not ready for a full exit or who want a second bite — that is a real objection-handler no one else on this list offers as openly.",
- deals:[],
+ sourcingNotes:"42 brands and still adding, with Texas entered in 2025 via Swan. The flexible structure is the real differentiator — they will buy all or part of a business, which is the one answer on this list for an owner who is not ready for a full exit.",
+ deals:[{when:"May 2025",what:"S&S Mechanical",note:"Entry into the Utah market"},{when:"Apr 2025",what:"Swan Electric, Plumbing, Heating & Air",note:"42nd partner brand; entry into Texas, Dallas–Fort Worth"},{when:"Recent",what:"Tuscan Electric (Denver) and Alpine Heating & Air (Eugene, OR)",note:""}],
  links:[],
- confidence:"partial"},
+ confidence:"verified"},
 
-{id:"comfortconnect", name:"Comfort Connect", kind:"platform", el:{d:"2026-01-08",deal:47720985184}, hsId:43296427420, url:"https://www.comfortconnect.com", hsLinkedin:"https://linkedin.com/company/comfort-connections", hsVertical:"Capital Partners", hsName:"Comfort Connect", hsLoc:"Markham, Ontario", sponsor:"", verticals:["hvac"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
- deals:[], links:[], confidence:"unverified"},
+{id:"comfortconnect", name:"Comfort Connect", intl:["Ontario, Canada"], kind:"platform", el:{d:"2026-01-08",deal:47720985184}, hsId:43296427420, url:"https://www.comfortconnect.com", hsLinkedin:"https://linkedin.com/company/comfort-connections", hsVertical:"Capital Partners", hsName:"Comfort Connect", hsLoc:"Markham, Ontario", sponsor:"", verticals:["hvac"], hq:"Markham, Ontario",
+ footprint:"Markham, Ontario — territories not disclosed", states:[], brands:["Premier Program®", "TEC (Temperature Equipment Corp) — strategic partner"], buyBox:"Not an acquirer of trades businesses. Comfort Connect finances and leases HVAC, plumbing and back-up power systems to homeowners through contractor partners.", sourcingNotes:"Two things to pin down before routing anything here. First, your CRM has them in Markham, Ontario, which would make this a third Canadian partner alongside Ironclad and Alphi. Second, comfortconnect.com presents a financing and leasing business \u2014 the Premier Program is structured as a lease for homeowners through contractor partners \u2014 not a trades roll-up. Confirm which entity the EL covers and what they actually want to buy; there is no service-area data here because they do not publish one.",
+ deals:[], links:[], confidence:"partial"},
 
-{id:"servicecountry", name:"Service Country", kind:"platform", el:{d:"2025-10-08",deal:44587525672}, sponsor:"", verticals:["hvac"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
- deals:[], links:[], confidence:"unverified"},
+{id:"servicecountry", name:"Service Country", kind:"platform", el:{d:"2025-10-08",deal:44587525672}, sponsor:"Grove Mountain Partners", verticals:["hvac"], hq:"Southeast U.S.",
+ footprint:"Nine brands across six Southeastern states", states:["GA", "SC", "FL", "AL", "WV", "TN"], brands:["McGee Heating and Air (GA/SC)", "Castle Air (Englewood, FL)", "Childress Heating & Cooling (Gadsden, AL)", "Childers Air Plumbing & Electric (Beckley, WV)", "Holsenback Heating and Air (Monetta, SC)"], buyBox:"Residential HVAC, plumbing and electrical. Partners keep their own brand and leadership.", sourcingNotes:"Explicitly targets smaller cities and towns in the Southeast, not metros — the natural home for a good operator in a market Apex or Champions would pass on. Nine brands across six states already.",
+ deals:[{when:"Recent",what:"Castle Air (FL) and Childress Heating & Cooling (AL)",note:""},{when:"Recent",what:"Childers Air Plumbing & Electric (WV); Holsenback Heating and Air (SC)",note:""},{when:"Launch",what:"McGee Heating and Air",note:"Grove Mountain Partners launches Service Country"}], links:[], confidence:"verified"},
 
 {id:"solidaire", name:"Solidaire", kind:"platform", el:{d:"2026-03-02",deal:57350626602}, hsId:52360638837, url:"https://solidaire.com", hsVertical:"Capital Partners", hsName:"Solidaire", sponsor:"", verticals:["hvac"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
@@ -506,15 +503,15 @@ const PARTNERS = [
  confidence:"verified"},
 
 {id:"pine", name:"Pine Services Group", kind:"platform", el:{d:"2026-05-04",deal:59963605140}, hsId:54711479678, url:"https://pineservicesgroup.com", hsLinkedin:"https://linkedin.com/company/pine-services-group", hsVertical:"Portfolio Company", hsName:"Pine Services Group", sponsor:"Evergreen Services Group",
- verticals:["facilities","it"], hq:"",
- footprint:"North America — permanent-hold holding company",
- states:[],
- brands:[],
- buyBox:"Essential residential and commercial field service businesses; also ERP and technology-enabled services.",
- sourcingNotes:"Two separate Closed-Won deals exist for this partner in the Client Pipeline (May 2026 and Oct 2025) \u2014 likely a duplicate worth merging. Permanent ownership, no fund life, no forced exit. That is the pitch for owners who hate the idea of being flipped in five years. Genuinely different from every sponsor-backed platform on this list.",
+ verticals:["it"], hq:"San Francisco, CA",
+ footprint:"Evergreen's dedicated ERP vertical — North America plus the UK",
+ states:["NC", "FL", "TX"],
+ brands:["The Vested Group (NetSuite)", "Practical Software Solutions (Concord, NC)", "Acumen Information Systems (Clermont, FL)", "Alliance Solutions Group", "Eureka Solutions (Scotland)"],
+ buyBox:"ERP consultancies and software partners — NetSuite, Sage and similar practices. Original brand and founder legacy preserved.",
+ sourcingNotes:"Reclassified: this is Evergreen's ERP and software arm, not a field-services holdco as previously recorded here. Route NetSuite, Sage and ERP implementation practices here, not trades businesses. Permanent-hold ownership with no fund life is still the pitch.",
  deals:[],
  links:[{label:"pineservicesgroup.com",url:"https://pineservicesgroup.com/"}],
- confidence:"partial"},
+ confidence:"verified"},
 
 {id:"atlas", name:"Atlas Facilities Maintenance", kind:"platform", el:{d:"2026-05-12",deal:58519358005}, sponsor:"",
  verticals:["janitorial","facilities","landscaping"], hq:"Portland, OR",
@@ -648,8 +645,8 @@ const PARTNERS = [
  links:[],
  confidence:"verified"},
 
-{id:"avi", name:"AVI Roofing", kind:"platform", el:{d:"2025-10-22",deal:45719563693}, hsId:30750543750, url:"https://www.aviroofing.com", hsLinkedin:"https://linkedin.com/company/avi-roofing-inc", hsVertical:"Portfolio Company", hsName:"Aviroofing", hsLoc:"Denver, Colorado", sponsor:"", verticals:["roofing"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"avi", name:"AVI Roofing", founded:1998, kind:"platform", el:{d:"2025-10-22",deal:45719563693}, hsId:30750543750, url:"https://www.aviroofing.com", hsLinkedin:"https://linkedin.com/company/avi-roofing-inc", hsVertical:"Portfolio Company", hsName:"Aviroofing", hsLoc:"Denver, Colorado", sponsor:"", verticals:["roofing"], hq:"Denver, CO",
+ footprint:"Colorado Front Range, I-70 corridor and Wyoming", states:["CO", "WY"], brands:[], buyBox:"Residential and commercial roofing — flat roof systems (TPO, EPDM, PVC), replacement, repair and storm response.", sourcingNotes:"A single-region operator rather than a national roll-up: Denver metro, Colorado Springs, Fort Collins, Grand Junction and the Front Range. Best used as a strategic buyer for Colorado and Wyoming roofers, not for out-of-state deals.", deals:[], links:[], confidence:"verified"},
 
 /* ---------- Landscaping / grounds / tree ---------- */
 {id:"alp", name:"American Landscaping Partners", kind:"platform", el:{d:"2026-08-11",deal:51633461509}, sponsor:"Shoreline Equity Partners (Aug 2023)",
@@ -711,16 +708,16 @@ const PARTNERS = [
  links:[{label:"Acquisitions",url:"https://www.ruppertlandscape.com/about/acquisitions-partnerships/"}],
  confidence:"verified"},
 
-{id:"canopy", name:"Canopy Service Partners", kind:"platform", el:{d:"2025-10-08",deal:45491255459}, hsId:41134944079, url:"https://canopysps.com", hsVertical:"Portfolio Company", hsName:"Canopy Service Partners", hsLoc:"Chicago, Illinois", sponsor:"",
- verticals:["tree"], hq:"",
- footprint:"North America",
- states:[],
- brands:[],
- buyBox:"Tree care services businesses.",
- sourcingNotes:"The only dedicated tree care buyer on our list — so every tree service lead we get should route here by default. Worth a call to get their buy box and target geographies documented properly.",
- deals:[],
+{id:"canopy", name:"Canopy Service Partners", kind:"platform", el:{d:"2025-10-08",deal:45491255459}, hsId:41134944079, url:"https://canopysps.com", hsVertical:"Portfolio Company", hsName:"Canopy Service Partners", hsLoc:"Chicago, Illinois", sponsor:"Alpine Investors (Jan 2023)",
+ verticals:["tree"], hq:"Chicago, IL",
+ footprint:"North America — building a collection of local tree care brands",
+ states:["IL", "CA", "GA"],
+ brands:["Maguire Tree Care (CA Coastal Peninsula & South Bay)", "Arbor Equity (GA)", "Urban Tree Management"],
+ buyBox:"Tree care and arboriculture businesses generating $3–30M revenue. Local brands and legacies are kept.",
+ sourcingNotes:"The only dedicated tree care buyer we have, and they publish a clear size band: $3–30M revenue. Alpine-backed, which is a fifth Alpine platform on this roster. Any tree service lead should come here first.",
+ deals:[{when:"Jun 2026",what:"Urban Tree Management",note:""},{when:"Jan 2023",what:"Alpine Investors acquires Canopy Service Partners",note:""}],
  links:[{label:"LinkedIn",url:"https://www.linkedin.com/company/canopy-service-partners"}],
- confidence:"partial"},
+ confidence:"verified"},
 
 /* ---------- Paving ---------- */
 {id:"heartland", name:"Heartland Paving Partners", kind:"platform", sponsor:"Soundcore Capital Partners",
@@ -738,21 +735,21 @@ const PARTNERS = [
  confidence:"verified"},
 
 /* ---------- Fire / life safety ---------- */
-{id:"zeus", name:"Zeus", kind:"platform", el:{d:"2026-04-09",deal:58208857108}, hsId:53139037860, url:"https://zeusfireandsecurity.com", hsLinkedin:"https://linkedin.com/company/zeus-fire-and-security", hsVertical:"Capital Partners", hsName:"Zeus", hsLoc:"Paoli, Pennsylvania", sponsor:"",
- verticals:["fire"], hq:"",
- footprint:"",
- states:[],
- brands:[],
- buyBox:"",
- sourcingNotes:"Believed to be Zeus Fire & Security, but not confirmed. Do not pitch until the entity, sponsor and buy box are verified — there are several 'Zeus' entities in adjacent markets.",
- deals:[], links:[], confidence:"unverified"},
+{id:"zeus", name:"Zeus Fire & Security", founded:2022, kind:"platform", el:{d:"2026-04-09",deal:58208857108}, hsId:53139037860, url:"https://zeusfireandsecurity.com", hsLinkedin:"https://linkedin.com/company/zeus-fire-and-security", hsVertical:"Capital Partners", hsName:"Zeus", hsLoc:"Paoli, Pennsylvania", sponsor:"",
+ verticals:["fire"], hq:"Paoli, PA",
+ footprint:"House of brands across the Mid-Atlantic, Midwest, Mountain South and Hawaii — 750+ employees",
+ states:["PA", "HI", "IL", "MD", "MO", "TN"],
+ brands:["UAS", "SMG of Chicago", "Alert Alarm Hawaii", "Bayside Fire and Security", "Absolute Security Group", "PASS Security", "Gallaher & Associates", "Atlas Security"],
+ buyBox:"Legacy fire and security operators. Acquired companies keep their name, leadership and local market presence.",
+ sourcingNotes:"Formed Feb 2022 from UAS, SMG and Alert Alarm of Hawaii, and buying steadily since. The house-of-brands promise is explicit, which lands well with owners whose name is on the building. Fire and security together, so a mixed alarm/sprinkler book does not need splitting.",
+ deals:[{when:"2022–25",what:"PASS Security (MO), Gallaher & Associates (TN), Atlas Security",note:"Extended beyond the founding three businesses"},{when:"Feb 2022",what:"Zeus formed from UAS, SMG of Chicago and Alert Alarm of Hawaii",note:""}], links:[], confidence:"verified"},
 
-{id:"cfp", name:"Commercial Fire Protection", kind:"platform", el:{d:"2026-01-16",deal:54011040054}, hsId:49252531620, url:"https://www.fireprotected.com", hsLinkedin:"https://linkedin.com/company/commercial-fire-protection", hsVertical:"Portfolio Company", hsName:"Commercial Fire Protection", hsLoc:"Nevada", sponsor:"",
+{id:"cfp", name:"Commercial Fire Protection (CFP)", kind:"platform", el:{d:"2026-01-16",deal:54011040054}, hsId:49252531620, url:"https://www.fireprotected.com", hsLinkedin:"https://linkedin.com/company/commercial-fire-protection", hsVertical:"Portfolio Company", hsName:"Commercial Fire Protection", hsLoc:"Nevada", sponsor:"",
  verticals:["fire"], hq:"",
- footprint:"", states:[], brands:[],
- buyBox:"Fire protection and life safety services.",
- sourcingNotes:"Fire and life safety is one of the cleanest recurring-revenue theses in building services — inspection contracts drive 80%+ recurring revenue at the best platforms, and $5–20M businesses have been trading at roughly 5–9x EBITDA. Worth confirming this partner's specifics quickly.",
- deals:[], links:[], confidence:"unverified"},
+ footprint:"Western and southern U.S. — San Francisco, San Diego, Denver, Salt Lake City, Portland, Dallas, Austin", states:["CA", "AZ", "NV", "CO", "UT", "OR", "WA", "TX"], brands:[],
+ buyBox:"Fire alarm, sprinkler, standpipe, extinguisher, suppression, emergency lighting and monitoring across commercial, multifamily, retail, schools and municipalities.",
+ sourcingNotes:"Does not subcontract — every technician is in-house, so acquisitions with their own licensed field staff matter more here than an asset-light book. Fire and life safety runs 80%+ recurring revenue off inspection contracts, and $5–20M businesses have been trading at roughly 5–9x EBITDA.",
+ deals:[], links:[], confidence:"verified"},
 
 /* ---------- IT / MSP / cyber ---------- */
 {id:"evergreen", name:"Evergreen Services Group", kind:"platform", el:{d:"2025-08-01",deal:41183912011}, hsId:37088747447, url:"https://evergreensg.com", hsLinkedin:"https://linkedin.com/company/evergreen-services-group", hsVertical:"Portfolio Company", hsName:"Evergreen Services Group", hsLoc:"San Francisco, California", sponsor:"Alpine Investors",
@@ -791,12 +788,12 @@ const PARTNERS = [
  confidence:"verified"},
 
 {id:"procern", name:"ProCern Technology Solutions", kind:"platform", el:{d:"2025-10-20",deal:46558020182}, hsId:42179582497, url:"https://procern.com", hsLinkedin:"https://linkedin.com/company/procern-technology-solutions", hsVertical:"Portfolio Company", hsName:"ProCern Technology Solutions", hsLoc:"Broomfield, Colorado", sponsor:"",
- verticals:["it"], hq:"",
- footprint:"",
- states:[],
+ verticals:["it"], hq:"Broomfield, CO",
+ footprint:"Colorado base, with clients and acquisitions across the U.S.",
+ states:["CO"],
  brands:["Aldrich Technology"],
  buyBox:"Managed IT services with a healthcare and long-term-care specialization; also finance, education and manufacturing.",
- sourcingNotes:"Healthcare/long-term-care IT vertical focus is narrow but valuable — an MSP with a senior-living or clinic book is worth more here than to a generalist.",
+ sourcingNotes:"Healthcare and long-term-care IT is the specialisation — skilled nursing, senior living and post-acute. An MSP with a senior-living book is worth more here than to a generalist. Only Colorado is confirmed; they describe a wider U.S. footprint built by acquisition but do not publish it.",
  deals:[{when:"Aug 2023",what:"Aldrich Technology managed IT services business",note:"Buyout / LBO"}],
  links:[{label:"procern.com",url:"https://procern.com/"}],
  confidence:"partial"},
@@ -809,40 +806,40 @@ const PARTNERS = [
  sourcingNotes:"Flag: public information points to Netstock being an inventory-optimization SaaS product (demand forecasting, replenishment, ERP integration), not a services acquirer. Confirm which entity is actually our partner before routing any deal here.",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"aphix", name:"APHIX", kind:"platform", el:{d:"2025-10-15",deal:46031013723}, hsId:41647831311, url:"https://aphix.com", hsLinkedin:"https://linkedin.com/company/aphixky", hsVertical:"Portfolio Company", hsName:"APHIX", hsLoc:"Lexington, Kentucky", sponsor:"", verticals:["it"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"aphix", name:"APHIX", founded:2002, kind:"platform", el:{d:"2025-10-15",deal:46031013723}, hsId:41647831311, url:"https://aphix.com", hsLinkedin:"https://linkedin.com/company/aphixky", hsVertical:"Portfolio Company", hsName:"APHIX", hsLoc:"Lexington, Kentucky", sponsor:"Gauge Capital", verticals:["landscaping", "facilities"], hq:"Lexington, KY",
+ footprint:"Seven branches across Kentucky, Tennessee, Alabama and North Carolina", states:["KY", "TN", "AL", "NC"], brands:[], buyBox:"Commercial landscaping, turf and grounds maintenance, plus broader facilities services.", sourcingNotes:"Reclassified: APHIX is commercial landscaping and facilities services, not an IT provider as previously recorded here. Backed by Gauge Capital, who are also on this roster — so a landscaping lead can be worked through either relationship. Branches in Lexington, Louisville, Frankfort, Knoxville, Chattanooga, Nashville, Birmingham, Owens Cross Roads and Youngsville.", deals:[], links:[], confidence:"verified"},
 
-{id:"subsplit", name:"SubSplit", kind:"platform", el:{d:"2026-03-27",deal:47568228483}, hsId:39132014506, url:"https://subsplitsg.com", hsVertical:"Capital Partners", hsName:"SubSplit", sponsor:"", verticals:["other"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"subsplit", name:"SubSplit Services Group", founded:2023, kind:"platform", el:{d:"2026-03-27",deal:47568228483}, hsId:39132014506, url:"https://subsplitsg.com", hsVertical:"Capital Partners", hsName:"SubSplit", sponsor:"", verticals:["mep"], hq:"Memphis, TN",
+ footprint:"Eleven metros across the Southeast, Texas, Southwest and Midwest", states:["TN", "SC", "TX", "AL", "AZ", "NE", "OH"], brands:["MIINC Mechanical Engineers"], buyBox:"MEP contractors — companies that construct, maintain and operate critical mechanical, electrical and plumbing systems. Structured to give owners liquidity rather than a clean exit.", sourcingNotes:"The liquidity-not-exit structure is the hook: owners who want money off the table while staying in the business. Live in Greenville and Aiken SC, DFW, San Antonio and Houston, Huntsville and Gadsden AL, Clarksville TN, Phoenix, Lincoln and Omaha, and Columbus OH.", deals:[], links:[], confidence:"verified"},
 
 {id:"allyservices", name:"Ally Services", kind:"platform", el:{d:"2026-03-06",deal:56214847768}, hsId:51297568812, url:"https://allyservicesgroup.com", hsVertical:"Capital Partners", hsName:"Ally Services", hsLoc:"Houston, Texas", sponsor:"", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"nexcore", name:"Nexcore", kind:"platform", el:{d:"2026-05-20",deal:60177776997}, hsId:54896198459, url:"https://www.nxcus.com", hsVertical:"Capital Partners", hsName:"Nexcore", sponsor:"",
- verticals:["other"], hq:"",
- footprint:"", states:[], brands:[],
- buyBox:"",
- sourcingNotes:"Flag: the well-known NexCore Group is a healthcare real estate developer, not a services acquirer. Confirm whether our partner is that entity or a different Nexcore before routing anything.",
- deals:[], links:[], confidence:"unverified"},
+{id:"nexcore", name:"NexCore", kind:"platform", el:{d:"2026-05-20",deal:60177776997}, hsId:54896198459, url:"https://www.nxcus.com", hsVertical:"Capital Partners", hsName:"Nexcore", sponsor:"Trinity Hunt Partners",
+ verticals:["mep", "hvac", "plumbing"], hq:"Dallas, TX",
+ footprint:"Commercial HVAC platform — ten acquisitions in just over two years", states:["CT", "MA", "TX"], brands:["Action Air Systems", "Accutemp Engineering", "Air Comfort Systems"],
+ buyBox:"Commercial HVAC and mechanical contractors — full-service, including plumbing.",
+ sourcingNotes:"Resolves an earlier flag: this is Trinity Hunt's commercial HVAC platform, not NexCore Group the healthcare real estate developer. Ten deals in two years and pushing hard into New England, so Connecticut and Massachusetts mechanical contractors are live targets right now.",
+ deals:[{when:"Recent",what:"Action Air Systems and Accutemp Engineering",note:"Ninth and tenth acquisitions; expanded into Connecticut and Massachusetts"},{when:"Recent",what:"Air Comfort Systems",note:"Acquired by Action Air, a NexCore partner"}], links:[], confidence:"verified"},
 
-{id:"ios", name:"IOS", kind:"platform", el:{d:"2026-04-01",deal:58208802655}, hsId:53139040798, url:"https://integratedopenings.com", hsLinkedin:"https://linkedin.com/company/integrated-openings-solutions", hsVertical:"Capital Partners", hsName:"IOS", hsLoc:"Naples, Florida", sponsor:"", verticals:["other"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"ios", name:"IOS — Integrated Openings Solutions", kind:"platform", el:{d:"2026-04-01",deal:58208802655}, hsId:53139040798, url:"https://integratedopenings.com", hsLinkedin:"https://linkedin.com/company/integrated-openings-solutions", hsVertical:"Capital Partners", hsName:"IOS", hsLoc:"Naples, Florida", sponsor:"", verticals:["facilities"], hq:"Olathe, KS",
+ footprint:"Midwest and Southeast — branches across six states", states:["KS", "MO", "FL", "NC", "AR", "AL"], brands:["Automatic Door Systems", "Cardinal Door and Hardware", "Duranotic Door", "Commercial Door and Hardware"], buyBox:"Commercial and architectural doors, frames and hardware; automatics, access control, roll-up and high-speed doors, storefront and gate access systems. Fabrication and distribution as well as service.", sourcingNotes:"Direct comparable to Cobalt — run both against any commercial door, hardware or access-control business to create tension. IOS carries fabrication and distribution too, so a business with a product arm fits here where a pure service buyer would discount it.", deals:[], links:[], confidence:"verified"},
 
-{id:"4m", name:"4M", kind:"platform", el:{d:"2026-07-02",deal:62121774123}, sponsor:"", verticals:["other"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"4m", name:"4M Building Solutions", kind:"platform", el:{d:"2026-07-02",deal:62121774123}, sponsor:"", verticals:["janitorial", "facilities"], hq:"",
+ footprint:"One of the largest janitorial service providers in the Midwest and Southeast", states:["IL", "FL", "GA", "MO"], brands:[], buyBox:"Commercial janitorial and building services.", sourcingNotes:"Janitorial at scale across the Midwest and Southeast. Confirmed locations include Bloomington IL, Jacksonville FL and Atlanta; the full branch list is not published, so verify the map before pitching.", deals:[], links:[], confidence:"partial"},
 
-{id:"ironclad", name:"Ironclad Holdings", kind:"platform", el:{d:"2026-07-08",deal:62416551492}, hsId:56468510038, url:"https://ironcladcorp.ca", hsVertical:"Capital Partners", hsName:"Ironclad Holdings", sponsor:"", verticals:["other"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"ironclad", name:"Ironclad Group", intl:["Ontario, Canada"], kind:"platform", el:{d:"2026-07-08",deal:62416551492}, hsId:56468510038, url:"https://ironcladcorp.ca", hsVertical:"Capital Partners", hsName:"Ironclad Holdings", sponsor:"", verticals:["hvac", "plumbing", "fire", "restoration"], hq:"Simcoe County, Ontario",
+ footprint:"Simcoe County and Central Ontario — a coordinated network of specialist brands", states:[], brands:[], buyBox:"Integrated facility services — fire, HVAC, plumbing and restoration.", sourcingNotes:"Canadian, Ontario-based. Along with Alphi, one of only two partners that can transact north of the border, so route Ontario leads here. Multi-trade plus restoration under one roof is unusual and widens what they can absorb.", deals:[], links:[], confidence:"partial"},
 
-{id:"skycrest", name:"Skycrest", kind:"platform", el:{d:"2025-07-30",deal:41104398250}, hsId:37009102920, url:"https://skycrestroof.com", hsName:"Skycrest Roof Co", sponsor:"", verticals:["roofing"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
+{id:"skycrest", name:"Skycrest Roof", founded:2024, kind:"platform", el:{d:"2025-07-30",deal:41104398250}, hsId:37009102920, url:"https://skycrestroof.com", hsName:"Skycrest Roof Co", sponsor:"Shore Capital Partners", verticals:["roofing"], hq:"Denver, CO",
+ footprint:"Denver base, with partners in West Florida, Colorado and Nebraska", states:["CO", "FL", "NE"], brands:["Anthony C. Leonard Roofing", "Bulldog Roofing"], buyBox:"Roofing — inspections, replacement, maintenance, repair, storm response and solar.", sourcingNotes:"Formed Jan 2025 by Shore Capital with two founding partners and an openly national ambition, so almost every market is white space for them. Early-platform economics: the next few sellers in get founder-level terms.", deals:[{when:"Jan 2025",what:"Shore Capital forms Skycrest Roof",note:"Anthony C. Leonard Roofing and Bulldog Roofing join as the founding partners"}], links:[], confidence:"verified"},
 
-{id:"bakery", name:"Baxter's Bakery", kind:"platform", el:{d:"2025-08-26",deal:41598072223}, hsId:37441155394, url:"https://www.baxtersbakery.ca", hsVertical:"Capital Partners", hsName:"Baxter's Bakery", hsLoc:"Ontario", sponsor:"",
- verticals:["other"], hq:"",
- footprint:"", states:[], brands:[],
- buyBox:"",
- sourcingNotes:"Flag: sits outside every services vertical on this list. Confirm whether this belongs on the partner roster or landed here by mistake.",
- deals:[], links:[], confidence:"unverified"},
+{id:"bakery", name:"Baxter's Bakery", intl:["Ontario, Canada"], kind:"platform", el:{d:"2025-08-26",deal:41598072223}, hsId:37441155394, url:"https://www.baxtersbakery.ca", hsVertical:"Capital Partners", hsName:"Baxter's Bakery", hsLoc:"Ontario", sponsor:"",
+ verticals:["other"], hq:"Toronto, Ontario",
+ footprint:"Toronto and Cobourg, Ontario", states:[], brands:[],
+ buyBox:"Family-owned bakery and foodservice business, known for handmade butter tarts.",
+ sourcingNotes:"Confirmed as a genuine Toronto bakery, so it is correctly on the client roster but sits outside every services vertical the rest of this tool covers. Nothing here routes to it — keep it visible only so nobody re-researches it.",
+ deals:[], links:[], confidence:"verified"},
 
 {id:"bluefox", name:"Blue Fox", kind:"platform", el:{d:"2026-07-02",deal:62121587992}, sponsor:"Walk On Capital", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"",
@@ -989,8 +986,8 @@ const PARTNERS = [
 {id:"koa", name:"Koa Capital", kind:"sponsor", el:{d:"2026-06-24",deal:60236783679}, hsId:54896238484, url:"https://koacapitalpartners.com", hsLinkedin:"https://linkedin.com/company/koa-capital-partners-llc", hsVertical:"Capital Partners", hsName:"Koa Capital Partners", hsLoc:"Honolulu, Hawaii", sponsor:"", verticals:["capital"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"clarion", name:"Clarion", kind:"sponsor", el:{d:"2026-06-24",deal:59150431893}, hsId:53948769797, url:"https://clarionhsg.com", hsLinkedin:"https://linkedin.com/company/clarion-home-services-group", hsVertical:"Capital Partners", hsName:"Clarion", hsLoc:"Lake Forest, Illinois", sponsor:"", verticals:["capital"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"Likely Clarion Capital Partners — confirm.", deals:[], links:[], confidence:"unverified"},
+{id:"clarion", name:"Clarion Home Services Group", kind:"platform", el:{d:"2026-06-24",deal:59150431893}, hsId:53948769797, url:"https://clarionhsg.com", hsLinkedin:"https://linkedin.com/company/clarion-home-services-group", hsVertical:"Capital Partners", hsName:"Clarion", hsLoc:"Lake Forest, Illinois", sponsor:"", verticals:["hvac", "plumbing", "electrical"], hq:"Lake Forest, IL",
+ footprint:"Multi-brand residential platform, 1,000+ employees, $50–100M revenue", states:["IL", "WI", "UT"], brands:["Mr. Holland's Home Services (Jackson, WI)", "Triple-T Heating Cooling Plumbing & Electrical (St. George, UT)"], buyBox:"Residential HVAC, plumbing and electrical. Local businesses keep their brand and get capital plus an operating playbook.", sourcingNotes:"Reclassified: Clarion is an operating platform, not a capital partner — it was previously filed under Private Equity Group here, which was wrong. Multi-brand residential trades, and the Wisconsin and Utah brands show they are not tied to one region.", deals:[], links:[], confidence:"verified"},
 
 {id:"flint", name:"Flint Group", kind:"sponsor", el:{d:"2026-06-22",deal:60857700414}, hsId:55405262674, url:"https://flintg.com", hsLinkedin:"https://linkedin.com/company/flintgroup", hsVertical:"Capital Partners", hsName:"Flint Group", hsLoc:"Seattle, Washington", sponsor:"", verticals:["capital"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
@@ -1023,7 +1020,7 @@ const saveOverlay = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify
 const note = id => (overlay[id] && overlay[id].note) || "";
 
 /* ---------- state ---------- */
-const S = { vertical:"all", kind:"all", el:"all", q:"", state:"", sponsor:"", sort:"name", conf:new Set(), view:"directory", mapState:null };
+const S = { vertical:"all", kind:"all", q:"", state:"", sponsor:"", sort:"name", conf:new Set(), view:"directory", mapState:null };
 
 /* ---------- helpers ---------- */
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1058,9 +1055,6 @@ function visible(){
   const q = S.q.trim().toLowerCase();
   return PARTNERS.filter(p=>{
     if(S.vertical!=="all" && !(p.verticals||[]).includes(S.vertical)) return false;
-    if(S.el==="signed" && !elSigned(p)) return false;
-    if(S.el==="via"    && !elCovered(p)) return false;
-    if(S.el==="none"   && (elSigned(p)||elCovered(p))) return false;
     if(S.kind!=="all"){
       if(S.kind==="platform" && p.kind==="sponsor") return false;
       if(S.kind==="sponsor" && p.kind==="platform") return false;
@@ -1070,7 +1064,7 @@ function visible(){
     if(S.conf.size && !S.conf.has(p.confidence)) return false;
     if(q){
       const hay = [p.name,p.sponsor,p.hq,p.footprint,p.buyBox,p.sourcingNotes,note(p.id),
-                   p.url,p.hsVertical,p.hsName,p.hsLoc,
+                   p.url,p.hsVertical,p.hsName,p.hsLoc,(p.intl||[]).join(" "),
                    (elSigned(p)?"el signed "+p.el.d:elCovered(p)?"under parent el "+p.el.via:"no el"),
                    (p.brands||[]).join(" "),(p.states||[]).join(" "),
                    (p.verticals||[]).map(v=>VERTICALS[v]?VERTICALS[v].label:"").join(" "),
@@ -1136,19 +1130,6 @@ function renderRail(){
     .sort((a,b)=>counts[b[0]]-counts[a[0]])
     .forEach(([k,v]) => rail.appendChild(mk(k,v.label,v.color,counts[k])));
 
-  const er = document.getElementById("elRail");
-  er.innerHTML="";
-  const nSigned = PARTNERS.filter(elSigned).length;
-  const nVia    = PARTNERS.filter(elCovered).length;
-  const nNone   = PARTNERS.length - nSigned - nVia;
-  [["all","All",PARTNERS.length],["signed","Signed EL",nSigned],
-   ["via","Under parent EL",nVia],["none","No EL",nNone]].forEach(([k,l,n])=>{
-    const b = el("button","vbtn"+(S.el===k?" on":""));
-    b.innerHTML='<span>'+l+'</span><span class="n">'+n+'</span>';
-    b.onclick=()=>{ S.el=k; render(); };
-    er.appendChild(b);
-  });
-
   const kr = document.getElementById("kindRail");
   kr.innerHTML="";
   [["all","Everyone"],["platform","Operating platforms"],["sponsor","Capital / sponsors"]].forEach(([k,l])=>{
@@ -1171,8 +1152,7 @@ function renderGrid(){
   const vLabel = S.vertical==="all" ? "all verticals" : VERTICALS[S.vertical].label;
   rl.innerHTML = '<b>'+list.length+'</b> partner'+(list.length===1?"":"s")+' &middot; '+vLabel
     + (S.state? ' &middot; active in <b>'+S.state+'</b>':'')
-    + (S.sponsor? ' &middot; backed by <b>'+esc(S.sponsor)+'</b>':'')
-    + (S.el==="signed"? ' &middot; <b>signed EL only</b>' : S.el==="via"? ' &middot; <b>under a parent EL</b>' : S.el==="none"? ' &middot; <b>no EL on file</b>':'');
+    + (S.sponsor? ' &middot; backed by <b>'+esc(S.sponsor)+'</b>':'');
 
   grid.innerHTML="";
   if(!list.length){
@@ -1197,7 +1177,10 @@ function renderGrid(){
         (p.sponsor? '<span class="sep">&bull;</span><span>'+esc(p.sponsor.split("(")[0].trim())+'</span>':'')+
       '</div>'+
       '<div class="verts">'+(p.verticals||[]).map(vtagHtml).join("")+'</div>'+
-      (sts.length? '<div class="geo">'+shown+more+'</div>' : '<div class="geo" style="opacity:.5">No geography on file</div>')+
+      ((sts.length||(p.intl||[]).length)
+        ? '<div class="geo">'+shown+more+
+          (p.intl||[]).map(x=>'<span class="st intl">'+esc(x)+'</span>').join("")+'</div>'
+        : '<div class="geo" style="opacity:.5">No geography on file</div>')+
       (p.url? '<div class="meta" style="margin-top:8px"><a href="'+esc(p.url)+'" target="_blank" rel="noopener" '+
               'onclick="event.stopPropagation()" style="color:var(--steel-blue);font-size:12.5px;text-decoration:none">'+
               esc(p.url.replace(/^https?:\/\//,"").replace(/\/$/,""))+' &#8599;</a></div>' : '')+
@@ -1262,6 +1245,11 @@ function openDrawer(id){
       (p.hsLoc? '<dt>CRM location</dt><dd>'+esc(p.hsLoc)+'</dd>':'')+
       '</dl>'+
       (p.hsId? '' : '<p style="font-size:12px;color:var(--warn);margin:10px 0 0">&#9888; No matching HubSpot company record found under this name.</p>'))+
+
+    ((p.intl||[]).length ? sec("Outside the U.S.",
+      '<div class="geo" style="display:flex;gap:5px;flex-wrap:wrap">'+
+      p.intl.map(x=>'<span class="st intl">'+esc(x)+'</span>').join("")+'</div>'+
+      '<p style="font-size:12px;color:var(--text-soft);margin:9px 0 0">Not shown on the coverage map, which is U.S. states only.</p>') : "")+
 
     (sts.length ? sec("Where they operate ("+sts.length+" states)",
       '<div class="geo" style="display:flex;gap:5px;flex-wrap:wrap">'+

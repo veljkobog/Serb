@@ -83,8 +83,10 @@ first section of the drawer:
 | **Under parent EL** | 3 | Apex and Orion (under `Alpine Investors; Apex & Orion`) and Percheron (under `Alloy Roofing (Percheron Capital)`). In scope through the parent, no standalone EL. |
 | **No EL** | 1 | Heartland Paving Partners. |
 
-Filter by state in the **Engagement** rail, or sort by **Most recent EL** to see the
-newest signings first. American Landscaping Partners is the most recent (11 Aug 2026).
+Sort by **Most recent EL** to see the newest signings first. American Landscaping
+Partners is the most recent (11 Aug 2026). There is no Engagement filter in the rail —
+with 68 of 72 signed, the distinction did not earn a filter; it lives on the card chip
+and in the drawer instead.
 
 **Heartland Paving Partners has no deal record in HubSpot at all** — not in Closed
 (Won), not anywhere in the Client Pipeline. The tool says so plainly in the drawer.
@@ -125,9 +127,38 @@ Every partner carries a confidence flag, shown on the card and in the drawer:
 | `partial` | Platform confirmed, but geography or buy box is still thin — verify before pitching |
 | `unverified` | On the roster, not yet researched. No claims made. |
 
-As of the initial build: **31 verified, 14 partial, 27 unverified.** The unverified
-rows are deliberately empty rather than guessed — a wrong state list is worse than a
-blank one when someone is sourcing against it.
+Currently **46 verified, 13 partial, 13 unverified**. Rows that are still unresearched
+are deliberately empty rather than guessed — a wrong state list is worse than a blank
+one when someone is sourcing against it.
+
+Six operating companies still have no geography because nothing usable is published:
+Solidaire, CenterPoint Companies, Netstock, Ally Services, Blue Fox and Link 1. Blue
+Fox and Link 1 are both Walk On Capital portfolio companies, so one call fills three
+rows. Sponsors are unmapped by design — they invest through platforms rather than
+holding territory.
+
+### Corrections found while filling in geography
+
+Research contradicted four records that were previously wrong. All four are fixed, and
+the drawer explains each so nobody re-derives the old answer:
+
+| Partner | Was | Actually |
+| --- | --- | --- |
+| **APHIX** | IT / MSP | Commercial landscaping and facilities, Lexington KY, backed by Gauge Capital |
+| **Clarion** | Private equity group | Operating HVAC/plumbing/electrical platform, Lake Forest IL |
+| **Pine Services Group** | Field services holdco | Evergreen's ERP and software vertical (NetSuite, Sage) |
+| **Comfort Connect** | HVAC acquirer | A financing and leasing platform, and the CRM places it in Markham, Ontario |
+
+Two earlier flags also resolved: **Zeus** is Zeus Fire & Security (Paoli PA), and
+**Nexcore** is Trinity Hunt's commercial HVAC platform, not NexCore Group the
+healthcare real estate developer.
+
+### Partners outside the U.S.
+
+Ironclad Group (Ontario), Alphi Capital (Toronto/BC), Baxter's Bakery (Toronto) and
+possibly Comfort Connect (Markham) operate outside the U.S. They carry an `intl` field
+shown as a blue chip on the card and a dedicated drawer section, and they are excluded
+from the coverage map, which is U.S. states only.
 
 ### Updating the data
 
