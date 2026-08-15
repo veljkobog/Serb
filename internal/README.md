@@ -43,6 +43,35 @@ Plumbing *and* Electrical, so picking any one trade shows every buyer who will t
 that deal. Sponsors carry the verticals their platforms operate in, which is why
 Alpine shows up under HVAC, Commercial MEP and IT.
 
+### Engagement letters — the source of truth
+
+Partner status comes from the **HubSpot Client Pipeline, `Closed (Won)` stage**
+(pipeline `772899739`, stage `1128447549`). That stage holds **69 deals across 68
+unique partners**, which is the signed-EL roster.
+
+Every partner carries one of three states, shown as a chip on the card and as the
+first section of the drawer:
+
+| State | Count | Meaning |
+| --- | --- | --- |
+| **EL signed** | 68 | Has a Closed (Won) deal. Drawer shows the EL date and links to the deal. |
+| **Under parent EL** | 3 | Apex and Orion (under `Alpine Investors; Apex & Orion`) and Percheron (under `Alloy Roofing (Percheron Capital)`). In scope through the parent, no standalone EL. |
+| **No EL** | 1 | Heartland Paving Partners. |
+
+Filter by state in the **Engagement** rail, or sort by **Most recent EL** to see the
+newest signings first. American Landscaping Partners is the most recent (11 Aug 2026).
+
+**Heartland Paving Partners has no deal record in HubSpot at all** — not in Closed
+(Won), not anywhere in the Client Pipeline. The tool says so plainly in the drawer.
+Its research is retained but must not be presented to a seller as a live mandate.
+
+Two other reconciliation notes:
+
+- **Pine Services Group has two Closed (Won) deals** (May 2026 and Oct 2025) — likely
+  a duplicate worth merging in the CRM.
+- `Heartland Home Services` (Grand Rapids, MI) *is* in the Client Pipeline but at a
+  different stage. It is a different company from Heartland Paving Partners.
+
 ### HubSpot
 
 Partner records are cross-referenced against the HubSpot company object (portal
