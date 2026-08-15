@@ -91,6 +91,11 @@ button{font-family:inherit}
 /* ---------- main ---------- */
 .main{flex:1;min-width:0;padding:18px 22px 60px}
 .filters{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.lead-select{
+  font-size:14.5px !important;font-weight:600;min-width:270px;
+  border-color:var(--safety) !important;color:#fff !important;
+  background:var(--steel-3) !important;
+}
 select,.filters input{
   background:var(--steel);color:var(--text);border:1px solid #3a4a5c;border-radius:9px;
   padding:8px 11px;font-size:13px;font-family:inherit;outline:none;
@@ -127,7 +132,7 @@ select,.filters input{
 .card .geo{margin-top:11px;font-size:11.5px;color:var(--text-soft);display:flex;gap:4px;flex-wrap:wrap}
 .st{background:#26333f;border-radius:4px;padding:2px 6px;font-weight:600;font-size:10.5px;letter-spacing:.04em}
 .st.more{background:none;color:#66788c}
-.card .conf{margin-top:11px;font-size:10px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:flex;align-items:center;gap:6px}
+.card .conf{margin-top:11px;font-size:10px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;row-gap:3px}
 .c-verified{color:var(--good)} .c-partial{color:var(--warn)} .c-unverified{color:#e0715f}
 .conf .bulb{width:7px;height:7px;border-radius:50%;background:currentColor}
 
@@ -261,6 +266,7 @@ select,.filters input{
   <main class="main">
     <div id="viewDirectory">
       <div class="filters">
+        <select id="verticalFilter" class="lead-select" title="Verticals ranked by how many partners cover them"></select>
         <select id="stateFilter"><option value="">All geographies</option></select>
         <select id="sponsorFilter"><option value="">All sponsors / backers</option></select>
         <select id="sortBy">
@@ -285,6 +291,7 @@ select,.filters input{
         Click any state to see who is there. Use this to match a seller to the buyers who already
         operate in their market &mdash; and <b>White Space</b> to find the states they are paying to enter.
       </div>
+      <div class="filters"><select id="verticalFilterMap" class="lead-select"></select></div>
       <div class="mapwrap">
         <div class="tilegrid" id="tilegrid"></div>
         <div class="legend" id="legend"></div>
@@ -299,6 +306,7 @@ select,.filters input{
         A seller in a red state is a first-mover entry for every buyer in that vertical &mdash; that is
         where the competitive tension, and the multiple, is highest.
       </div>
+      <div class="filters"><select id="verticalFilterGaps" class="lead-select"></select></div>
       <div class="gapgrid" id="gapgrid"></div>
     </div>
   </main>
@@ -318,24 +326,35 @@ select,.filters input{
    merged JSON you can paste back into this file.
    ===================================================================== */
 const VERTICALS = {
-  hvac:    {label:"HVAC / Plumbing / Electrical", color:"#3f7cad"},
-  comm:    {label:"Commercial Mechanical & Facility Services", color:"#2f8f8f"},
-  roof:    {label:"Roofing & Exteriors", color:"#c9622f"},
-  land:    {label:"Landscaping & Grounds", color:"#4f9e46"},
-  tree:    {label:"Tree Care", color:"#6d9b3a"},
-  fire:    {label:"Fire, Life Safety & Security", color:"#c0392b"},
-  it:      {label:"IT / MSP / Cybersecurity", color:"#7a5cc4"},
-  pave:    {label:"Paving & Site Work", color:"#8a8a8a"},
-  restore: {label:"Restoration", color:"#b5893a"},
-  facil:   {label:"Facilities Maintenance & Janitorial", color:"#4a7fa8"},
-  capital: {label:"Capital / Sponsor", color:"#5b6b7d"},
-  other:   {label:"Unclassified &mdash; needs research", color:"#7d5a5a"}
+  hvac:       {label:"HVAC", color:"#3f7cad"},
+  plumbing:   {label:"Plumbing", color:"#2f8f8f"},
+  electrical: {label:"Electrical", color:"#d8a52a"},
+  roofing:    {label:"Roofing", color:"#c9622f"},
+  exterior:   {label:"Exterior Services", color:"#b5673f"},
+  windows:    {label:"Windows", color:"#8f6f4a"},
+  landscaping:{label:"Landscaping", color:"#4f9e46"},
+  tree:       {label:"Tree Care Services", color:"#6d9b3a"},
+  fire:       {label:"Fire Protection", color:"#c0392b"},
+  it:         {label:"IT", color:"#7a5cc4"},
+  cyber:      {label:"Cybersecurity", color:"#9b6dd4"},
+  mep:        {label:"Commercial MEP", color:"#3d8f77"},
+  facilities: {label:"Commercial Facilities", color:"#4a7fa8"},
+  janitorial: {label:"Janitorial", color:"#5b8fa8"},
+  asphalt:    {label:"Asphalt", color:"#8a8a8a"},
+  restoration:{label:"Restoration Services", color:"#b5893a"},
+  water:      {label:"Water", color:"#3a86b5"},
+  capital:    {label:"Private Equity Group", color:"#5b6b7d"},
+  other:      {label:"Unclassified &mdash; needs research", color:"#7d5a5a"}
 };
+
+// Minimum partners for a vertical to appear as a top-level option in the
+// vertical dropdown. Anything thinner is grouped under "Thin coverage".
+const COVERAGE_THRESHOLD = 3;
 
 const PARTNERS = [
 /* ---------- HVAC / P / E residential ---------- */
-{id:"apex", name:"Apex Service Partners", kind:"platform", sponsor:"Alpine Investors (Apollo minority, announced May 2026)",
- verticals:["hvac"], hq:"Tampa, FL", founded:2019,
+{id:"apex", name:"Apex Service Partners", kind:"platform", hsId:37100145992, url:"https://apexservicepartners.com", hsLinkedin:"https://linkedin.com/company/apex-service-partners", hsVertical:"Capital Partners", hsName:"Apex Service Partners", hsLoc:"Tampa, Florida", sponsor:"Alpine Investors (Apollo minority, announced May 2026)",
+ verticals:["hvac","plumbing","electrical"], hq:"Tampa, FL", founded:2019,
  footprint:"National — 75 brands across 46 states, ~13,000 employees, ~$1.3B revenue",
  states:["FL","TX","CA","AZ","NV","CO","UT","GA","NC","SC","TN","VA","MD","PA","NY","NJ","OH","IN","IL","MI","WI","MN","MO","KS","OK","AR","LA","AL","MS","KY","WA","OR","ID","NM","IA","NE","CT","MA","DE","WV"],
  brands:["~300 local operating businesses under 75 brands"],
@@ -346,8 +365,8 @@ const PARTNERS = [
  links:[{label:"Alpine Investors",url:"https://alpineinvestors.com/"}],
  confidence:"verified"},
 
-{id:"champions", name:"Champions Group", kind:"platform", sponsor:"Blackstone (agreed Feb 2026, from Odyssey Investment Partners)",
- verticals:["hvac"], hq:"Brea, CA",
+{id:"champions", name:"Champions Group", kind:"platform", hsId:40173694544, url:"https://championsgroupholdings.com", hsVertical:"Capital Partners", hsName:"Champions Group", hsLoc:"Irvine, California", sponsor:"Blackstone (agreed Feb 2026, from Odyssey Investment Partners)",
+ verticals:["hvac","plumbing","electrical"], hq:"Brea, CA",
  footprint:"Multi-metro — 1,800+ field technicians, ~150,000 active membership customers",
  states:["CA","TX","AZ","NV","GA","FL","CO"],
  brands:[],
@@ -357,8 +376,8 @@ const PARTNERS = [
  links:[],
  confidence:"verified"},
 
-{id:"sila", name:"SILA Services", kind:"platform", sponsor:"Goldman Sachs Alternatives (majority, from Morgan Stanley Capital Partners, Nov 2024)",
- verticals:["hvac"], hq:"King of Prussia, PA",
+{id:"sila", name:"SILA Services", kind:"platform", hsId:51288325999, url:"https://silaservices.com", hsLinkedin:"https://linkedin.com/company/silaservices", hsVertical:"Capital Partners", hsName:"Sila Services", hsLoc:"King of Prussia, Pennsylvania", sponsor:"Goldman Sachs Alternatives (majority, from Morgan Stanley Capital Partners, Nov 2024)",
+ verticals:["hvac","plumbing","electrical","water"], hq:"King of Prussia, PA",
  footprint:"30+ brands across the Northeast, Mid-Atlantic and Midwest",
  states:["PA","NJ","NY","MD","VA","DE","CT","MA","OH","IN","DC"],
  brands:["My Plumber Plus","TriState Home Services","Triangle Heating, Cooling, Plumbing & Electrical"],
@@ -371,7 +390,7 @@ const PARTNERS = [
  confidence:"verified"},
 
 {id:"anyhour", name:"Any Hour Group", kind:"platform", sponsor:"Knox Lane (July 2021)",
- verticals:["hvac"], hq:"Orem / Salt Lake City, UT",
+ verticals:["hvac","plumbing","electrical"], hq:"Orem / Salt Lake City, UT",
  footprint:"Mountain West leader, expanding into the West Coast and Midwest",
  states:["UT","ID","AZ","NM","NV","CO","CA","OR","MN"],
  brands:["Any Hour Services","Magic Electric","Perfect Plumbing","Strongbuilt USA"],
@@ -382,8 +401,8 @@ const PARTNERS = [
  links:[{label:"anyhourgroup.com",url:"https://anyhourgroup.com/press/"}],
  confidence:"verified"},
 
-{id:"goettl", name:"Goettl", kind:"platform", sponsor:"Cortec Group (Dec 2021)",
- verticals:["hvac"], hq:"Las Vegas, NV", founded:1939,
+{id:"goettl", name:"Goettl", kind:"platform", hsId:47247178312, url:"https://www.goettl.com", hsVertical:"HVAC", hsName:"Goettl", hsLoc:"Tempe, Arizona", sponsor:"Cortec Group (Dec 2021)",
+ verticals:["hvac","plumbing"], hq:"Las Vegas, NV", founded:1939,
  footprint:"Southwest — Arizona, Nevada, Texas",
  states:["NV","AZ","TX"],
  brands:["Goettl Air Conditioning & Plumbing"],
@@ -393,8 +412,8 @@ const PARTNERS = [
  links:[{label:"goettl.com",url:"https://www.goettl.com/locations/"}],
  confidence:"verified"},
 
-{id:"southern", name:"Southern Home Services", kind:"platform", sponsor:"",
- verticals:["hvac"], hq:"", founded:2022,
+{id:"southern", name:"Southern Home Services", kind:"platform", hsId:39314338156, url:"https://southernhomeservices.com", hsLinkedin:"https://linkedin.com/company/22293481", hsVertical:"Capital Partners", hsName:"Southern Home Services", hsLoc:"Maitland, Florida", sponsor:"",
+ verticals:["hvac","plumbing","electrical"], hq:"", founded:2022,
  footprint:"Southern U.S. tri-trade platform",
  states:["TX","GA","FL","TN","NC","SC","AL"],
  brands:[],
@@ -404,8 +423,8 @@ const PARTNERS = [
  links:[],
  confidence:"partial"},
 
-{id:"redwood", name:"Redwood Services", kind:"platform", sponsor:"",
- verticals:["hvac"], hq:"Memphis, TN",
+{id:"redwood", name:"Redwood Services", kind:"platform", hsId:37002286367, url:"https://redwoodservices.com", hsName:"Redwood Services", hsLoc:"Memphis, Tennessee", sponsor:"",
+ verticals:["hvac","plumbing","electrical"], hq:"Memphis, TN",
  footprint:"Multi-state residential services platform",
  states:["TN","MS","AR","AL","MO","TX"],
  brands:[],
@@ -415,8 +434,8 @@ const PARTNERS = [
  links:[],
  confidence:"partial"},
 
-{id:"columbia", name:"Columbia Home Services", kind:"platform", sponsor:"Oxbow Equity Partners; Tenex Capital Management",
- verticals:["hvac"], hq:"",
+{id:"columbia", name:"Columbia Home Services", kind:"platform", hsId:40165583237, url:"https://columbiahomeservices.com", hsLinkedin:"https://linkedin.com/company/columbia-home-services", hsVertical:"Capital Partners", hsName:"Columbia Home Services", hsLoc:"Dallas, Texas", sponsor:"Oxbow Equity Partners; Tenex Capital Management",
+ verticals:["hvac","plumbing","electrical"], hq:"",
  footprint:"Secondary but growing U.S. markets",
  states:[],
  brands:[],
@@ -426,8 +445,8 @@ const PARTNERS = [
  links:[],
  confidence:"partial"},
 
-{id:"seer", name:"The SEER Group", kind:"platform", sponsor:"",
- verticals:["hvac","comm"], hq:"",
+{id:"seer", name:"The SEER Group", kind:"platform", hsId:40290018845, url:"https://www.theseergroup.com", hsLinkedin:"https://linkedin.com/company/the-seer-group-llc", hsVertical:"Capital Partners", hsName:"The SEER Group", hsLoc:"Lynnwood, Washington", sponsor:"",
+ verticals:["hvac","plumbing","electrical","mep"], hq:"",
  footprint:"Residential and commercial trade services",
  states:[],
  brands:[],
@@ -437,7 +456,7 @@ const PARTNERS = [
  links:[],
  confidence:"partial"},
 
-{id:"comfortconnect", name:"Comfort Connect", kind:"platform", sponsor:"", verticals:["hvac"], hq:"",
+{id:"comfortconnect", name:"Comfort Connect", kind:"platform", hsId:43296427420, url:"https://www.comfortconnect.com", hsLinkedin:"https://linkedin.com/company/comfort-connections", hsVertical:"Capital Partners", hsName:"Comfort Connect", hsLoc:"Markham, Ontario", sponsor:"", verticals:["hvac"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
  deals:[], links:[], confidence:"unverified"},
 
@@ -445,13 +464,13 @@ const PARTNERS = [
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"solidaire", name:"Solidaire", kind:"platform", sponsor:"", verticals:["hvac"], hq:"",
+{id:"solidaire", name:"Solidaire", kind:"platform", hsId:52360638837, url:"https://solidaire.com", hsVertical:"Capital Partners", hsName:"Solidaire", sponsor:"", verticals:["hvac"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
  deals:[], links:[], confidence:"unverified"},
 
 /* ---------- Commercial mechanical / facility ---------- */
 {id:"orion", name:"Orion Services Group", kind:"platform", sponsor:"Alpine Investors",
- verticals:["comm"], hq:"Oklahoma City, OK",
+ verticals:["mep","hvac","plumbing"], hq:"Oklahoma City, OK",
  footprint:"National commercial facility services platform, incl. Astra Service Partners division",
  states:["OK","MO","MD","VA","DC","TX","CA","IL","PA","DE"],
  brands:["Jackson Mechanical Service","Astra Service Partners","Air Comfort Service Group","Knott Mechanical"],
@@ -463,8 +482,8 @@ const PARTNERS = [
  links:[{label:"Alpine — Orion",url:"https://alpineinvestors.com/update/alpine-launches-orion-group/"}],
  confidence:"verified"},
 
-{id:"pine", name:"Pine Services Group", kind:"platform", sponsor:"Evergreen Services Group",
- verticals:["comm","facil","it"], hq:"",
+{id:"pine", name:"Pine Services Group", kind:"platform", hsId:54711479678, url:"https://pineservicesgroup.com", hsLinkedin:"https://linkedin.com/company/pine-services-group", hsVertical:"Portfolio Company", hsName:"Pine Services Group", sponsor:"Evergreen Services Group",
+ verticals:["facilities","it"], hq:"",
  footprint:"North America — permanent-hold holding company",
  states:[],
  brands:[],
@@ -475,7 +494,7 @@ const PARTNERS = [
  confidence:"partial"},
 
 {id:"atlas", name:"Atlas Facilities Maintenance", kind:"platform", sponsor:"",
- verticals:["facil","land"], hq:"Portland, OR",
+ verticals:["janitorial","facilities","landscaping"], hq:"Portland, OR",
  footprint:"16+ states, 100+ commercial accounts",
  states:["OR","WA","CA","ID","NV","UT","AZ","CO","TX","IL","GA","FL","NC","VA","NY","PA"],
  brands:[],
@@ -485,8 +504,8 @@ const PARTNERS = [
  links:[{label:"atlasfacilities.com",url:"https://atlasfacilities.com/acquisitions/"}],
  confidence:"partial"},
 
-{id:"cobalt", name:"Cobalt Service Partners", kind:"platform", sponsor:"Alpine Investors",
- verticals:["fire","comm"], hq:"",
+{id:"cobalt", name:"Cobalt Service Partners", kind:"platform", hsId:52179230819, url:"https://www.cobaltsp.com", hsLinkedin:"https://linkedin.com/company/cobalt-sp", hsVertical:"Capital Partners", hsName:"Cobalt Service Partners", hsLoc:"New York, New York", sponsor:"Alpine Investors",
+ verticals:["fire","facilities"], hq:"",
  footprint:"West Coast, Midwest and Gulf South",
  states:["CA","WA","OR","IL","MI","LA","TX"],
  brands:["Automated Door Ways","Toepfer Security","Industrial Door Company","Homeland Safety Systems"],
@@ -496,12 +515,12 @@ const PARTNERS = [
  links:[],
  confidence:"verified"},
 
-{id:"centerpoint", name:"CenterPoint Companies", kind:"platform", sponsor:"", verticals:["comm"], hq:"",
+{id:"centerpoint", name:"CenterPoint Companies", kind:"platform", hsId:50330423625, url:"https://centerpointcompanies.co", hsVertical:"Capital Partners", hsName:"CenterPoint Companies", sponsor:"", verticals:["mep"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
 /* ---------- Roofing & exteriors ---------- */
 {id:"raftrx", name:"RAFTRx Roofing + Exteriors", kind:"platform", sponsor:"Saw Mill Capital (with Everberg Capital)",
- verticals:["roof"], hq:"Duluth, GA", founded:2023,
+ verticals:["roofing","exterior"], hq:"Duluth, GA", founded:2023,
  footprint:"35+ local offices across 15–16 states, 8 brands",
  states:["GA","FL","TX","NC","SC","TN","AL","IL","WI","MO","OK","CO","VA","KY","IN"],
  brands:["Gold Medal Roofing","Apex General Contracting"],
@@ -513,8 +532,8 @@ const PARTNERS = [
  links:[{label:"raftrxroofing.com",url:"https://raftrxroofing.com/acquisition/"}],
  confidence:"verified"},
 
-{id:"stonegrove", name:"Stonegrove Roofing Partners", kind:"platform", sponsor:"Strand Equity (minority disclosed May 2025)",
- verticals:["roof"], hq:"", founded:2024,
+{id:"stonegrove", name:"Stonegrove Roofing Partners", kind:"platform", hsId:55606339081, url:"https://stonegroveroofing.com", hsLinkedin:"https://linkedin.com/company/stonegrove-roofing", hsVertical:"Capital Partners", hsName:"Stonegrove Roofing Partners", sponsor:"Strand Equity (minority disclosed May 2025)",
+ verticals:["roofing"], hq:"", founded:2024,
  footprint:"14 partner locations across 9 states, 7 distinct roofing brands",
  states:["KS","IN","MO","OH","TX","IL","KY","TN","MI"],
  brands:["AR Roofing","Moss Roofing","TEC","Guns N Hoses"],
@@ -526,8 +545,8 @@ const PARTNERS = [
  links:[{label:"stonegroveroofing.com",url:"https://stonegroveroofing.com/our-process/"}],
  confidence:"verified"},
 
-{id:"alloy", name:"Alloy Roofing", kind:"platform", sponsor:"Percheron Capital",
- verticals:["roof"], hq:"Atlanta, GA", founded:2024,
+{id:"alloy", name:"Alloy Roofing", kind:"platform", hsId:50239273877, url:"https://alloyroofing.com", hsVertical:"Portfolio Company", hsName:"Alloy Roofing", hsLoc:"Chamblee, Georgia", sponsor:"Percheron Capital",
+ verticals:["roofing"], hq:"Atlanta, GA", founded:2024,
  footprint:"National ambition, launched from a Houston base",
  states:["GA","TX"],
  brands:["Amstill Roofing"],
@@ -537,8 +556,8 @@ const PARTNERS = [
  links:[{label:"percheron.com",url:"https://percheron.com/media/percheron-capital-launches-alloy-roofing/"}],
  confidence:"verified"},
 
-{id:"infinity", name:"Infinity Home Services", kind:"platform", sponsor:"LightBay Capital & Freeman Spogli (Dec 2022)",
- verticals:["roof"], hq:"New Berlin, WI", founded:1997,
+{id:"infinity", name:"Infinity Home Services", kind:"platform", hsId:54041802914, url:"https://infinityhomeservices.com", hsVertical:"Roofing", hsName:"Infinity Home Services", sponsor:"LightBay Capital & Freeman Spogli (Dec 2022)",
+ verticals:["roofing","exterior"], hq:"New Berlin, WI", founded:1997,
  footprint:"14+ partner brands across new and existing markets",
  states:["WI","MN","IL","MI","IN","OH","IA","MO","CO","TX"],
  brands:["14 partner brands"],
@@ -549,8 +568,8 @@ const PARTNERS = [
  links:[{label:"infinityhomeservices.com",url:"https://www.infinityhomeservices.com/why-ihs"}],
  confidence:"verified"},
 
-{id:"stronghouse", name:"Stronghouse Brands / Stronghouse Solutions", kind:"platform", sponsor:"O2 Investment Partners (2021)",
- verticals:["roof"], hq:"Addison, TX",
+{id:"stronghouse", name:"Stronghouse Brands / Stronghouse Solutions", kind:"platform", hsId:39418015378, url:"https://stronghousebrands.com", hsVertical:"Capital Partners", hsName:"Stronghouse Brands", hsLoc:"Addison, Texas", sponsor:"O2 Investment Partners (2021)",
+ verticals:["roofing","exterior","windows"], hq:"Addison, TX",
  footprint:"59 locations across 30 states",
  states:["TX","OK","KS","MO","AR","LA","CO","NM","AZ","NV","UT","NE","IA","MN","WI","IL","IN","OH","MI","KY","TN","GA","FL","AL","NC","SC","VA","PA","NY","NJ"],
  brands:["Formed from 8 regional brands, now consolidating under one name"],
@@ -561,8 +580,8 @@ const PARTNERS = [
  links:[{label:"stronghousebrands.com",url:"https://stronghousebrands.com/brands/"}],
  confidence:"verified"},
 
-{id:"rca", name:"Roofing Corp of America", kind:"platform", sponsor:"FirstService Corporation (controlling interest, Dec 2023)",
- verticals:["roof","comm"], hq:"Atlanta, GA",
+{id:"rca", name:"Roofing Corp of America", kind:"platform", hsId:41128122209, url:"https://www.roofingcorp.com", hsLinkedin:"https://linkedin.com/company/roofing-corp-of-america", hsVertical:"Portfolio Company", hsName:"Roofing Corp of America", hsLoc:"Atlanta, Georgia", sponsor:"FirstService Corporation (controlling interest, Dec 2023)",
+ verticals:["roofing"], hq:"Atlanta, GA",
  footprint:"16 regional branches across 11 states, 900+ employees, ~$400M revenue",
  states:["GA","FL","TX","NC","SC","TN","AL","CO","VA","OH","AZ"],
  brands:["Innovative Roofing Group","Front Range Roofing Systems","Springer-Peterson Roofing & Sheet Metal"],
@@ -574,7 +593,7 @@ const PARTNERS = [
  confidence:"verified"},
 
 {id:"ridgeline", name:"Ridgeline Roofing & Restoration", kind:"platform", sponsor:"Bertram Capital",
- verticals:["roof","restore"], hq:"",
+ verticals:["roofing","restoration"], hq:"",
  footprint:"Residential and commercial roofing",
  states:["AL","GA","TN","FL"],
  brands:[],
@@ -584,8 +603,8 @@ const PARTNERS = [
  links:[{label:"Bertram portfolio",url:"https://www.bertramcapital.com/portfolio/ridgeline-roofing-restoration"}],
  confidence:"partial"},
 
-{id:"valor", name:"Valor Exterior Partners", kind:"platform", sponsor:"Osceola Capital",
- verticals:["roof"], hq:"Ohio",
+{id:"valor", name:"Valor Exterior Partners", kind:"platform", hsId:43037871223, url:"https://valorexteriorpartners.com", hsVertical:"Roofing", hsName:"Valor Exterior Partners", sponsor:"Osceola Capital",
+ verticals:["roofing","exterior"], hq:"Ohio",
  footprint:"Roofing and exterior home services",
  states:["OH"],
  brands:[],
@@ -595,8 +614,8 @@ const PARTNERS = [
  links:[{label:"valorexteriorpartners.com",url:"https://valorexteriorpartners.com/"}],
  confidence:"partial"},
 
-{id:"harley", name:"Harley Exteriors", kind:"platform", sponsor:"O2 Investment Partners (Aug 2024)",
- verticals:["roof"], hq:"Bothell, WA", founded:2002,
+{id:"harley", name:"Harley Exteriors", kind:"platform", hsId:56468390324, url:"https://harleyexteriors.com", hsLinkedin:"https://linkedin.com/company/harley-exteriors", hsVertical:"Capital Partners", hsName:"Harley Exteriors", hsLoc:"Bothell, Washington", sponsor:"O2 Investment Partners (Aug 2024)",
+ verticals:["windows","exterior"], hq:"Bothell, WA", founded:2002,
  footprint:"Greater Seattle region",
  states:["WA"],
  brands:["Harley Exteriors"],
@@ -606,12 +625,12 @@ const PARTNERS = [
  links:[],
  confidence:"verified"},
 
-{id:"avi", name:"AVI Roofing", kind:"platform", sponsor:"", verticals:["roof"], hq:"",
+{id:"avi", name:"AVI Roofing", kind:"platform", hsId:30750543750, url:"https://www.aviroofing.com", hsLinkedin:"https://linkedin.com/company/avi-roofing-inc", hsVertical:"Portfolio Company", hsName:"Aviroofing", hsLoc:"Denver, Colorado", sponsor:"", verticals:["roofing"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
 /* ---------- Landscaping / grounds / tree ---------- */
 {id:"alp", name:"American Landscaping Partners", kind:"platform", sponsor:"Shoreline Equity Partners (Aug 2023)",
- verticals:["land"], hq:"",
+ verticals:["landscaping"], hq:"",
  footprint:"Seven acquisitions since Aug 2023; Mid-Atlantic weighted",
  states:["MD","VA","PA","WV","NC","DE"],
  brands:["Landscape Detail","Ultralawn","Ready Field Solutions","Maxalea","Swift Lawn & Land","Precision Landscape Management","Appalachia Landscaping"],
@@ -621,8 +640,8 @@ const PARTNERS = [
  links:[{label:"Shoreline Equity",url:"https://shorelineequitypartners.com/"}],
  confidence:"verified"},
 
-{id:"riverview", name:"Riverview Landscapes", kind:"platform", sponsor:"",
- verticals:["land"], hq:"",
+{id:"riverview", name:"Riverview Landscapes", kind:"platform", hsId:53392301410, url:"https://riverviewco.com", hsVertical:"Capital Partners", hsName:"Riverview Landscapes", hsLoc:"Selkirk, New York", sponsor:"",
+ verticals:["landscaping"], hq:"",
  footprint:"21 acquisitions since 2022; Northeast weighted",
  states:["NY","NJ","CT","PA","MA","VT","NH"],
  brands:["Nature Scape","Cleveland Brothers Landscaping"],
@@ -633,8 +652,8 @@ const PARTNERS = [
  links:[],
  confidence:"partial"},
 
-{id:"ethoscapes", name:"Ethoscapes", kind:"platform", sponsor:"Evolution Strategy Partners; Genesis Park",
- verticals:["land"], hq:"Texas",
+{id:"ethoscapes", name:"Ethoscapes", kind:"platform", hsId:52360951099, url:"https://ethoscapestx.com", hsVertical:"Capital Partners", hsName:"Ethoscapes", hsLoc:"Houston, Texas", sponsor:"Evolution Strategy Partners; Genesis Park",
+ verticals:["landscaping"], hq:"Texas",
  footprint:"Six acquisitions over four years; Texas and Gulf weighted",
  states:["TX","LA","OK"],
  brands:["Westco Grounds Maintenance","Champions Hydro-Lawn","Houston Landscapes Unlimited"],
@@ -645,8 +664,8 @@ const PARTNERS = [
  links:[],
  confidence:"verified"},
 
-{id:"cleanscapes", name:"Clean Scapes", kind:"platform", sponsor:"Blue Sage Capital (July 2025)",
- verticals:["land"], hq:"Austin, TX", founded:2005,
+{id:"cleanscapes", name:"Clean Scapes", kind:"platform", hsId:48666099854, url:"https://cleanscapes.net", hsLinkedin:"https://linkedin.com/company/cleanscapeslandscaping", hsVertical:"Portfolio Company", hsName:"Clean Scapes", hsLoc:"Austin, Texas", sponsor:"Blue Sage Capital (July 2025)",
+ verticals:["landscaping"], hq:"Austin, TX", founded:2005,
  footprint:"Largest Texas-based commercial landscape contractor — Austin, Dallas, Fort Worth, San Antonio, Houston",
  states:["TX"],
  brands:["Clean Scapes"],
@@ -656,8 +675,8 @@ const PARTNERS = [
  links:[{label:"cleanscapes.net",url:"https://cleanscapes.net/"}],
  confidence:"verified"},
 
-{id:"ruppert", name:"Ruppert Landscape", kind:"platform", sponsor:"Knox Lane",
- verticals:["land"], hq:"Laytonsville, MD",
+{id:"ruppert", name:"Ruppert Landscape", kind:"platform", hsId:47439262276, url:"https://www.ruppertlandscape.com", hsVertical:"HVAC", hsName:"Ruppert", hsLoc:"Gaithersburg, Maryland", sponsor:"Knox Lane",
+ verticals:["landscaping"], hq:"Laytonsville, MD",
  footprint:"Mid-Atlantic and Southeast, expanding into Florida and the Carolinas",
  states:["MD","VA","DC","PA","DE","NC","SC","GA","TN","TX","FL"],
  brands:["Lawnscapes","Ocean Woods Landscaping","Landscapes Unlimited","Greatscapes Property Management Group"],
@@ -669,7 +688,7 @@ const PARTNERS = [
  links:[{label:"Acquisitions",url:"https://www.ruppertlandscape.com/about/acquisitions-partnerships/"}],
  confidence:"verified"},
 
-{id:"canopy", name:"Canopy Service Partners", kind:"platform", sponsor:"",
+{id:"canopy", name:"Canopy Service Partners", kind:"platform", hsId:41134944079, url:"https://canopysps.com", hsVertical:"Portfolio Company", hsName:"Canopy Service Partners", hsLoc:"Chicago, Illinois", sponsor:"",
  verticals:["tree"], hq:"",
  footprint:"North America",
  states:[],
@@ -682,7 +701,7 @@ const PARTNERS = [
 
 /* ---------- Paving ---------- */
 {id:"heartland", name:"Heartland Paving Partners", kind:"platform", sponsor:"Soundcore Capital Partners",
- verticals:["pave"], hq:"",
+ verticals:["asphalt"], hq:"",
  footprint:"Eight-plus acquisitions across the Midwest, Northeast and Mid-Atlantic",
  states:["IL","WI","OH","IN","MI","NJ","NY","PA","MD","VA","MO","KY"],
  brands:["ACI Asphalt & Concrete","S&K Asphalt and Concrete","Klekamp & Company","Asphalt Solutions","ProCru","Professional Paving and Concrete","Garden State Pavement Solutions","Poblocki Paving","Macadam Company"],
@@ -696,7 +715,7 @@ const PARTNERS = [
  confidence:"verified"},
 
 /* ---------- Fire / life safety ---------- */
-{id:"zeus", name:"Zeus", kind:"platform", sponsor:"",
+{id:"zeus", name:"Zeus", kind:"platform", hsId:53139037860, url:"https://zeusfireandsecurity.com", hsLinkedin:"https://linkedin.com/company/zeus-fire-and-security", hsVertical:"Capital Partners", hsName:"Zeus", hsLoc:"Paoli, Pennsylvania", sponsor:"",
  verticals:["fire"], hq:"",
  footprint:"",
  states:[],
@@ -705,7 +724,7 @@ const PARTNERS = [
  sourcingNotes:"Believed to be Zeus Fire & Security, but not confirmed. Do not pitch until the entity, sponsor and buy box are verified — there are several 'Zeus' entities in adjacent markets.",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"cfp", name:"Commercial Fire Protection", kind:"platform", sponsor:"",
+{id:"cfp", name:"Commercial Fire Protection", kind:"platform", hsId:49252531620, url:"https://www.fireprotected.com", hsLinkedin:"https://linkedin.com/company/commercial-fire-protection", hsVertical:"Portfolio Company", hsName:"Commercial Fire Protection", hsLoc:"Nevada", sponsor:"",
  verticals:["fire"], hq:"",
  footprint:"", states:[], brands:[],
  buyBox:"Fire protection and life safety services.",
@@ -713,7 +732,7 @@ const PARTNERS = [
  deals:[], links:[], confidence:"unverified"},
 
 /* ---------- IT / MSP / cyber ---------- */
-{id:"evergreen", name:"Evergreen Services Group", kind:"platform", sponsor:"Alpine Investors",
+{id:"evergreen", name:"Evergreen Services Group", kind:"platform", hsId:37088747447, url:"https://evergreensg.com", hsLinkedin:"https://linkedin.com/company/evergreen-services-group", hsVertical:"Portfolio Company", hsName:"Evergreen Services Group", hsLoc:"San Francisco, California", sponsor:"Alpine Investors",
  verticals:["it"], hq:"San Francisco, CA",
  footprint:"160+ businesses globally across 10+ separately-branded regional platforms",
  states:["CA","WA","OR","TX","IL","NY","MA","GA","FL","CO","MN","PA","NC","AZ","MI"],
@@ -724,8 +743,8 @@ const PARTNERS = [
  links:[{label:"Recent deals",url:"https://www.evergreensg.com/recent-deals/"}],
  confidence:"verified"},
 
-{id:"worklyn", name:"Worklyn Partners", kind:"platform+sponsor", sponsor:"Independent — ~$50M capital base",
- verticals:["it"], hq:"New York, NY",
+{id:"worklyn", name:"Worklyn Partners", kind:"platform+sponsor", hsId:18095323415, url:"https://worklynpartners.com", hsName:"Worklyn Partners", hsLoc:"New York, New York", sponsor:"Independent — ~$50M capital base",
+ verticals:["it","cyber"], hq:"New York, NY",
  footprint:"Seven acquisitions; New England and Mountain West presence",
  states:["NY","MA","CT","RI","NH","CO"],
  brands:["IT Management Solutions (ITMS)","NOYNIM"],
@@ -736,7 +755,7 @@ const PARTNERS = [
  links:[{label:"worklynpartners.com",url:"https://www.worklynpartners.com/insights/tag/acquisition"}],
  confidence:"verified"},
 
-{id:"netsurit", name:"Netsurit", kind:"platform", sponsor:"",
+{id:"netsurit", name:"Netsurit", kind:"platform", hsId:8357923589, url:"https://netsurit.com", hsLinkedin:"https://linkedin.com/company/netsurit", hsVertical:"Strategic Acquirer", hsName:"Netsurit", hsLoc:"New York, New York", sponsor:"",
  verticals:["it"], hq:"New York, NY",
  footprint:"Seven acquisitions to date; NYC plus South Central U.S.",
  states:["NY","NJ","TX"],
@@ -748,7 +767,7 @@ const PARTNERS = [
  links:[{label:"Acquisitions",url:"https://netsurit.com/en-us/acquisition/"}],
  confidence:"verified"},
 
-{id:"procern", name:"ProCern Technology Solutions", kind:"platform", sponsor:"",
+{id:"procern", name:"ProCern Technology Solutions", kind:"platform", hsId:42179582497, url:"https://procern.com", hsLinkedin:"https://linkedin.com/company/procern-technology-solutions", hsVertical:"Portfolio Company", hsName:"ProCern Technology Solutions", hsLoc:"Broomfield, Colorado", sponsor:"",
  verticals:["it"], hq:"",
  footprint:"",
  states:[],
@@ -767,35 +786,35 @@ const PARTNERS = [
  sourcingNotes:"Flag: public information points to Netstock being an inventory-optimization SaaS product (demand forecasting, replenishment, ERP integration), not a services acquirer. Confirm which entity is actually our partner before routing any deal here.",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"aphix", name:"APHIX", kind:"platform", sponsor:"", verticals:["it"], hq:"",
+{id:"aphix", name:"APHIX", kind:"platform", hsId:41647831311, url:"https://aphix.com", hsLinkedin:"https://linkedin.com/company/aphixky", hsVertical:"Portfolio Company", hsName:"APHIX", hsLoc:"Lexington, Kentucky", sponsor:"", verticals:["it"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"subsplit", name:"SubSplit", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+{id:"subsplit", name:"SubSplit", kind:"platform", hsId:39132014506, url:"https://subsplitsg.com", hsVertical:"Capital Partners", hsName:"SubSplit", sponsor:"", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"allyservices", name:"Ally Services", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+{id:"allyservices", name:"Ally Services", kind:"platform", hsId:51297568812, url:"https://allyservicesgroup.com", hsVertical:"Capital Partners", hsName:"Ally Services", hsLoc:"Houston, Texas", sponsor:"", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"nexcore", name:"Nexcore", kind:"platform", sponsor:"",
+{id:"nexcore", name:"Nexcore", kind:"platform", hsId:54896198459, url:"https://www.nxcus.com", hsVertical:"Capital Partners", hsName:"Nexcore", sponsor:"",
  verticals:["other"], hq:"",
  footprint:"", states:[], brands:[],
  buyBox:"",
  sourcingNotes:"Flag: the well-known NexCore Group is a healthcare real estate developer, not a services acquirer. Confirm whether our partner is that entity or a different Nexcore before routing anything.",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"ios", name:"IOS", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+{id:"ios", name:"IOS", kind:"platform", hsId:53139040798, url:"https://integratedopenings.com", hsLinkedin:"https://linkedin.com/company/integrated-openings-solutions", hsVertical:"Capital Partners", hsName:"IOS", hsLoc:"Naples, Florida", sponsor:"", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
 {id:"4m", name:"4M", kind:"platform", sponsor:"", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"ironclad", name:"Ironclad Holdings", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+{id:"ironclad", name:"Ironclad Holdings", kind:"platform", hsId:56468510038, url:"https://ironcladcorp.ca", hsVertical:"Capital Partners", hsName:"Ironclad Holdings", sponsor:"", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"skycrest", name:"Skycrest", kind:"platform", sponsor:"", verticals:["other"], hq:"",
+{id:"skycrest", name:"Skycrest", kind:"platform", hsId:37009102920, url:"https://skycrestroof.com", hsName:"Skycrest Roof Co", sponsor:"", verticals:["roofing"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"bakery", name:"Baxter's Bakery", kind:"platform", sponsor:"",
+{id:"bakery", name:"Baxter's Bakery", kind:"platform", hsId:37441155394, url:"https://www.baxtersbakery.ca", hsVertical:"Capital Partners", hsName:"Baxter's Bakery", hsLoc:"Ontario", sponsor:"",
  verticals:["other"], hq:"",
  footprint:"", states:[], brands:[],
  buyBox:"",
@@ -807,14 +826,14 @@ const PARTNERS = [
  sourcingNotes:"Walk On Capital portfolio company. Vertical and geography not yet confirmed.",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"link1", name:"Link 1", kind:"platform", sponsor:"Walk On Capital", verticals:["other"], hq:"",
+{id:"link1", name:"Link 1", kind:"platform", hsId:56463061125, url:"https://link1it.com", hsVertical:"Capital Partners", hsName:"Link 1", sponsor:"Walk On Capital", verticals:["other"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"",
  sourcingNotes:"Walk On Capital portfolio company. Vertical and geography not yet confirmed.",
  deals:[], links:[], confidence:"unverified"},
 
 /* ---------- Sponsors / capital ---------- */
-{id:"alpine", name:"Alpine Investors", kind:"sponsor", sponsor:"",
- verticals:["capital","hvac","comm","it"], hq:"San Francisco, CA",
+{id:"alpine", name:"Alpine Investors", kind:"sponsor", hsId:3270268167, url:"https://alpineinvestors.com", hsLinkedin:"https://linkedin.com/company/alpine-investors", hsVertical:"Capital Partners", hsName:"Alpine Investors", hsLoc:"San Francisco, California", sponsor:"",
+ verticals:["capital","hvac","mep","it"], hq:"San Francisco, CA",
  footprint:"Backs Apex Service Partners, Orion Services Group, Cobalt Service Partners and Evergreen Services Group",
  states:[],
  brands:["Apex Service Partners","Orion Services Group","Cobalt Service Partners","Evergreen Services Group"],
@@ -825,8 +844,8 @@ const PARTNERS = [
  links:[{label:"alpineinvestors.com",url:"https://alpineinvestors.com/"}],
  confidence:"verified"},
 
-{id:"knoxlane", name:"Knox Lane", kind:"sponsor", sponsor:"",
- verticals:["capital","hvac","land"], hq:"San Francisco, CA",
+{id:"knoxlane", name:"Knox Lane", kind:"sponsor", hsId:47439262128, url:"https://knoxlane.com", hsVertical:"HVAC", hsName:"Knox Lane", hsLoc:"San Francisco, California", sponsor:"",
+ verticals:["capital","hvac","landscaping"], hq:"San Francisco, CA",
  footprint:"Consumer and services investing; backs Any Hour Group and Ruppert Landscape",
  states:[],
  brands:["Any Hour Group","Ruppert Landscape"],
@@ -838,7 +857,7 @@ const PARTNERS = [
  confidence:"verified"},
 
 {id:"o2", name:"O2 Investment Partners", kind:"sponsor", sponsor:"",
- verticals:["capital","roof"], hq:"Bloomfield Hills, MI",
+ verticals:["capital","roofing","exterior"], hq:"Bloomfield Hills, MI",
  footprint:"Lower middle market; backs Stronghouse Solutions and Harley Exteriors",
  states:[],
  brands:["Stronghouse Solutions","Harley Exteriors","Options Exteriors"],
@@ -849,8 +868,8 @@ const PARTNERS = [
  links:[{label:"o2investment.com",url:"https://o2investment.com/"}],
  confidence:"verified"},
 
-{id:"percheron", name:"Percheron Capital", kind:"sponsor", sponsor:"",
- verticals:["capital","roof"], hq:"San Francisco, CA",
+{id:"percheron", name:"Percheron Capital", kind:"sponsor", hsId:41456769323, url:"https://percheron.com", hsLinkedin:"https://linkedin.com/company/percheroncapital", hsVertical:"Capital Partners", hsName:"Percheron Capital", hsLoc:"San Francisco, California", sponsor:"",
+ verticals:["capital","roofing"], hq:"San Francisco, CA",
  footprint:"Essential services businesses; launched Alloy Roofing",
  states:[], brands:["Alloy Roofing"],
  buyBox:"High-quality essential services businesses.",
@@ -859,16 +878,16 @@ const PARTNERS = [
  links:[{label:"percheron.com",url:"https://percheron.com/"}],
  confidence:"verified"},
 
-{id:"bertram", name:"Bertram Capital", kind:"sponsor", sponsor:"",
- verticals:["capital","roof"], hq:"Foster City, CA",
+{id:"bertram", name:"Bertram Capital", kind:"sponsor", hsId:55404755829, url:"https://www.bertramcapital.com", hsLinkedin:"https://linkedin.com/company/bertramcapital", hsVertical:"Capital Partners", hsName:"Bertram Capital", hsLoc:"San Mateo, California", sponsor:"",
+ verticals:["capital","roofing"], hq:"Foster City, CA",
  footprint:"Lower middle market; backs Ridgeline Roofing & Restoration",
  states:[], brands:["Ridgeline Roofing & Restoration"],
  buyBox:"Lower-middle-market buyouts across services and industrials.",
  sourcingNotes:"",
  deals:[], links:[{label:"bertramcapital.com",url:"https://www.bertramcapital.com/"}], confidence:"partial"},
 
-{id:"sawmill", name:"Saw Mill Capital", kind:"sponsor", sponsor:"",
- verticals:["capital","roof"], hq:"Briarcliff Manor, NY",
+{id:"sawmill", name:"Saw Mill Capital", kind:"sponsor", hsId:37321331036, url:"https://www.sawmillcapital.com", hsLinkedin:"https://linkedin.com/company/saw-mill-capital", hsVertical:"Capital Partners", hsName:"Saw Mill Capital", hsLoc:"Briarcliff Manor, New York", sponsor:"",
+ verticals:["capital","roofing"], hq:"Briarcliff Manor, NY",
  footprint:"Launched RAFTRx Roofing + Exteriors",
  states:[], brands:["RAFTRx Roofing + Exteriors"],
  buyBox:"Founder-led, high-growth businesses; built RAFTRx around insurance-claim roofing.",
@@ -876,16 +895,16 @@ const PARTNERS = [
  deals:[{when:"2023",what:"Launched RAFTR Roofing + Exteriors",note:""}],
  links:[], confidence:"verified"},
 
-{id:"osceola", name:"Osceola Capital", kind:"sponsor", sponsor:"",
- verticals:["capital","roof"], hq:"Tampa, FL",
+{id:"osceola", name:"Osceola Capital", kind:"sponsor", hsId:40806048566, url:"https://osceola.com", hsLinkedin:"https://linkedin.com/company/osceola-capital-management", hsVertical:"Capital Partners", hsName:"Osceola Capital Management", hsLoc:"Tampa, Florida", sponsor:"",
+ verticals:["capital","roofing"], hq:"Tampa, FL",
  footprint:"Lower middle market services; backs Valor Exterior Partners",
  states:[], brands:["Valor Exterior Partners","Flotilla Partners","Trauma Services"],
  buyBox:"Lower-middle-market services roll-ups — roofing/exteriors, water treatment, biohazard remediation.",
  sourcingNotes:"Flotilla (water treatment) and Trauma Services (biohazard) are two niches nobody else on our list covers. Keep them in mind for odd leads that do not fit a standard trade.",
  deals:[], links:[{label:"Portfolio",url:"https://osceola.com/investments/"}], confidence:"verified"},
 
-{id:"garnett", name:"Garnett Station Partners", kind:"sponsor", sponsor:"",
- verticals:["capital","roof"], hq:"New York, NY",
+{id:"garnett", name:"Garnett Station Partners", kind:"sponsor", hsId:53284554782, url:"https://garnettstation.com", hsLinkedin:"https://linkedin.com/company/garnett-station-partners", hsVertical:"Capital Partners", hsName:"Garnett Station Partners", hsLoc:"New York, New York", sponsor:"",
+ verticals:["capital","roofing"], hq:"New York, NY",
  footprint:"Backs Skybound Service Partners plus roofing investments",
  states:[], brands:["Skybound Service Partners","Technique Roofing Systems","Unicoat Industrial Roofing"],
  buyBox:"Residential roofing and exterior services; commercial/industrial roofing.",
@@ -893,8 +912,8 @@ const PARTNERS = [
  deals:[{when:"Jun 2025",what:"Launched Skybound Service Partners",note:"Residential roofing and exterior services platform"}],
  links:[{label:"Partnerships",url:"https://garnettstation.com/partnerships/"}], confidence:"verified"},
 
-{id:"timoneer", name:"Timoneer Strategic Partners", kind:"sponsor", sponsor:"",
- verticals:["capital","restore"], hq:"", founded:2019,
+{id:"timoneer", name:"Timoneer Strategic Partners", kind:"sponsor", hsId:57067435863, url:"https://www.timoneersp.com", hsLinkedin:"https://linkedin.com/company/timoneer-strategic-partners", hsVertical:"Capital Partners", hsName:"Timoneer Strategic Partners", hsLoc:"Los Angeles, California", sponsor:"",
+ verticals:["capital","restoration"], hq:"", founded:2019,
  footprint:"Control investments in lower- and middle-market essential services",
  states:[], brands:["Solid Restoration","DRC Restoration"],
  buyBox:"$1–10M EBITDA. Essential services across business, commercial, consumer, environmental, healthcare, industrial, infrastructure and residential.",
@@ -903,7 +922,7 @@ const PARTNERS = [
         {when:"2024",what:"Solid Restoration, LLC",note:"Majority stake; insurance-based water/fire mitigation, mold remediation"}],
  links:[{label:"timoneersp.com",url:"https://www.timoneersp.com/"}], confidence:"verified"},
 
-{id:"alphi", name:"Alphi Capital", kind:"sponsor", sponsor:"",
+{id:"alphi", name:"Alphi Capital", kind:"sponsor", hsId:56245463836, url:"https://alphicapital.com", hsLinkedin:"https://linkedin.com/company/alphi-capital", hsVertical:"Capital Partners", hsName:"Alphi Capital", hsLoc:"Toronto, Ontario", sponsor:"",
  verticals:["capital","hvac"], hq:"Toronto, ON",
  footprint:"Lower middle market; Canadian home services",
  states:[], brands:["RedBlue HeatPumps & Refrigeration"],
@@ -912,7 +931,7 @@ const PARTNERS = [
  deals:[{when:"Recent",what:"RedBlue HeatPumps & Refrigeration",note:"Victoria, BC; founded 2013"}],
  links:[{label:"alphicapital.com",url:"https://www.alphicapital.com/"}], confidence:"verified"},
 
-{id:"gauge", name:"Gauge Capital", kind:"sponsor", sponsor:"",
+{id:"gauge", name:"Gauge Capital", kind:"sponsor", hsId:899382628, url:"http://www.gaugecapital.com", hsLinkedin:"https://linkedin.com/company/gauge-capital", hsVertical:"Capital Partners", hsName:"Gauge Capital", hsLoc:"Southlake, Texas", sponsor:"",
  verticals:["capital"], hq:"Southlake, TX", founded:2013,
  footprint:"Business services, technology, healthcare, food and consumer, financial services",
  states:[], brands:[],
@@ -920,7 +939,7 @@ const PARTNERS = [
  sourcingNotes:"Broad mandate rather than a single trade platform. Worth a direct conversation to pin down which service verticals they are actively hunting right now.",
  deals:[], links:[], confidence:"partial"},
 
-{id:"strattam", name:"Strattam Capital", kind:"sponsor", sponsor:"",
+{id:"strattam", name:"Strattam Capital", kind:"sponsor", hsId:18017667733, url:"https://strattam.com", hsName:"Strattam", hsLoc:"San Francisco, Texas", sponsor:"",
  verticals:["capital","it"], hq:"Austin, TX",
  footprint:"B2B software and IT",
  states:[], brands:[],
@@ -928,32 +947,32 @@ const PARTNERS = [
  sourcingNotes:"Software, not trades. Route SaaS and tech-enabled leads here rather than to the MSP platforms.",
  deals:[], links:[], confidence:"partial"},
 
-{id:"seaside", name:"Seaside Equity Partners", kind:"sponsor", sponsor:"",
+{id:"seaside", name:"Seaside Equity Partners", kind:"sponsor", hsId:40379319566, url:"https://seasideequity.com", hsLinkedin:"https://linkedin.com/company/seaside-equity-partners", hsVertical:"Capital Partners", hsName:"Seaside Equity", hsLoc:"San Diego, California", sponsor:"",
  verticals:["capital"], hq:"San Diego, CA",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"centeroak", name:"CenterOak Partners", kind:"sponsor", sponsor:"",
+{id:"centeroak", name:"CenterOak Partners", kind:"sponsor", hsId:37220437034, url:"https://centeroakpartners.com", hsLinkedin:"https://linkedin.com/company/centeroak-partners", hsVertical:"Capital Partners", hsName:"CenterOak Partners", hsLoc:"Dallas, Texas", sponsor:"",
  verticals:["capital"], hq:"Dallas, TX",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"walkon", name:"Walk On Capital", kind:"sponsor", sponsor:"",
+{id:"walkon", name:"Walk On Capital", kind:"sponsor", hsId:55687815427, url:"https://walk-oncapital.com", hsLinkedin:"https://linkedin.com/company/walk-on-capital", hsVertical:"Capital Partners", hsName:"Walk On Capital", hsLoc:"Los Angeles, California", sponsor:"",
  verticals:["capital"], hq:"",
  footprint:"Backs Blue Fox and Link 1",
  states:[], brands:["Blue Fox","Link 1"], buyBox:"", sourcingNotes:"Two portfolio companies on our roster but neither is documented yet. One call to Walk On would fill in three rows at once — high-value, low-effort.",
  deals:[], links:[], confidence:"unverified"},
 
-{id:"koa", name:"Koa Capital", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+{id:"koa", name:"Koa Capital", kind:"sponsor", hsId:54896238484, url:"https://koacapitalpartners.com", hsLinkedin:"https://linkedin.com/company/koa-capital-partners-llc", hsVertical:"Capital Partners", hsName:"Koa Capital Partners", hsLoc:"Honolulu, Hawaii", sponsor:"", verticals:["capital"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"clarion", name:"Clarion", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+{id:"clarion", name:"Clarion", kind:"sponsor", hsId:53948769797, url:"https://clarionhsg.com", hsLinkedin:"https://linkedin.com/company/clarion-home-services-group", hsVertical:"Capital Partners", hsName:"Clarion", hsLoc:"Lake Forest, Illinois", sponsor:"", verticals:["capital"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"Likely Clarion Capital Partners — confirm.", deals:[], links:[], confidence:"unverified"},
 
-{id:"flint", name:"Flint Group", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+{id:"flint", name:"Flint Group", kind:"sponsor", hsId:55405262674, url:"https://flintg.com", hsLinkedin:"https://linkedin.com/company/flintgroup", hsVertical:"Capital Partners", hsName:"Flint Group", hsLoc:"Seattle, Washington", sponsor:"", verticals:["capital"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
-{id:"isla", name:"ISLA Partners", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
+{id:"isla", name:"ISLA Partners", kind:"sponsor", hsId:41047414964, url:"https://islapartners.com", hsVertical:"Capital Partners", hsName:"ISLA Partners", hsLoc:"Austin, Texas", sponsor:"", verticals:["capital"], hq:"",
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
 {id:"highground", name:"High Ground", kind:"sponsor", sponsor:"", verticals:["capital"], hq:"",
@@ -990,6 +1009,18 @@ const dealCount = p => (p.deals||[]).length;
 const primaryVertical = p => (p.verticals||[]).find(v => v!=="capital") || p.verticals[0] || "other";
 const kindClass = k => k==="sponsor" ? "k-sponsor" : k==="platform+sponsor" ? "k-both" : "k-platform";
 const kindLabel = k => k==="sponsor" ? "Capital" : k==="platform+sponsor" ? "Platform + Capital" : "Platform";
+const hsUrl = p => "https://app.hubspot.com/contacts/3983452/record/0-2/" + p.hsId;
+const HS_VERT_MAP = {"HVAC":"hvac","Plumbing":"plumbing","Electrical":"electrical",
+  "HVAC/Plumbing/Electrical (Mix)":"hvac","Roofing":"roofing","Exterior Services":"exterior",
+  "Windows":"windows","Landscaping":"landscaping","Tree Care Services":"tree",
+  "Fire Protection":"fire","IT":"it","Cybersecurity":"cyber","Commercial MEP":"mep",
+  "Commercial Facilities":"facilities","Janitorial":"janitorial","Asphalt":"asphalt",
+  "Restoration Services":"restoration","Water":"water"};
+// True when the CRM's vertical tag contradicts every vertical we have this partner under.
+const verticalConflict = p => {
+  const mapped = HS_VERT_MAP[p.hsVertical];
+  return !!mapped && !(p.verticals||[]).includes(mapped);
+};
 const newsUrl = p => "https://news.google.com/search?q=" + encodeURIComponent('"'+p.name+'" (acquisition OR acquires OR partners OR platform)') + "&hl=en-US&gl=US&ceid=US:en";
 const webUrl  = p => "https://www.google.com/search?q=" + encodeURIComponent('"'+p.name+'" acquisition news');
 const liUrl   = p => "https://www.linkedin.com/search/results/companies/?keywords=" + encodeURIComponent(p.name);
@@ -1008,6 +1039,7 @@ function visible(){
     if(S.conf.size && !S.conf.has(p.confidence)) return false;
     if(q){
       const hay = [p.name,p.sponsor,p.hq,p.footprint,p.buyBox,p.sourcingNotes,note(p.id),
+                   p.url,p.hsVertical,p.hsName,p.hsLoc,
                    (p.brands||[]).join(" "),(p.states||[]).join(" "),
                    (p.verticals||[]).map(v=>VERTICALS[v]?VERTICALS[v].label:"").join(" "),
                    (p.deals||[]).map(d=>d.what+" "+(d.note||"")).join(" ")].join(" ").toLowerCase();
@@ -1025,6 +1057,31 @@ function sortList(list){
     confidence:(a,b)=>c[b.confidence]-c[a.confidence] || a.name.localeCompare(b.name)
   }[S.sort];
   return list.slice().sort(by);
+}
+
+/* ---------- vertical dropdown, ordered and gated by partner coverage ---------- */
+function verticalCounts(){
+  const c={}; PARTNERS.forEach(p=>(p.verticals||[]).forEach(v=>c[v]=(c[v]||0)+1)); return c;
+}
+function buildVerticalSelects(){
+  const c = verticalCounts();
+  const entries = Object.keys(VERTICALS).filter(k=>c[k]).map(k=>({k,n:c[k],label:VERTICALS[k].label}));
+  const covered = entries.filter(e=>e.n>=COVERAGE_THRESHOLD && e.k!=="other").sort((a,b)=>b.n-a.n||a.label.localeCompare(b.label));
+  const thin    = entries.filter(e=>e.n< COVERAGE_THRESHOLD && e.k!=="other").sort((a,b)=>b.n-a.n||a.label.localeCompare(b.label));
+  const other   = entries.filter(e=>e.k==="other");
+
+  const opt = e => '<option value="'+e.k+'">'+VERTICALS[e.k].label.replace("&mdash;","—")+' ('+e.n+')</option>';
+  const html =
+    '<option value="all">All verticals ('+PARTNERS.length+' partners)</option>'+
+    (covered.length? '<optgroup label="Covered — '+COVERAGE_THRESHOLD+'+ partners">'+covered.map(opt).join("")+'</optgroup>':'')+
+    (thin.length?    '<optgroup label="Thin coverage — under '+COVERAGE_THRESHOLD+'">'+thin.map(opt).join("")+'</optgroup>':'')+
+    (other.length?   '<optgroup label="Not yet classified">'+other.map(opt).join("")+'</optgroup>':'');
+
+  ["verticalFilter","verticalFilterMap","verticalFilterGaps"].forEach(id=>{
+    const sel=document.getElementById(id); if(!sel) return;
+    sel.innerHTML=html; sel.value=S.vertical;
+    sel.onchange=()=>{ S.vertical=sel.value; S.mapState=null; render(); };
+  });
 }
 
 /* ---------- rail ---------- */
@@ -1091,10 +1148,14 @@ function renderGrid(){
       '</div>'+
       '<div class="verts">'+(p.verticals||[]).map(vtagHtml).join("")+'</div>'+
       (sts.length? '<div class="geo">'+shown+more+'</div>' : '<div class="geo" style="opacity:.5">No geography on file</div>')+
+      (p.url? '<div class="meta" style="margin-top:8px"><a href="'+esc(p.url)+'" target="_blank" rel="noopener" '+
+              'onclick="event.stopPropagation()" style="color:var(--steel-blue);font-size:12.5px;text-decoration:none">'+
+              esc(p.url.replace(/^https?:\/\//,"").replace(/\/$/,""))+' &#8599;</a></div>' : '')+
       '<div class="conf c-'+p.confidence+'"><span class="bulb"></span>'+
-        (p.confidence==="verified"?"Verified":p.confidence==="partial"?"Partial — verify before pitching":"Needs research")+
+        (p.confidence==="verified"?"Verified":p.confidence==="partial"?"Partial":"Needs research")+
         (dealCount(p)? ' &nbsp;&middot;&nbsp; '+dealCount(p)+' deal note'+(dealCount(p)===1?"":"s"):"")+
         (note(p.id)? ' &nbsp;&middot;&nbsp; <span style="color:var(--hi-vis)">has team note</span>':"")+
+        (p.hsId? ' &nbsp;&middot;&nbsp; <span style="color:var(--steel-blue)">in HubSpot</span>':"")+
       '</div>';
     card.onclick = ()=>openDrawer(p.id);
     grid.appendChild(card);
@@ -1131,7 +1192,14 @@ function openDrawer(id){
       (p.founded? '<dt>Founded</dt><dd>'+p.founded+'</dd>':'')+
       (p.sponsor? '<dt>Backed by</dt><dd>'+esc(p.sponsor)+'</dd>':'')+
       (p.footprint? '<dt>Footprint</dt><dd>'+esc(p.footprint)+'</dd>':'')+
-      '</dl>')+
+      (p.url? '<dt>Website</dt><dd><a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+
+              esc(p.url.replace(/^https?:\/\//,"").replace(/\/$/,""))+'</a></dd>':'')+
+      (p.hsVertical? '<dt>HubSpot vertical</dt><dd>'+esc(p.hsVertical)+
+        (verticalConflict(p)? ' <span style="color:var(--warn)">&#9888; does not match how this tool classifies them &mdash; worth fixing in the CRM</span>':'')+
+        '</dd>':'')+
+      (p.hsLoc? '<dt>CRM location</dt><dd>'+esc(p.hsLoc)+'</dd>':'')+
+      '</dl>'+
+      (p.hsId? '' : '<p style="font-size:12px;color:var(--warn);margin:10px 0 0">&#9888; No matching HubSpot company record found under this name.</p>'))+
 
     (sts.length ? sec("Where they operate ("+sts.length+" states)",
       '<div class="geo" style="display:flex;gap:5px;flex-wrap:wrap">'+
@@ -1154,6 +1222,9 @@ function openDrawer(id){
     sec("Latest news &amp; research",
       '<div class="linkrow">'+
       '<a class="linkbtn primary" target="_blank" rel="noopener" href="'+newsUrl(p)+'">Latest acquisition news</a>'+
+      (p.url? '<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(p.url)+'">Website</a>':'')+
+      (p.hsId? '<a class="linkbtn" target="_blank" rel="noopener" href="'+hsUrl(p)+'">Open in HubSpot</a>':'')+
+      (p.hsLinkedin? '<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(p.hsLinkedin)+'">LinkedIn (CRM)</a>':'')+
       '<a class="linkbtn" target="_blank" rel="noopener" href="'+webUrl(p)+'">Web search</a>'+
       '<a class="linkbtn" target="_blank" rel="noopener" href="'+liUrl(p)+'">LinkedIn</a>'+
       (p.links||[]).map(l=>'<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(l.url)+'">'+esc(l.label)+'</a>').join("")+
@@ -1329,6 +1400,7 @@ function exportData(){
 /* ---------- render + wiring ---------- */
 function render(){
   renderRail();
+  buildVerticalSelects();
   document.getElementById("viewDirectory").hidden = S.view!=="directory";
   document.getElementById("viewMap").hidden       = S.view!=="map";
   document.getElementById("viewGaps").hidden      = S.view!=="gaps";
