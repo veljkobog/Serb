@@ -4,6 +4,29 @@
 the public site into `_site/` and fails the build if anything from this directory
 leaks in. Files here are served to nobody — open them from a local checkout.
 
+## Hosted copy
+
+The team-facing copy lives at **https://claude.ai/code/artifact/c543de72-8dbf-41ae-b2d6-a4ee5ce57bba**
+
+It is private until shared from the page's own share menu. `partners.html` in this
+directory stays the canonical source; the hosted page is generated from it by
+`build-artifact.py`, which strips the document wrapper, inlines the typefaces as
+data URIs (the host blocks font CDNs), and swaps the Export download for
+copy-to-clipboard (the host blocks page-initiated downloads).
+
+To rebuild and redeploy after editing `partners.html`:
+
+```bash
+python3 internal/build-artifact.py fonts.css desk.html
+# then republish desk.html to the SAME artifact URL above
+```
+
+`fonts.css` holds `@font-face` rules with base64 `woff2` data URIs for Barlow 400/600/700
+and Barlow Condensed 700/800. Regenerate it from the Google Fonts CSS if it is lost.
+
+Publishing to a *different* URL creates a second artifact instead of updating this
+one, so always pass the existing URL when redeploying.
+
 ## `partners.html`
 
 Partner Sourcing Desk — the buyer-coverage map for our EL partner roster.
