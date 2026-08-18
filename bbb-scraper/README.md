@@ -60,6 +60,23 @@ Approach B automatically unless you pass `--no-fallback`.
 The browser profile in `--profile-dir` persists between runs, so the Cloudflare clearance
 cookie survives and challenges stay rare. Add `--headed` if headless gets challenged.
 
+## Several trades in one go
+
+`--category` takes a comma-separated list, or `--categories-file` a file of slugs:
+
+```bash
+python scraper.py --category plumber,roofing-contractors,electrician \
+  --location nc --endpoints endpoints.json --max-results 500
+```
+
+Each category writes its own `<category>-<location>.csv`; an explicit `--output` collects
+them all into one file instead (the `category` column tells them apart, and rows already
+in the file are skipped). `--max-results` applies **per category**.
+
+The endpoint is resolved once and one session serves the whole batch — categories run in
+sequence, not concurrently, which keeps the request rate where the anti-bot section says
+it is.
+
 ## Full-state pulls
 
 `--location` accepts a whole state, which runs as a metro-by-metro sequence rather than
@@ -201,6 +218,22 @@ The value is still written to the CSV either way, with `google_match` alongside 
 `--min-years 10 --min-bbb-reviews 15` in front of `--min-google-reviews` can cut the billed
 lookups by most of the pull.
 
+**Check the bill before paying it** with `--google-dry-run`, which runs the pull and the
+BBB-side filters, then reports what enrichment *would* cost and stops:
+
+```
+google preflight (dry run -- nothing was billed)
+-----------------------------------------------
+  candidates      : 21
+  already cached  : 0
+  billable lookups: 21
+  estimated cost  : 0.67 at 0.032 per lookup
+```
+
+The count comes from the same cache keys and the same cap as the real pass, so it's the
+number you'd actually be billed. `--google-cost-per-lookup` turns it into an estimate —
+pass your current rate; nothing is assumed about Places pricing.
+
 Cost control, since every uncached lookup is billed:
 
 - one request per company, field-masked to just id / name / address / rating / review count
@@ -260,7 +293,7 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-98 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+109 tests, no network required. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,
@@ -268,12 +301,14 @@ along with HAR mining, resume, backoff and the block-abort path. `tests/places_s
 stands in for the Places API and counts requests, so the cache, the TTL and the lookup cap
 are proven rather than assumed. The state-pull tests run a multi-metro pull against a
 location-aware fixture, including a regional operator listed in every metro, so
-cross-metro dedupe and cross-invocation appending are checked too.
+cross-metro dedupe and cross-invocation appending are checked too. One test asserts the
+dry-run count equals the number of requests the real pass makes, so the preflight can't
+drift from the thing it predicts.
 
 ## Out of scope (v1)
 
 Email discovery (Apollo/Outscraper downstream) · HubSpot dedupe (existing pipeline step) ·
-multi-category concurrent runs · proxy rotation (add only if IP blocks become real) ·
+concurrent runs (categories and metros go in sequence) · proxy rotation (add only if IP blocks become real) ·
 revenue estimates (no honest source at this layer — Google review volume is the closest
 available proxy).
 

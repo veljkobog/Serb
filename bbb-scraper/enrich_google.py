@@ -263,6 +263,48 @@ class PlacesClient:
             self.stats.low_match += 1
 
 
+@dataclass
+class Preflight:
+    """What an enrichment run would cost, before any of it is billed."""
+    total: int = 0
+    cached: int = 0
+    billable: int = 0
+    capped: int = 0
+
+    def report(self, cost_per_lookup: Optional[float] = None) -> str:
+        lines = [
+            f"  candidates      : {self.total}",
+            f"  already cached  : {self.cached}",
+            f"  billable lookups: {self.billable}",
+        ]
+        if self.capped:
+            lines.append(f"  over the cap    : {self.capped} (raise --max-google-lookups)")
+        if cost_per_lookup:
+            lines.append(f"  estimated cost  : {self.billable * cost_per_lookup:,.2f} "
+                         f"at {cost_per_lookup} per lookup")
+        return "\n".join(lines)
+
+
+def preflight(listings: Iterable[Listing], cache: PlacesCache,
+              max_lookups: Optional[int] = None) -> Preflight:
+    """Count what enrichment would cost without calling Google.
+
+    Uses the same cache keys and the same cap as the real pass, so the number
+    it reports is the number you would actually be billed for.
+    """
+    stats = Preflight()
+    for listing in listings:
+        stats.total += 1
+        if cache.get(cache_key(listing)) is not MISS:
+            stats.cached += 1
+            continue
+        if max_lookups is not None and stats.billable >= max_lookups:
+            stats.capped += 1
+            continue
+        stats.billable += 1
+    return stats
+
+
 def enrich_listings(
     listings: Iterable[Listing],
     client: PlacesClient,

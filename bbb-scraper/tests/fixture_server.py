@@ -53,19 +53,19 @@ def _no_contact(i: int) -> dict:
     }
 
 
-def location_offset(location: str) -> int:
-    """Distinct businesses per metro, deterministically."""
-    if not location:
+def location_offset(location: str, category: str = "") -> int:
+    """Distinct businesses per metro and per vertical, deterministically."""
+    if not location and not category:
         return 0
-    return (zlib.crc32(location.encode()) % 40) * 1000
+    return (zlib.crc32(f"{location}|{category}".encode()) % 400) * 1000
 
 
-def build_page(page: int, total_pages: int = 6, location: str = "") -> dict:
+def build_page(page: int, total_pages: int = 6, location: str = "", category: str = "") -> dict:
     """Page N of results. Past the end -> empty list, like a real API."""
     if page < 1 or page > total_pages:
         return {"meta": {"totalResults": total_pages * PAGE_SIZE}, "data": {"searchResults": []}}
 
-    base = location_offset(location)
+    base = location_offset(location, category)
     start = (page - 1) * PAGE_SIZE
     records = []
 
@@ -128,7 +128,8 @@ class Handler(BaseHTTPRequestHandler):
 
         page = int(query.get("page", ["1"])[0])
         location = query.get("find_loc", [""])[0]
-        body = json.dumps(build_page(page, self.total_pages, location)).encode()
+        category = query.get("find_text", [""])[0]
+        body = json.dumps(build_page(page, self.total_pages, location, category)).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

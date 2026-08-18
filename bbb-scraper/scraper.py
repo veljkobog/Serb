@@ -42,12 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("--category", required=True,
-                   help="BBB category slug, e.g. heating-and-air-conditioning, plumber, roofing-contractors")
+                   help="BBB category slug, e.g. heating-and-air-conditioning, plumber, "
+                        "roofing-contractors. Comma-separate several to run them in turn.")
+    p.add_argument("--categories-file", default=None,
+                   help="file of category slugs, one per line, instead of --category")
     p.add_argument("--location", required=True,
                    help="city+state (charlotte-nc) or a whole state (nc, 'north carolina'), "
                         "which expands into a metro-by-metro pull")
     p.add_argument("--max-results", type=int, default=500,
-                   help="cap for the whole run, across every metro (default: 500)")
+                   help="cap per category, across every metro (default: 500)")
     p.add_argument("--max-per-metro", type=int, default=None,
                    help="cap per metro on a state pull (default: the whole --max-results budget)")
 
@@ -98,6 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
                      help="days before cached Google content is refetched (default: 30)")
     goo.add_argument("--max-google-lookups", type=int, default=500,
                      help="hard cap on billed lookups per run (default: 500)")
+    goo.add_argument("--google-dry-run", action="store_true",
+                     help="report how many lookups would be billed, then skip enrichment")
+    goo.add_argument("--google-cost-per-lookup", type=float, default=None,
+                     help="unit price, to turn the dry-run count into an estimate "
+                          "(check current Places pricing -- nothing is assumed)")
     goo.add_argument("--google-endpoint", default=None,
                      help="override the Places endpoint (enterprise proxy, or a test double)")
     goo.add_argument("--google-delay", type=float, default=0.0,
@@ -272,14 +280,14 @@ class Collector:
             print(f"[run] page {page}: +{len(fresh)} (total {len(self.listings)})", flush=True)
 
 
-def _default_paths(args, locations):
-    """Per-location checkpoint paths that don't collide on a multi-metro run."""
+def _default_paths(args, category, locations):
+    """Per-location checkpoint paths that don't collide across metros."""
     if args.checkpoint and len(locations) == 1:
         return {locations[0]: args.checkpoint}
     if args.checkpoint:
         base, ext = os.path.splitext(args.checkpoint)
         return {loc: f"{base}-{loc}{ext or '.json'}" for loc in locations}
-    return {loc: default_checkpoint(args.category, loc) for loc in locations}
+    return {loc: default_checkpoint(category, loc) for loc in locations}
 
 
 class ApiSession:
@@ -335,15 +343,15 @@ class ApiSession:
         return self.spec
 
 
-def collect_via_api(session: ApiSession, location: str, checkpoint: Checkpoint,
+def collect_via_api(session: ApiSession, category: str, location: str, checkpoint: Checkpoint,
                     collector: Collector, required_fields=None) -> bool:
     """Approach A for one location. False means fall back to Approach B."""
     args = session.args
     client = session.client
     try:
         start_page = max(checkpoint.next_page(), args.skip + 1)
-        for page, payload in client.iter_pages(args.category, location, start_page=start_page):
-            listings = list(parse.iter_listings_from_payload(payload, default_category=args.category))
+        for page, payload in client.iter_pages(category, location, start_page=start_page):
+            listings = list(parse.iter_listings_from_payload(payload, default_category=category))
             collector.add_page(page, listings)
             if collector.full:
                 break
@@ -372,11 +380,11 @@ def _http_detail_fetcher(client):
     return fetch
 
 
-def collect_via_browser(browser, args, location: str, checkpoint: Checkpoint,
+def collect_via_browser(browser, args, category: str, location: str, checkpoint: Checkpoint,
                         collector: Collector, required_fields=None) -> bool:
     """Approach B for one location."""
     start_page = max(checkpoint.next_page(), args.skip + 1)
-    for page, listings in browser.iter_listings(args.category, location, start_page=start_page):
+    for page, listings in browser.iter_listings(category, location, start_page=start_page):
         collector.add_page(page, listings)
         if collector.full:
             break
@@ -439,27 +447,68 @@ class RunResult:
         self.budget_spent = False
 
 
-def collect_all(args, locations, progress, required_fields) -> RunResult:
-    """Pull every location in turn, sharing one budget and one session."""
-    result = RunResult()
-    paths = _default_paths(args, locations)
-    per_metro_cap = args.max_per_metro or args.max_results
-    session = None
-    browser = None
+class Clients:
+    """The HTTP session and browser, shared across every category and metro.
 
-    try:
-        if not args.browser:
-            session = ApiSession(args)
+    One endpoint resolution and one browser launch per run, not per category:
+    re-resolving would re-probe, and relaunching would drop the cookies that
+    keep a long run looking like one person browsing.
+    """
+
+    def __init__(self, args):
+        self.args = args
+        self.session = None
+        self.browser = None
+        self.used_browser = False
+        self.api_failed = False
+
+    def api(self, location: str):
+        """The resolved ApiSession, or None when Approach A isn't usable."""
+        if self.args.browser or self.api_failed:
+            return None
+        if self.session is None:
+            session = ApiSession(self.args)
             try:
-                session.resolve(locations[0])
+                session.resolve(location)
+                self.session = session
             except (api_client.EndpointUnavailable, api_client.BlockedError) as exc:
                 print(f"[run] Approach A unavailable: {exc}", file=sys.stderr)
                 session.close()
-                session = None
-                if args.no_fallback:
-                    return result
-                print("[run] falling back to Approach B (Playwright)")
+                self.api_failed = True
+                return None
+        return self.session
 
+    def drop_api(self) -> None:
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+        self.api_failed = True
+
+    def browser_client(self):
+        if self.browser is None:
+            self.browser = open_browser(self.args)
+            self.used_browser = True
+        return self.browser
+
+    def close(self) -> None:
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+        if self.browser is not None:
+            self.browser.close()
+            self.browser = None
+
+
+def collect_all(args, category, locations, progress, required_fields, clients) -> RunResult:
+    """Pull every location for one category, sharing one budget."""
+    result = RunResult()
+    paths = _default_paths(args, category, locations)
+    per_metro_cap = args.max_per_metro or args.max_results
+
+    if not args.browser and clients.api(locations[0]) is None and args.no_fallback:
+        return result
+
+    try:
         for location in locations:
             remaining = args.max_results - len(result.listings)
             if remaining <= 0:
@@ -471,10 +520,10 @@ def collect_all(args, locations, progress, required_fields) -> RunResult:
                 print(f"[run] {location}: already collected, skipping")
                 continue
 
-            checkpoint = Checkpoint(category=args.category, location=location,
+            checkpoint = Checkpoint(category=category, location=location,
                                     path=paths[location])
             if not args.no_resume:
-                checkpoint = Checkpoint.load(paths[location], args.category, location)
+                checkpoint = Checkpoint.load(paths[location], category, location)
                 if checkpoint.last_page:
                     print(f"[run] {location}: resuming after page {checkpoint.last_page}")
 
@@ -483,20 +532,18 @@ def collect_all(args, locations, progress, required_fields) -> RunResult:
                 print(f"[run] {location} ({len(result.listings)}/{args.max_results} collected)")
 
             ok = False
+            session = clients.api(location)
             if session is not None:
-                ok = collect_via_api(session, location, checkpoint, collector, required_fields)
+                ok = collect_via_api(session, category, location, checkpoint, collector,
+                                     required_fields)
                 if not ok and not args.no_fallback:
-                    session.close()
-                    session = None
+                    clients.drop_api()
                     print("[run] falling back to Approach B (Playwright)")
 
             if not ok and (args.browser or not args.no_fallback):
                 try:
-                    if browser is None:
-                        browser = open_browser(args)
-                        result.used_browser = True
-                    collect_via_browser(browser, args, location, checkpoint, collector,
-                                        required_fields)
+                    collect_via_browser(clients.browser_client(), args, category, location,
+                                        checkpoint, collector, required_fields)
                     ok = True
                 except Exception as exc:
                     print(f"[run] Approach B failed for {location}: {exc}", file=sys.stderr)
@@ -512,15 +559,45 @@ def collect_all(args, locations, progress, required_fields) -> RunResult:
                 progress.mark_done(location, len(collector.listings))
                 progress.save()
     finally:
-        if session is not None:
-            session.close()
-        if browser is not None:
-            browser.close()
+        result.used_browser = clients.used_browser
 
     return result
 
 
+def resolve_categories(args) -> List[str]:
+    """One or more category slugs, in the order they'll be pulled."""
+    if args.categories_file:
+        slugs = []
+        with open(args.categories_file, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    slugs.append(line)
+        return slugs
+    return [c.strip() for c in args.category.split(",") if c.strip()]
+
+
+def output_for(args, category: str, categories: List[str]) -> str:
+    """Where a category's rows go.
+
+    An explicit --output collects every category into one file (the `category`
+    column tells them apart); otherwise each gets its own.
+    """
+    if args.output:
+        return args.output
+    return default_output(category, args.location)
+
+
 def run(args) -> int:
+    try:
+        categories = resolve_categories(args)
+    except OSError as exc:
+        print(f"could not read categories: {exc}", file=sys.stderr)
+        return 2
+    if not categories:
+        print("no categories to pull", file=sys.stderr)
+        return 2
+
     try:
         locations, source = metros.resolve_locations(
             args.location, args.metros, args.metros_file, args.max_metros
@@ -529,48 +606,98 @@ def run(args) -> int:
         print(f"could not resolve metros: {exc}", file=sys.stderr)
         return 2
 
-    if len(locations) > 1:
-        print(f"[run] {args.location} -> {len(locations)} metros (source: {source})")
-        if source.startswith("bundled"):
-            print("[run] bundled metro list is a starting point -- "
-                  "override with --metros / --metros-file if it misses your markets")
     if args.list_metros:
         for location in locations:
             print(location)
         return 0
 
-    output = args.output or default_output(args.category, args.location)
+    if len(locations) > 1:
+        print(f"[run] {args.location} -> {len(locations)} metros (source: {source})")
+        if source.startswith("bundled"):
+            print("[run] bundled metro list is a starting point -- "
+                  "override with --metros / --metros-file if it misses your markets")
+    if len(categories) > 1:
+        print(f"[run] {len(categories)} categories: {', '.join(categories)}")
+        print(f"[run] --max-results {args.max_results} applies per category")
+
     filters = build_filters(args)
     required_fields = detail_fields_for(args, filters)
+    warn_blind_filters(args, filters)
 
-    progress_path = args.progress or f".progress-{args.category}-{args.location}.json"
-    progress = checkpoint_mod.RunProgress(category=args.category, scope=args.location,
-                                          path=progress_path)
-    if len(locations) > 1 and not args.no_resume:
-        progress = checkpoint_mod.RunProgress.load(progress_path, args.category, args.location)
-        if progress.completed:
-            print(f"[run] resuming state pull -- {len(progress.completed)} metro(s) already done")
+    clients = Clients(args)
+    written_to = set()
+    totals = {"pulled": 0, "written": 0}
+    worst = 0
 
-    if args.no_detail:
-        blind = {f.detail_field for f in filters if f.detail_field} & parse.DETAIL_FIELDS
-        if blind:
-            print(f"[run] warning: --no-detail with filters on {', '.join(sorted(blind))} -- "
-                  f"those values stay unknown for any listing whose search card omits them",
-                  file=sys.stderr)
+    try:
+        for index, category in enumerate(categories):
+            if len(categories) > 1:
+                print(f"\n[run] === {category} ({index + 1}/{len(categories)}) ===")
 
-    # A resumed state pull continues into the same CSV -- overwriting it would
-    # silently discard the metros the earlier invocation already paid for.
-    resuming = bool(progress.completed)
-    append = args.append or (resuming and not args.overwrite)
-    if append and os.path.exists(output) and not args.append:
-        print(f"[run] appending to existing {output} (--overwrite to start fresh)")
+            output = output_for(args, category, categories)
+            progress_path = args.progress or f".progress-{category}-{args.location}.json"
+            progress = checkpoint_mod.RunProgress(category=category, scope=args.location,
+                                                  path=progress_path)
+            if len(locations) > 1 and not args.no_resume:
+                progress = checkpoint_mod.RunProgress.load(progress_path, category, args.location)
+                if progress.completed:
+                    print(f"[run] resuming state pull -- "
+                          f"{len(progress.completed)} metro(s) already done")
 
-    result = collect_all(args, locations, progress, required_fields)
+            # A resumed state pull continues into the same CSV -- overwriting it
+            # would silently discard metros an earlier invocation already paid
+            # for. Several categories sharing one --output likewise append.
+            resuming = bool(progress.completed)
+            append = (
+                args.append
+                or output in written_to
+                or (resuming and not args.overwrite)
+            )
+            if append and output not in written_to and os.path.exists(output) and not args.append:
+                print(f"[run] appending to existing {output} (--overwrite to start fresh)")
 
-    code = finish(args, result, output, filters, locations, append=append)
-    if not result.budget_spent and len(locations) > 1:
-        progress.clear()      # whole state covered; a rerun should start clean
-    return code
+            result = collect_all(args, category, locations, progress, required_fields, clients)
+            code = finish(args, result, output, filters, locations, append=append,
+                          label=category if len(categories) > 1 else None)
+            written_to.add(output)
+            totals["pulled"] += len(result.listings)
+            worst = max(worst, code)
+
+            if not result.budget_spent and len(locations) > 1:
+                progress.clear()   # whole state covered; a rerun starts clean
+
+            for f in filters:      # per-category counts, not cumulative
+                f.dropped = 0
+                f.unknown_dropped = 0
+    finally:
+        clients.close()
+
+    if len(categories) > 1:
+        print(f"\n[run] {len(categories)} categories done, {totals['pulled']} listings pulled")
+    return worst
+
+
+def warn_blind_filters(args, filters) -> None:
+    if not args.no_detail:
+        return
+    blind = {f.detail_field for f in filters if f.detail_field} & parse.DETAIL_FIELDS
+    if blind:
+        print(f"[run] warning: --no-detail with filters on {', '.join(sorted(blind))} -- "
+              f"those values stay unknown for any listing whose search card omits them",
+              file=sys.stderr)
+
+
+def report_google_preflight(args, listings) -> None:
+    """Print what enrichment would cost, without spending anything."""
+    import enrich_google
+
+    cache = enrich_google.PlacesCache(args.google_cache, ttl_days=args.google_cache_ttl)
+    stats = enrich_google.preflight(listings, cache, max_lookups=args.max_google_lookups)
+    print("")
+    print("google preflight (dry run -- nothing was billed)")
+    print("-----------------------------------------------")
+    print(stats.report(args.google_cost_per_lookup))
+    print("  google filters were not applied; rerun without --google-dry-run to enrich")
 
 
 def run_google_enrichment(args, listings):
@@ -602,7 +729,7 @@ def run_google_enrichment(args, listings):
 
 
 def finish(args, result: RunResult, output: str, filters=None, locations=None,
-           append: bool = False) -> int:
+           append: bool = False, label: Optional[str] = None) -> int:
     pulled = len(result.listings)
     unique, dupes = parse.dedupe(result.listings)
 
@@ -615,7 +742,9 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     kept, rejected = apply_filters(unique, local, args.drop_unknown)
 
     google_stats = None
-    if uses_google(args) and kept:
+    if uses_google(args) and kept and args.google_dry_run:
+        report_google_preflight(args, kept)
+    elif uses_google(args) and kept:
         google_stats = run_google_enrichment(args, kept)
         kept, rejected_google = apply_filters(kept, google, args.drop_unknown)
         rejected.extend(rejected_google)
@@ -642,9 +771,10 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     with_website = sum(1 for l in main_rows if l.website)
     pct = (with_website / len(main_rows) * 100) if main_rows else 0.0
 
+    heading = f"run summary -- {label}" if label else "run summary"
     print("")
-    print("run summary")
-    print("-----------")
+    print(heading)
+    print("-" * len(heading))
     print(f"  approach        : {'B (playwright)' if result.used_browser else 'A (json api)'}")
     if locations and len(locations) > 1:
         pulled_from = [f"{loc} {n}" for loc, n in result.per_location if n]
@@ -665,7 +795,11 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         if google_stats.no_result or google_stats.errors or google_stats.capped:
             print(f"                    {google_stats.no_result} no result, "
                   f"{google_stats.errors} errors, {google_stats.capped} skipped at cap")
+    dry_run = uses_google(args) and args.google_dry_run
     for f in filters:
+        if f.needs_google and dry_run:
+            print(f"  filtered {f.name:<18}: not applied (dry run)")
+            continue
         detail = f" ({f.unknown_dropped} unknown)" if f.unknown_dropped else ""
         print(f"  filtered {f.name:<18}: {f.dropped}{detail}")
     if filters:
