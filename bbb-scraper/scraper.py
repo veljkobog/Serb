@@ -18,6 +18,8 @@ import sys
 from typing import List, Optional
 
 import api_client
+import checkpoint as checkpoint_mod
+import metros
 import parse
 from checkpoint import Checkpoint, listing_id
 
@@ -41,8 +43,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--category", required=True,
                    help="BBB category slug, e.g. heating-and-air-conditioning, plumber, roofing-contractors")
-    p.add_argument("--location", required=True, help="city+state or state, e.g. charlotte-nc or nc")
-    p.add_argument("--max-results", type=int, default=500, help="cap per run (default: 500)")
+    p.add_argument("--location", required=True,
+                   help="city+state (charlotte-nc) or a whole state (nc, 'north carolina'), "
+                        "which expands into a metro-by-metro pull")
+    p.add_argument("--max-results", type=int, default=500,
+                   help="cap for the whole run, across every metro (default: 500)")
+    p.add_argument("--max-per-metro", type=int, default=None,
+                   help="cap per metro on a state pull (default: the whole --max-results budget)")
+
+    geo = p.add_argument_group("full-state pulls")
+    geo.add_argument("--metros", default=None,
+                     help="explicit metro slugs, comma-separated; overrides the bundled list")
+    geo.add_argument("--metros-file", default=None, help="file of metro slugs, one per line")
+    geo.add_argument("--max-metros", type=int, default=None, help="only pull the first N metros")
+    geo.add_argument("--list-metros", action="store_true",
+                     help="print the metros that would be pulled, then exit without scraping")
+    geo.add_argument("--overwrite", action="store_true",
+                     help="start a fresh output file even when resuming a state pull")
+    geo.add_argument("--append", action="store_true",
+                     help="append to an existing output file (implied when resuming a state pull)")
+    geo.add_argument("--progress", default=None,
+                     help="cross-metro resume file (default: .progress-<category>-<location>.json)")
     p.add_argument("--output", default=None, help="CSV path (default: <category>-<location>.csv)")
 
     flt = p.add_argument_group(
@@ -130,11 +151,12 @@ def default_checkpoint(category: str, location: str) -> str:
 class Filter:
     """One named threshold, plus how to read its value off a Listing."""
 
-    def __init__(self, name, getter, predicate, detail_field=None):
+    def __init__(self, name, getter, predicate, detail_field=None, needs_google=False):
         self.name = name
         self.getter = getter
         self.predicate = predicate
         self.detail_field = detail_field
+        self.needs_google = needs_google
         self.dropped = 0
         self.unknown_dropped = 0
 
@@ -184,11 +206,11 @@ def build_filters(args):
     if args.min_google_reviews > 0:
         filters.append(Filter("min-google-reviews",
                               _google_value("google_reviews", args.allow_low_match),
-                              lambda v: v >= args.min_google_reviews))
+                              lambda v: v >= args.min_google_reviews, needs_google=True))
     if args.min_google_rating > 0:
         filters.append(Filter("min-google-rating",
                               _google_value("google_rating", args.allow_low_match),
-                              lambda v: v >= args.min_google_rating))
+                              lambda v: v >= args.min_google_rating, needs_google=True))
     return filters
 
 
@@ -250,24 +272,48 @@ class Collector:
             print(f"[run] page {page}: +{len(fresh)} (total {len(self.listings)})", flush=True)
 
 
-def collect_via_api(args, checkpoint: Checkpoint, collector: Collector, required_fields=None) -> bool:
-    """Approach A. Returns True if it produced anything, False to fall back."""
-    limiter = api_client.RateLimiter(min_delay=args.min_delay, max_delay=args.max_delay)
-    specs: List[api_client.EndpointSpec] = []
+def _default_paths(args, locations):
+    """Per-location checkpoint paths that don't collide on a multi-metro run."""
+    if args.checkpoint and len(locations) == 1:
+        return {locations[0]: args.checkpoint}
+    if args.checkpoint:
+        base, ext = os.path.splitext(args.checkpoint)
+        return {loc: f"{base}-{loc}{ext or '.json'}" for loc in locations}
+    return {loc: default_checkpoint(args.category, loc) for loc in locations}
 
-    if args.from_har:
-        specs.extend(api_client.endpoints_from_har(args.from_har))
-        if args.verbose:
-            print(f"[run] {len(specs)} candidate endpoint(s) from HAR", flush=True)
-    if args.endpoints:
-        specs.extend(api_client.load_endpoints(args.endpoints))
 
-    client = api_client.ApiClient(limiter=limiter, verbose=args.verbose)
-    try:
+class ApiSession:
+    """One HTTP client and one resolved endpoint for the whole run.
+
+    Resolving the endpoint per metro would re-probe (and re-pay in requests)
+    for every city, and a client per metro would throw away the session
+    cookies and User-Agent that make the run look like one person browsing.
+    """
+
+    def __init__(self, args):
+        self.args = args
+        self.limiter = api_client.RateLimiter(min_delay=args.min_delay, max_delay=args.max_delay)
+        self.client = api_client.ApiClient(limiter=self.limiter, verbose=args.verbose)
+        self.spec = None
+
+    def close(self):
+        self.client.close()
+
+    def resolve(self, location: str):
+        """Find and verify a working endpoint. Raises EndpointUnavailable."""
+        args = self.args
+        specs = []
+        if args.from_har:
+            specs.extend(api_client.endpoints_from_har(args.from_har))
+            if args.verbose:
+                print(f"[run] {len(specs)} candidate endpoint(s) from HAR", flush=True)
+        if args.endpoints:
+            specs.extend(api_client.load_endpoints(args.endpoints))
+
         if args.discover or not specs:
             try:
                 discovered = api_client.discover_endpoints(
-                    client.client, args.category, args.location, limiter=limiter
+                    self.client.client, args.category, location, limiter=self.limiter
                 )
                 if args.verbose:
                     print(f"[run] {len(discovered)} candidate endpoint(s) discovered", flush=True)
@@ -280,15 +326,23 @@ def collect_via_api(args, checkpoint: Checkpoint, collector: Collector, required
                 "no candidate endpoints -- capture a HAR (--from-har) or use --browser"
             )
 
-        spec = client.select_endpoint(specs, args.category, args.location)
-        print(f"[run] using endpoint {spec.url} (source: {spec.source})")
-
+        self.spec = self.client.select_endpoint(specs, args.category, location)
+        print(f"[run] using endpoint {self.spec.url} (source: {self.spec.source})")
         if args.save_endpoints:
-            api_client.save_endpoints(args.save_endpoints, [spec], include_cookies=args.save_cookies)
+            api_client.save_endpoints(args.save_endpoints, [self.spec],
+                                      include_cookies=args.save_cookies)
             print(f"[run] saved endpoint config -> {args.save_endpoints}")
+        return self.spec
 
+
+def collect_via_api(session: ApiSession, location: str, checkpoint: Checkpoint,
+                    collector: Collector, required_fields=None) -> bool:
+    """Approach A for one location. False means fall back to Approach B."""
+    args = session.args
+    client = session.client
+    try:
         start_page = max(checkpoint.next_page(), args.skip + 1)
-        for page, payload in client.iter_pages(args.category, args.location, start_page=start_page):
+        for page, payload in client.iter_pages(args.category, location, start_page=start_page):
             listings = list(parse.iter_listings_from_payload(payload, default_category=args.category))
             collector.add_page(page, listings)
             if collector.full:
@@ -305,8 +359,6 @@ def collect_via_api(args, checkpoint: Checkpoint, collector: Collector, required
     except api_client.EndpointUnavailable as exc:
         print(f"[run] Approach A unavailable: {exc}", file=sys.stderr)
         return False
-    finally:
-        client.close()
 
 
 def _http_detail_fetcher(client):
@@ -320,33 +372,30 @@ def _http_detail_fetcher(client):
     return fetch
 
 
-def collect_via_browser(args, checkpoint: Checkpoint, collector: Collector, required_fields=None) -> bool:
-    """Approach B. Returns True if it produced anything."""
-    import browser_client
-
+def collect_via_browser(browser, args, location: str, checkpoint: Checkpoint,
+                        collector: Collector, required_fields=None) -> bool:
+    """Approach B for one location."""
     start_page = max(checkpoint.next_page(), args.skip + 1)
-    try:
-        with browser_client.BrowserClient(
-            user_data_dir=args.profile_dir,
-            headless=not args.headed,
-            min_delay=args.min_delay,
-            max_delay=args.max_delay,
-            verbose=args.verbose,
-        ) as browser:
-            for page, listings in browser.iter_listings(
-                args.category, args.location, start_page=start_page
-            ):
-                collector.add_page(page, listings)
-                if collector.full:
-                    break
+    for page, listings in browser.iter_listings(args.category, location, start_page=start_page):
+        collector.add_page(page, listings)
+        if collector.full:
+            break
+    if not args.no_detail:
+        enrich_details(browser.fetch_detail, collector.listings, args, required=required_fields)
+    return True
 
-            if not args.no_detail:
-                enrich_details(browser.fetch_detail, collector.listings, args,
-                               required=required_fields)
-        return True
-    except browser_client.BrowserUnavailable as exc:
-        print(f"[run] Approach B unavailable: {exc}", file=sys.stderr)
-        return False
+
+def open_browser(args):
+    import browser_client
+    browser = browser_client.BrowserClient(
+        user_data_dir=args.profile_dir,
+        headless=not args.headed,
+        min_delay=args.min_delay,
+        max_delay=args.max_delay,
+        verbose=args.verbose,
+    )
+    browser.start()
+    return browser
 
 
 def enrich_details(fetch, listings: List[parse.Listing], args, required=None) -> int:
@@ -378,34 +427,129 @@ def enrich_details(fetch, listings: List[parse.Listing], args, required=None) ->
 
 
 # --------------------------------------------------------------------------
-# main
+# the run
 # --------------------------------------------------------------------------
 
+class RunResult:
+    def __init__(self):
+        self.listings: List[parse.Listing] = []
+        self.pages = 0
+        self.used_browser = False
+        self.per_location = []          # (location, count) in pull order
+        self.budget_spent = False
+
+
+def collect_all(args, locations, progress, required_fields) -> RunResult:
+    """Pull every location in turn, sharing one budget and one session."""
+    result = RunResult()
+    paths = _default_paths(args, locations)
+    per_metro_cap = args.max_per_metro or args.max_results
+    session = None
+    browser = None
+
+    try:
+        if not args.browser:
+            session = ApiSession(args)
+            try:
+                session.resolve(locations[0])
+            except (api_client.EndpointUnavailable, api_client.BlockedError) as exc:
+                print(f"[run] Approach A unavailable: {exc}", file=sys.stderr)
+                session.close()
+                session = None
+                if args.no_fallback:
+                    return result
+                print("[run] falling back to Approach B (Playwright)")
+
+        for location in locations:
+            remaining = args.max_results - len(result.listings)
+            if remaining <= 0:
+                result.budget_spent = True
+                print(f"[run] budget of {args.max_results} reached -- "
+                      f"stopping before {location}")
+                break
+            if progress.is_done(location):
+                print(f"[run] {location}: already collected, skipping")
+                continue
+
+            checkpoint = Checkpoint(category=args.category, location=location,
+                                    path=paths[location])
+            if not args.no_resume:
+                checkpoint = Checkpoint.load(paths[location], args.category, location)
+                if checkpoint.last_page:
+                    print(f"[run] {location}: resuming after page {checkpoint.last_page}")
+
+            collector = Collector(min(per_metro_cap, remaining), checkpoint, verbose=args.verbose)
+            if len(locations) > 1:
+                print(f"[run] {location} ({len(result.listings)}/{args.max_results} collected)")
+
+            ok = False
+            if session is not None:
+                ok = collect_via_api(session, location, checkpoint, collector, required_fields)
+                if not ok and not args.no_fallback:
+                    session.close()
+                    session = None
+                    print("[run] falling back to Approach B (Playwright)")
+
+            if not ok and (args.browser or not args.no_fallback):
+                try:
+                    if browser is None:
+                        browser = open_browser(args)
+                        result.used_browser = True
+                    collect_via_browser(browser, args, location, checkpoint, collector,
+                                        required_fields)
+                    ok = True
+                except Exception as exc:
+                    print(f"[run] Approach B failed for {location}: {exc}", file=sys.stderr)
+
+            result.listings.extend(collector.listings)
+            result.pages += collector.pages_fetched
+            result.per_location.append((location, len(collector.listings)))
+
+            if not collector.full:
+                # Location exhausted rather than capped -- nothing left to resume.
+                checkpoint.clear()
+            if ok:
+                progress.mark_done(location, len(collector.listings))
+                progress.save()
+    finally:
+        if session is not None:
+            session.close()
+        if browser is not None:
+            browser.close()
+
+    return result
+
+
 def run(args) -> int:
+    try:
+        locations, source = metros.resolve_locations(
+            args.location, args.metros, args.metros_file, args.max_metros
+        )
+    except (OSError, metros.UnknownState) as exc:
+        print(f"could not resolve metros: {exc}", file=sys.stderr)
+        return 2
+
+    if len(locations) > 1:
+        print(f"[run] {args.location} -> {len(locations)} metros (source: {source})")
+        if source.startswith("bundled"):
+            print("[run] bundled metro list is a starting point -- "
+                  "override with --metros / --metros-file if it misses your markets")
+    if args.list_metros:
+        for location in locations:
+            print(location)
+        return 0
+
     output = args.output or default_output(args.category, args.location)
-    ckpt_path = args.checkpoint or default_checkpoint(args.category, args.location)
-
-    checkpoint = Checkpoint(category=args.category, location=args.location, path=ckpt_path)
-    if not args.no_resume:
-        checkpoint = Checkpoint.load(ckpt_path, args.category, args.location)
-        if checkpoint.last_page:
-            print(f"[run] resuming after page {checkpoint.last_page} "
-                  f"({len(checkpoint.collected_ids)} ids already collected)")
-
-    collector = Collector(args.max_results, checkpoint, verbose=args.verbose)
     filters = build_filters(args)
     required_fields = detail_fields_for(args, filters)
 
-    used_browser = False
-    if args.browser:
-        used_browser = True
-        collect_via_browser(args, checkpoint, collector, required_fields)
-    else:
-        ok = collect_via_api(args, checkpoint, collector, required_fields)
-        if not ok and not args.no_fallback:
-            print("[run] falling back to Approach B (Playwright)")
-            used_browser = True
-            collect_via_browser(args, checkpoint, collector, required_fields)
+    progress_path = args.progress or f".progress-{args.category}-{args.location}.json"
+    progress = checkpoint_mod.RunProgress(category=args.category, scope=args.location,
+                                          path=progress_path)
+    if len(locations) > 1 and not args.no_resume:
+        progress = checkpoint_mod.RunProgress.load(progress_path, args.category, args.location)
+        if progress.completed:
+            print(f"[run] resuming state pull -- {len(progress.completed)} metro(s) already done")
 
     if args.no_detail:
         blind = {f.detail_field for f in filters if f.detail_field} & parse.DETAIL_FIELDS
@@ -414,11 +558,19 @@ def run(args) -> int:
                   f"those values stay unknown for any listing whose search card omits them",
                   file=sys.stderr)
 
-    google_stats = None
-    if uses_google(args) and collector.listings:
-        google_stats = run_google_enrichment(args, collector.listings)
+    # A resumed state pull continues into the same CSV -- overwriting it would
+    # silently discard the metros the earlier invocation already paid for.
+    resuming = bool(progress.completed)
+    append = args.append or (resuming and not args.overwrite)
+    if append and os.path.exists(output) and not args.append:
+        print(f"[run] appending to existing {output} (--overwrite to start fresh)")
 
-    return finish(args, collector, output, checkpoint, used_browser, filters, google_stats)
+    result = collect_all(args, locations, progress, required_fields)
+
+    code = finish(args, result, output, filters, locations, append=append)
+    if not result.budget_spent and len(locations) > 1:
+        progress.clear()      # whole state covered; a rerun should start clean
+    return code
 
 
 def run_google_enrichment(args, listings):
@@ -449,24 +601,43 @@ def run_google_enrichment(args, listings):
         client.close()
 
 
-def finish(args, collector: Collector, output: str, checkpoint: Checkpoint, used_browser: bool,
-           filters=None, google_stats=None) -> int:
-    pulled = len(collector.listings)
-    unique, dupes = parse.dedupe(collector.listings)
+def finish(args, result: RunResult, output: str, filters=None, locations=None,
+           append: bool = False) -> int:
+    pulled = len(result.listings)
+    unique, dupes = parse.dedupe(result.listings)
 
     filters = filters or []
-    filtered, rejected = apply_filters(unique, filters, args.drop_unknown)
+    local = [f for f in filters if not f.needs_google]
+    google = [f for f in filters if f.needs_google]
 
-    main_rows = [l for l in filtered if not l.is_low_confidence()]
-    low_rows = [l for l in filtered if l.is_low_confidence()]
+    # BBB-side filters run first so Google is only asked about survivors --
+    # every uncached lookup is billed, and the cheap filters cut the set hard.
+    kept, rejected = apply_filters(unique, local, args.drop_unknown)
 
-    parse.write_csv(output, main_rows)
+    google_stats = None
+    if uses_google(args) and kept:
+        google_stats = run_google_enrichment(args, kept)
+        kept, rejected_google = apply_filters(kept, google, args.drop_unknown)
+        rejected.extend(rejected_google)
+
+    already_written = 0
+    if append:
+        seen = parse.existing_keys(output) | parse.existing_keys(lowconfidence_path(output))
+        if seen:
+            before = len(kept)
+            kept = [l for l in kept if l.dedupe_key() not in seen]
+            already_written = before - len(kept)
+
+    main_rows = [l for l in kept if not l.is_low_confidence()]
+    low_rows = [l for l in kept if l.is_low_confidence()]
+
+    parse.write_csv(output, main_rows, append=append)
     low_path = ""
     if low_rows:
         low_path = lowconfidence_path(output)
-        parse.write_csv(low_path, low_rows)
+        parse.write_csv(low_path, low_rows, append=append)
     if args.rejects and rejected:
-        parse.write_csv(args.rejects, rejected)
+        parse.write_csv(args.rejects, rejected, append=append)
 
     with_website = sum(1 for l in main_rows if l.website)
     pct = (with_website / len(main_rows) * 100) if main_rows else 0.0
@@ -474,10 +645,19 @@ def finish(args, collector: Collector, output: str, checkpoint: Checkpoint, used
     print("")
     print("run summary")
     print("-----------")
-    print(f"  approach        : {'B (playwright)' if used_browser else 'A (json api)'}")
-    print(f"  pages fetched   : {collector.pages_fetched}")
+    print(f"  approach        : {'B (playwright)' if result.used_browser else 'A (json api)'}")
+    if locations and len(locations) > 1:
+        pulled_from = [f"{loc} {n}" for loc, n in result.per_location if n]
+        print(f"  metros pulled   : {len(result.per_location)}/{len(locations)}")
+        if pulled_from:
+            print(f"                    {', '.join(pulled_from)}")
+        if result.budget_spent:
+            print(f"  budget          : {args.max_results} reached -- rerun to continue")
+    print(f"  pages fetched   : {result.pages}")
     print(f"  pulled          : {pulled}")
     print(f"  deduped         : {len(dupes)}")
+    if already_written:
+        print(f"  already in file : {already_written}")
     if google_stats:
         print(f"  google lookups  : {google_stats.looked_up} billed, "
               f"{google_stats.cached} cached, {google_stats.matched} matched "
@@ -492,7 +672,8 @@ def finish(args, collector: Collector, output: str, checkpoint: Checkpoint, used
         print(f"  filtered total  : {len(rejected)}"
               + (f" -> {args.rejects}" if args.rejects and rejected else ""))
     print(f"  low-confidence  : {len(low_rows)}")
-    print(f"  written         : {len(main_rows)} -> {output}")
+    verb = "appended" if append else "written"
+    print(f"  {verb:<16}: {len(main_rows)} -> {output}")
     if low_path:
         print(f"                    {len(low_rows)} -> {low_path}")
     print(f"  website coverage: {with_website}/{len(main_rows)} ({pct:.0f}%)")
@@ -505,11 +686,6 @@ def finish(args, collector: Collector, output: str, checkpoint: Checkpoint, used
     if not pulled:
         print("  (nothing collected -- see errors above)")
         return 1
-
-    if not collector.full:
-        # Results exhausted rather than capped; the checkpoint has nothing left
-        # to resume and would only cause a later run to skip real pages.
-        checkpoint.clear()
     return 0
 
 

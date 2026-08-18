@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
+import zlib
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -52,15 +53,29 @@ def _no_contact(i: int) -> dict:
     }
 
 
-def build_page(page: int, total_pages: int = 6) -> dict:
+def location_offset(location: str) -> int:
+    """Distinct businesses per metro, deterministically."""
+    if not location:
+        return 0
+    return (zlib.crc32(location.encode()) % 40) * 1000
+
+
+def build_page(page: int, total_pages: int = 6, location: str = "") -> dict:
     """Page N of results. Past the end -> empty list, like a real API."""
     if page < 1 or page > total_pages:
         return {"meta": {"totalResults": total_pages * PAGE_SIZE}, "data": {"searchResults": []}}
 
+    base = location_offset(location)
     start = (page - 1) * PAGE_SIZE
     records = []
+
+    if page == 1 and location:
+        # A regional operator listed in every metro -- cross-metro dedupe has
+        # to collapse these into one row.
+        records.append(_business(999))
+
     for offset in range(PAGE_SIZE):
-        i = start + offset
+        i = base + start + offset
         if i % 17 == 5:
             records.append(_no_contact(i))
         elif i % 13 == 7 and i > PAGE_SIZE:
@@ -112,7 +127,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         page = int(query.get("page", ["1"])[0])
-        body = json.dumps(build_page(page, self.total_pages)).encode()
+        location = query.get("find_loc", [""])[0]
+        body = json.dumps(build_page(page, self.total_pages, location)).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

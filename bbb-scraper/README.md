@@ -60,6 +60,56 @@ Approach B automatically unless you pass `--no-fallback`.
 The browser profile in `--profile-dir` persists between runs, so the Cloudflare clearance
 cookie survives and challenges stay rare. Add `--headed` if headless gets challenged.
 
+## Full-state pulls
+
+`--location` accepts a whole state, which runs as a metro-by-metro sequence rather than
+one query:
+
+```bash
+python scraper.py --category plumber --location nc \
+  --endpoints endpoints.json --max-results 2000 --max-per-metro 300
+```
+
+```
+[run] nc -> 12 metros (source: bundled:NC)
+[run] charlotte-nc (0/2000 collected)
+[run] raleigh-nc (300/2000 collected)
+...
+  metros pulled   : 4/5
+                    charlotte-nc 15, raleigh-nc 15, greensboro-nc 15, durham-nc 15
+  budget          : 60 reached -- rerun to continue
+```
+
+- `--max-results` is the budget for the **whole run**; `--max-per-metro` caps each city so
+  one large metro can't eat it.
+- `--metros "raleigh-nc,durham-nc"` or `--metros-file markets.txt` overrides the bundled
+  list; `--max-metros N` takes the first N; `--list-metros` prints the plan and exits
+  without scraping.
+- Results are deduped **across** metros, so a company listed in two adjacent cities lands
+  in the CSV once.
+- One HTTP session and one resolved endpoint serve every metro — re-probing per city would
+  cost extra requests and throw away the cookies that keep the run looking like one person
+  browsing.
+
+### Resuming a state pull
+
+Hitting the budget mid-state is the normal case. A second run picks up where the first
+stopped:
+
+```
+[run] resuming state pull -- 4 metro(s) already done
+[run] charlotte-nc: already collected, skipping
+[run] appending to existing plumber-nc.csv (--overwrite to start fresh)
+```
+
+Two levels of resume: `.checkpoint-<category>-<metro>.json` tracks pages *within* a metro,
+`.progress-<category>-<state>.json` tracks which metros are *done*. A resumed run **appends**
+to the existing CSV and drops anything already in it, so several invocations build one
+clean file. `--overwrite` starts fresh; `--append` forces appending on a non-resumed run.
+
+The bundled metro list (`data/metros.json`) is the largest cities per state — a starting
+point, not an authoritative metro list. It's plain JSON; edit it, or override per run.
+
 ## Output
 
 CSV, UTF-8, one row per company:
@@ -147,6 +197,10 @@ A `low` match is treated as **unknown** by the Google filters — a wrong match 
 another business's 5,000 reviews to your lead. `--allow-low-match` opts into trusting them.
 The value is still written to the CSV either way, with `google_match` alongside it.
 
+**BBB-side filters run first**, so Google is only asked about the survivors — putting
+`--min-years 10 --min-bbb-reviews 15` in front of `--min-google-reviews` can cut the billed
+lookups by most of the pull.
+
 Cost control, since every uncached lookup is billed:
 
 - one request per company, field-masked to just id / name / address / rating / review count
@@ -189,11 +243,13 @@ results are exhausted, so a completed run doesn't cause the next one to skip pag
 ```
 bbb-scraper/
   scraper.py         # entry, CLI, orchestration, CSV output
+  metros.py          # state -> metro expansion for full-state pulls
+  data/metros.json   # bundled metro list, editable
   api_client.py      # Approach A: endpoint discovery (HAR/probe), pagination, backoff
   browser_client.py  # Approach B: Playwright + DOM extraction
   enrich_google.py   # optional Google Places lookup (rating + review count)
   parse.py           # field extraction + normalization + dedupe
-  checkpoint.py      # resume logic
+  checkpoint.py      # resume logic (per-metro pages, cross-metro progress)
   requirements.txt
   tests/
 ```
@@ -204,13 +260,15 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-79 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+98 tests, no network required. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,
 along with HAR mining, resume, backoff and the block-abort path. `tests/places_server.py`
 stands in for the Places API and counts requests, so the cache, the TTL and the lookup cap
-are proven rather than assumed.
+are proven rather than assumed. The state-pull tests run a multi-metro pull against a
+location-aware fixture, including a regional operator listed in every metro, so
+cross-metro dedupe and cross-invocation appending are checked too.
 
 ## Out of scope (v1)
 

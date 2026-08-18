@@ -93,6 +93,73 @@ class Checkpoint:
             os.unlink(self.path)
 
 
+@dataclass
+class RunProgress:
+    """Which locations of a multi-metro run are already finished.
+
+    Per-location page checkpoints handle resuming *within* a metro; this
+    handles resuming *across* them, so an interrupted state pull doesn't
+    re-walk metros it already collected.
+    """
+
+    category: str = ""
+    scope: str = ""                          # the state or list this run covers
+    completed: Set[str] = field(default_factory=set)
+    collected: int = 0
+    path: Optional[str] = None
+
+    @classmethod
+    def load(cls, path: str, category: str, scope: str) -> "RunProgress":
+        if not path or not os.path.exists(path):
+            return cls(category=category, scope=scope, path=path)
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            return cls(category=category, scope=scope, path=path)
+        if data.get("category") != category or data.get("scope") != scope:
+            return cls(category=category, scope=scope, path=path)
+        return cls(
+            category=category,
+            scope=scope,
+            completed=set(data.get("completed") or []),
+            collected=int(data.get("collected") or 0),
+            path=path,
+        )
+
+    def is_done(self, location: str) -> bool:
+        return location in self.completed
+
+    def mark_done(self, location: str, count: int = 0) -> None:
+        self.completed.add(location)
+        self.collected += count
+
+    def save(self) -> None:
+        if not self.path:
+            return
+        payload = {
+            "category": self.category,
+            "scope": self.scope,
+            "completed": sorted(self.completed),
+            "collected": self.collected,
+        }
+        directory = os.path.dirname(os.path.abspath(self.path)) or "."
+        os.makedirs(directory, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=directory, prefix=".progress-", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2)
+            os.replace(tmp, self.path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+
+    def clear(self) -> None:
+        if self.path and os.path.exists(self.path):
+            os.unlink(self.path)
+
+
 def listing_id(listing) -> Optional[str]:
     """Stable per-listing id for checkpointing: profile URL, else dedupe key."""
     if getattr(listing, "profile_url", ""):

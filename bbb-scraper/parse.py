@@ -12,6 +12,7 @@ assuming one shape.
 from __future__ import annotations
 
 import csv
+import os
 import re
 from dataclasses import dataclass, fields as dataclass_fields
 from datetime import date
@@ -551,15 +552,41 @@ def find_total_count(payload: Any) -> Optional[int]:
 # CSV output
 # --------------------------------------------------------------------------
 
-def write_csv(path, listings: Iterable[Listing]) -> int:
+def write_csv(path, listings: Iterable[Listing], append: bool = False) -> int:
+    """Write rows to `path`. Appending skips the header if one is already there."""
+    existing = append and os.path.exists(path) and os.path.getsize(path) > 0
     rows = 0
-    with open(path, "w", newline="", encoding="utf-8") as fh:
+    with open(path, "a" if existing else "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=FIELD_ORDER)
-        writer.writeheader()
+        if not existing:
+            writer.writeheader()
         for listing in listings:
             writer.writerow(listing.as_row())
             rows += 1
     return rows
+
+
+def existing_keys(path) -> set:
+    """Dedupe keys already present in a CSV we're about to append to.
+
+    A state pull spread over several invocations appends into one file, and a
+    business listed in two metros would otherwise land in it twice.
+    """
+    keys = set()
+    if not path or not os.path.exists(path) or os.path.getsize(path) == 0:
+        return keys
+    try:
+        with open(path, newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                website = normalize_domain(row.get("website"))
+                phone = normalize_phone(row.get("phone"))
+                if website:
+                    keys.add(f"web:{website}")
+                elif phone:
+                    keys.add(f"tel:{phone}")
+    except (OSError, csv.Error):
+        return set()
+    return keys
 
 
 def dedupe(listings: Iterable[Listing]) -> tuple:
