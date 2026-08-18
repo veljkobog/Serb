@@ -1,0 +1,10 @@
+# Captured browser sessions and generated endpoint configs carry cookies.
+*.har
+endpoints.json
+.bbb-browser-profile/
+
+# Run artifacts
+.checkpoint-*.json
+*.csv
+__pycache__/
+*.pyc
