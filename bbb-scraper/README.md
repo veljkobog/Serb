@@ -75,15 +75,91 @@ CSV, UTF-8, one row per company:
 | `accredited` | `true` / `false`; blank if unknown |
 | `bbb_rating` | `A+` … `F`; blank if NR |
 | `profile_url` | BBB listing URL |
+| `bbb_reviews` / `bbb_complaints` | BBB customer review + complaint counts |
+| `employees` | headcount; a range like `11-50` records as `11` |
+| `google_rating` / `google_reviews` | only with `--google-key` (see below) |
+| `google_place_id` / `google_match` | match confidence: `high` / `medium` / `low` |
 
 - Deduped within-run on normalized `website`, falling back to `phone`. When two rows
   collide, the richer one wins — blanks are filled from the duplicate, nothing is
   overwritten.
 - Rows missing **both** website and phone go to `<output>_lowconfidence.csv`, never the
   main file.
-- `--min-years N` drops rows below the threshold but **keeps rows with unknown years** —
-  unknown is not the same as "fewer than N".
-- Every run prints a summary: pulled / deduped / low-confidence / website coverage.
+- Every run prints a summary: pulled / deduped / per-filter drops / low-confidence /
+  website coverage.
+
+## Filtering out the noise
+
+Two kinds of size signal, from two different places.
+
+**On BBB, free with the pull:**
+
+```bash
+python scraper.py --category plumber --location charlotte-nc   --min-years 10 --min-bbb-reviews 15 --max-bbb-complaints 3 --min-employees 10
+```
+
+**Google reviews are not on BBB** — no scrape of bbb.org can produce them. They come from
+the Places API as an opt-in second lookup, billed by Google per request:
+
+```bash
+export GOOGLE_MAPS_API_KEY=...
+python scraper.py --category plumber --location charlotte-nc   --min-google-reviews 40 --min-google-rating 4.0
+```
+
+For home-services SMBs the Google review count is usually the best available proxy for job
+volume — BBB review counts are much sparser, and BBB headcount is self-reported and often
+missing entirely. Expect to lean on Google if size is the thing you actually care about.
+
+### How unknowns are treated
+
+**A missing value passes every filter by default.** A shop with no headcount on its BBB
+profile is not a small shop — it's an unmeasured one, and dropping it silently would cut
+good leads. `--drop-unknown` flips this to strict for every active filter.
+
+`--rejects rejects.csv` writes what got filtered out, so a threshold can be checked
+instead of trusted. The summary breaks drops down per filter:
+
+```
+  filtered min-bbb-reviews   : 25
+  filtered max-bbb-complaints: 11
+  filtered total  : 36 -> rejects.csv
+```
+
+### Filters drive the detail pass
+
+Search cards rarely carry headcount or review counts, so a run that filters on them
+fetches the profile page for exactly the records still missing those fields — under the
+same pacing, capped by `--max-detail`. This works on both approaches. With `--no-detail`
+the run warns that those values will stay unknown rather than filtering on data it never
+fetched.
+
+### Google matching and cost control
+
+BBB and Google have no shared key, so matches are scored, not assumed:
+
+| confidence | basis |
+| --- | --- |
+| `high` | website domain or phone matches the BBB record |
+| `medium` | strong name overlap and the city agrees |
+| `low` | anything weaker |
+
+A `low` match is treated as **unknown** by the Google filters — a wrong match attaches
+another business's 5,000 reviews to your lead. `--allow-low-match` opts into trusting them.
+The value is still written to the CSV either way, with `google_match` alongside it.
+
+Cost control, since every uncached lookup is billed:
+
+- one request per company, field-masked to just id / name / address / rating / review count
+  / website / phone
+- results cached in `--google-cache` (default `.google-places-cache.json`), so re-runs and
+  resumed runs cost nothing twice; cached content expires after `--google-cache-ttl` days
+  (default 30, matching Google's caching terms)
+- `--max-google-lookups` caps billed calls per run (default 500); cache hits don't count
+  against it
+- the summary reports `N billed, N cached, N matched (N low-confidence)`
+
+Check current Places API pricing before a large run — a 500-lead pull is 500 billed
+requests the first time and zero on re-runs.
 
 Detail pages are visited **only** for records still missing `years_in_business` or
 `accredited` after the search card, capped by `--max-detail` (default 100), and skipped
@@ -115,6 +191,7 @@ bbb-scraper/
   scraper.py         # entry, CLI, orchestration, CSV output
   api_client.py      # Approach A: endpoint discovery (HAR/probe), pagination, backoff
   browser_client.py  # Approach B: Playwright + DOM extraction
+  enrich_google.py   # optional Google Places lookup (rating + review count)
   parse.py           # field extraction + normalization + dedupe
   checkpoint.py      # resume logic
   requirements.txt
@@ -127,16 +204,20 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-52 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+79 tests, no network required. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,
-along with HAR mining, resume, backoff and the block-abort path.
+along with HAR mining, resume, backoff and the block-abort path. `tests/places_server.py`
+stands in for the Places API and counts requests, so the cache, the TTL and the lookup cap
+are proven rather than assumed.
 
 ## Out of scope (v1)
 
 Email discovery (Apollo/Outscraper downstream) · HubSpot dedupe (existing pipeline step) ·
-multi-category concurrent runs · proxy rotation (add only if IP blocks become real).
+multi-category concurrent runs · proxy rotation (add only if IP blocks become real) ·
+revenue estimates (no honest source at this layer — Google review volume is the closest
+available proxy).
 
 ## A note on access
 

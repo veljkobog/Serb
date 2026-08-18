@@ -18,6 +18,8 @@ from typing import Iterator, List, Optional
 
 from parse import (
     Listing,
+    parse_count,
+    parse_employees,
     normalize_domain,
     normalize_phone,
     normalize_rating,
@@ -239,6 +241,33 @@ _RATING_PATTERNS = (
 )
 
 
+# Size signals as they appear in profile copy.
+_REVIEWS_PATTERNS = (
+    re.compile(r"average\s+of\s+([\d,]+)\s+customer\s+reviews?", re.I),
+    re.compile(r"([\d,]+)\s+customer\s+reviews?", re.I),
+    re.compile(r"customer\s+reviews?\s*\(?\s*([\d,]+)\s*\)?", re.I),
+)
+_COMPLAINTS_PATTERNS = (
+    re.compile(r"([\d,]+)\s+complaints?\s+closed", re.I),
+    re.compile(r"([\d,]+)\s+(?:customer\s+)?complaints?\b", re.I),
+    re.compile(r"customer\s+complaints?\s*\(?\s*([\d,]+)\s*\)?", re.I),
+)
+_EMPLOYEES_PATTERNS = (
+    re.compile(r"number\s+of\s+employees:?\s*([\d,]+(?:\s*(?:-|to|–)\s*[\d,]+)?)", re.I),
+    re.compile(r"([\d,]+(?:\s*(?:-|to|–)\s*[\d,]+)?)\s+employees\b", re.I),
+)
+
+
+def _first_match(text: str, patterns, converter):
+    for pattern in patterns:
+        match = pattern.search(text)
+        if match:
+            value = converter(match.group(1))
+            if value is not None:
+                return value
+    return None
+
+
 def _find_rating(soup, text: str) -> str:
     node = soup.find(attrs={"class": re.compile("rating", re.I)})
     haystacks = [node.get_text(" ", strip=True)] if node else []
@@ -308,6 +337,7 @@ def listing_from_card_html(html: str, default_category: str = "") -> Listing:
         accredited=accredited,
         bbb_rating=rating,
         profile_url=_absolutize(profile_url),
+        bbb_reviews=_first_match(text, _REVIEWS_PATTERNS, parse_count),
     )
 
 
@@ -348,6 +378,9 @@ def listing_from_detail_html(html: str) -> Listing:
         years_in_business=years,
         accredited=accredited,
         bbb_rating=rating,
+        bbb_reviews=_first_match(text, _REVIEWS_PATTERNS, parse_count),
+        bbb_complaints=_first_match(text, _COMPLAINTS_PATTERNS, parse_count),
+        employees=_first_match(text, _EMPLOYEES_PATTERNS, parse_employees),
     )
 
 

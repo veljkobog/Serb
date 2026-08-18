@@ -5,6 +5,7 @@ endpoints.json
 
 # Run artifacts
 .checkpoint-*.json
+.google-places-cache.json
 *.csv
 __pycache__/
 *.pyc

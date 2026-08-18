@@ -31,7 +31,19 @@ FIELD_ORDER = [
     "accredited",
     "bbb_rating",
     "profile_url",
+    # size / traction signals, appended after the spec's columns
+    "bbb_reviews",
+    "bbb_complaints",
+    "employees",
+    "google_rating",
+    "google_reviews",
+    "google_place_id",
+    "google_match",
 ]
+
+# Fields that a search card rarely carries -- filtering on any of these means
+# the run has to visit detail pages to answer honestly.
+DETAIL_FIELDS = {"years_in_business", "accredited", "bbb_reviews", "bbb_complaints", "employees"}
 
 VALID_RATINGS = {
     "A+", "A", "A-",
@@ -56,6 +68,13 @@ class Listing:
     accredited: Optional[bool] = None
     bbb_rating: str = ""
     profile_url: str = ""
+    bbb_reviews: Optional[int] = None
+    bbb_complaints: Optional[int] = None
+    employees: Optional[int] = None
+    google_rating: Optional[float] = None
+    google_reviews: Optional[int] = None
+    google_place_id: str = ""
+    google_match: str = ""
 
     def dedupe_key(self) -> Optional[str]:
         """Normalized website, falling back to phone. None if neither is known."""
@@ -69,9 +88,14 @@ class Listing:
         """Missing website AND phone -> goes to the _lowconfidence file."""
         return not self.website and not self.phone
 
-    def needs_detail(self) -> bool:
-        """True when only a detail-page visit can fill the remaining gaps."""
-        return self.years_in_business is None or self.accredited is None
+    def needs_detail(self, required=None) -> bool:
+        """True when only a detail-page visit can fill the fields we need.
+
+        `required` defaults to the two fields the spec calls out; a run that
+        filters on review or headcount counts passes those in too.
+        """
+        required = required or {"years_in_business", "accredited"}
+        return any(getattr(self, name) is None for name in required)
 
     def merge(self, other: "Listing") -> None:
         """Fill blanks from `other` (a detail-page parse). Never overwrite."""
@@ -97,6 +121,13 @@ class Listing:
             "accredited": "" if self.accredited is None else str(self.accredited).lower(),
             "bbb_rating": self.bbb_rating,
             "profile_url": self.profile_url,
+            "bbb_reviews": _blank_if_none(self.bbb_reviews),
+            "bbb_complaints": _blank_if_none(self.bbb_complaints),
+            "employees": _blank_if_none(self.employees),
+            "google_rating": _blank_if_none(self.google_rating),
+            "google_reviews": _blank_if_none(self.google_reviews),
+            "google_place_id": self.google_place_id,
+            "google_match": self.google_match,
         }
 
 
@@ -172,6 +203,65 @@ def normalize_rating(value: Any) -> str:
     if v in {"NR", "N/R", "NOTRATED", "NONE"}:
         return ""
     return v if v in VALID_RATINGS else ""
+
+
+def _blank_if_none(value):
+    return "" if value is None else value
+
+
+def parse_count(value: Any) -> Optional[int]:
+    """A non-negative count, or None. Never coerces "unknown" into 0.
+
+    Handles the shapes these arrive in: 12, "12", "12 reviews", "1,204",
+    "1.2K customer reviews".
+    """
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value) if value >= 0 else None
+
+    text = str(value).strip().lower().replace(",", "")
+    match = re.search(r"(\d+(?:\.\d+)?)\s*([km])?", text)
+    if not match:
+        return None
+    number = float(match.group(1))
+    suffix = match.group(2)
+    if suffix == "k":
+        number *= 1_000
+    elif suffix == "m":
+        number *= 1_000_000
+    elif "." in match.group(1):
+        return None          # a bare decimal is a rating, not a count
+    return int(number)
+
+
+def parse_rating_value(value: Any, maximum: float = 5.0) -> Optional[float]:
+    """A star rating in 0..maximum, or None."""
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        number = float(str(value).strip().split()[0])
+    except (ValueError, IndexError):
+        return None
+    if 0 <= number <= maximum:
+        return round(number, 2)
+    return None
+
+
+def parse_employees(value: Any) -> Optional[int]:
+    """Headcount as an int. Ranges ("11-50") take the low end -- the
+    conservative read, so a size filter never passes a shop on optimism."""
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value) if value >= 0 else None
+    text = str(value).strip().replace(",", "")
+    match = re.search(r"(\d+)\s*(?:-|to|–)\s*(\d+)", text)
+    if match:
+        return int(match.group(1))
+    return parse_count(text)
 
 
 def parse_bool(value: Any) -> Optional[bool]:
@@ -299,6 +389,13 @@ YEARS_KEYS = ("yearsInBusiness", "years_in_business", "businessStartedDate", "da
               "yearEstablished", "businessStarted", "dateBusinessStarted")
 ACCREDITED_KEYS = ("isAccredited", "accredited", "isBBBAccredited", "accreditedBusiness", "isAccreditedBusiness")
 RATING_KEYS = ("bbbRating", "rating", "letterGrade", "ratingLetter", "grade", "rating.letter")
+REVIEW_COUNT_KEYS = ("customerReviewCount", "reviewCount", "numberOfReviews", "totalReviews",
+                     "reviews.count", "customerReviews.count", "reviewSummary.count",
+                     "customerReviewStats.totalCount")
+COMPLAINT_KEYS = ("complaintCount", "numberOfComplaints", "totalComplaints", "complaints.count",
+                  "complaintSummary.count", "complaintStats.totalCount")
+EMPLOYEE_KEYS = ("numberOfEmployees", "employeeCount", "employees", "numEmployees", "staffSize",
+                 "businessDetails.numberOfEmployees")
 PROFILE_KEYS = ("reportUrl", "profileUrl", "businessProfileUrl", "bbbProfileUrl", "reportURL", "url", "path", "slug")
 
 BBB_BASE = "https://www.bbb.org"
@@ -376,6 +473,9 @@ def listing_from_record(record: dict, default_category: str = "") -> Listing:
         accredited=parse_bool(_get(record, *ACCREDITED_KEYS)),
         bbb_rating=normalize_rating(rating if isinstance(rating, str) else None),
         profile_url=_absolutize(profile_raw),
+        bbb_reviews=parse_count(_get(record, *REVIEW_COUNT_KEYS)),
+        bbb_complaints=parse_count(_get(record, *COMPLAINT_KEYS)),
+        employees=parse_employees(_get(record, *EMPLOYEE_KEYS)),
     )
 
 

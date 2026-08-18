@@ -34,6 +34,10 @@ def _business(i: int, dupe_of: int = None) -> dict:
         "yearsInBusiness": 5 + (n % 30),
         "isAccredited": n % 2 == 0,
         "bbbRating": "A+" if n % 3 else "NR",
+        # size signals: a long tail of tiny shops, a handful of real operators
+        "customerReviewCount": 0 if n % 4 == 0 else (n % 7) * 12,
+        "complaintCount": n % 5,
+        "numberOfEmployees": "11-50" if n % 6 == 0 else ("2-10" if n % 3 else None),
         "reportUrl": f"/us/nc/wilmington/profile/plumber/test-{i:03d}",
     }
 
@@ -71,12 +75,35 @@ def build_page(page: int, total_pages: int = 6) -> dict:
     }
 
 
+# What a profile page carries that the search card doesn't.
+PROFILE_HTML = """
+<html><body>
+  <p>BBB Rating: A+</p>
+  <p>Number of Employees: 25</p>
+  <p>Average of 40 Customer Reviews</p>
+  <p>1 complaint closed in last 3 years</p>
+</body></html>
+"""
+
+
 class Handler(BaseHTTPRequestHandler):
     total_pages = 6
+
+    detail_requests = 0
 
     def do_GET(self):  # noqa: N802
         split = urllib.parse.urlsplit(self.path)
         query = urllib.parse.parse_qs(split.query)
+
+        if "/profile/" in split.path:
+            Handler.detail_requests += 1
+            body = PROFILE_HTML.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
 
         if not split.path.startswith("/api/businesssearch"):
             self.send_response(404)

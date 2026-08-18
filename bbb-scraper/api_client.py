@@ -448,6 +448,31 @@ class ApiClient:
         raise BlockedError(f"page {page} failed after {self.max_consecutive_blocks} attempts")
 
     # ------------------------------------------------------------------
+    def fetch_detail_html(self, url: str) -> Optional[str]:
+        """Fetch a business profile page as HTML, paced like any other request.
+
+        Approach A needs this too: filters on headcount or review counts read
+        fields the search card doesn't carry, and without it the run would
+        filter on values it never fetched.
+        """
+        self.limiter.wait()
+        try:
+            response = self.client.get(url, headers={"Referer": BBB_BASE + "/"})
+        except Exception as exc:
+            self._log(f"detail request failed for {url}: {exc}")
+            return None
+        if response.status_code in BLOCK_STATUSES:
+            self.consecutive_blocks += 1
+            self._log(f"detail blocked with {response.status_code} for {url}")
+            if self.consecutive_blocks >= self.max_consecutive_blocks:
+                raise BlockedError(f"aborting after {self.consecutive_blocks} consecutive blocks")
+            return None
+        if response.status_code >= 400:
+            return None
+        self.consecutive_blocks = 0
+        return response.text
+
+    # ------------------------------------------------------------------
     def probe(self, spec: EndpointSpec, category: str, location: str) -> int:
         """Try one page. Returns the number of business records found (0 = no good)."""
         from parse import find_records
