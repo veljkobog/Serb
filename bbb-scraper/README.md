@@ -78,6 +78,24 @@ That's the fastest way to find out whether extraction actually works on live BBB
 and it costs nothing to repeat. Profile pages in the capture are replayed too, so the
 years-in-business and headcount parsing gets exercised against real markup.
 
+## When something is wrong, the run says so
+
+The failure mode that matters isn't a crash — it's a run that looks fine and quietly
+returns less than it should. Each of these is reported rather than swallowed:
+
+| signal | what it means |
+| --- | --- |
+| `field coverage ... 0% (!)` | a key name moved; the column isn't missing from BBB |
+| `N record(s) had no readable company name` | the *name* key moved — every one is a dropped lead |
+| `N skipped at --max-detail` | the detail pass hit its cap; raise it or narrow the pull |
+| `filter settings changed since the earlier run` | a resumed pull won't re-filter metros it already collected |
+| `already in file: N` | a resumed run found rows it had written before |
+| `excluded: N` | your name/domain exclusions matched |
+
+Company names are escaped before they hit the CSV if they start with `=`, `+`, `-` or `@`,
+so a listing can't smuggle a formula into the spreadsheet someone opens the leads in.
+Normalized fields (phone, domains, URLs) are built by our own code and are left alone.
+
 ## Field coverage
 
 Every run ends with the share of rows carrying each field:
@@ -257,6 +275,19 @@ Name fragments match case-insensitively anywhere in the company name; a domain a
 matches its subdomains. Excluded rows are counted in the summary and land in `--rejects`
 if you asked for one.
 
+### What is *not* treated as identity
+
+Dedupe collapses rows that share a website or phone, which makes both fields load-bearing.
+Two cases are deliberately excluded:
+
+- **Social and directory pages** (above) — every Facebook-only shop would share one key.
+- **Toll-free numbers** (800/833/844/855/866/877/888) — franchisees, answering services and
+  marketing agencies share them, so two unrelated shops can carry the same 800 number.
+  The number is still written; it just isn't identity.
+
+Both follow the same rule: dropping a real lead is permanent and invisible, while letting a
+genuine duplicate through costs one row that the downstream HubSpot dedupe catches anyway.
+
 ### How unknowns are treated
 
 **A missing value passes every filter by default.** A shop with no headcount on its BBB
@@ -374,7 +405,7 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-141 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+158 tests, no network required. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,

@@ -7,6 +7,7 @@ already paid for.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -106,6 +107,7 @@ class RunProgress:
     scope: str = ""                          # the state or list this run covers
     completed: Set[str] = field(default_factory=set)
     collected: int = 0
+    settings: str = ""              # fingerprint of the run's filter settings
     path: Optional[str] = None
 
     @classmethod
@@ -124,6 +126,7 @@ class RunProgress:
             scope=scope,
             completed=set(data.get("completed") or []),
             collected=int(data.get("collected") or 0),
+            settings=str(data.get("settings") or ""),
             path=path,
         )
 
@@ -142,6 +145,7 @@ class RunProgress:
             "scope": self.scope,
             "completed": sorted(self.completed),
             "collected": self.collected,
+            "settings": self.settings,
         }
         directory = os.path.dirname(os.path.abspath(self.path)) or "."
         os.makedirs(directory, exist_ok=True)
@@ -158,6 +162,12 @@ class RunProgress:
     def clear(self) -> None:
         if self.path and os.path.exists(self.path):
             os.unlink(self.path)
+
+
+def settings_fingerprint(values) -> str:
+    """A short, stable hash of the settings a resume can't retroactively apply."""
+    blob = "|".join(f"{k}={v}" for k, v in sorted(values.items()))
+    return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
 
 def listing_id(listing) -> Optional[str]:

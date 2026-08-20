@@ -81,10 +81,17 @@ class Listing:
     google_match: str = ""
 
     def dedupe_key(self) -> Optional[str]:
-        """Normalized website, falling back to phone. None if neither is known."""
+        """Normalized website, falling back to phone. None if neither is known.
+
+        A toll-free number is never used as identity: franchisees, answering
+        services and marketing agencies share them, so two unrelated shops can
+        carry the same 800 number. Collapsing them would drop a real lead
+        permanently, while letting a genuine duplicate through only costs one
+        row that the downstream HubSpot dedupe catches anyway.
+        """
         if self.website:
             return f"web:{self.website}"
-        if self.phone:
+        if self.phone and not is_toll_free(self.phone):
             return f"tel:{self.phone}"
         return None
 
@@ -233,6 +240,17 @@ def normalize_phone(value: Any) -> str:
     if digits[0] in "01" or digits[3] in "01":  # invalid NANP area/exchange
         return ""
     return "+1" + digits
+
+
+# Shared across franchisees and answering services, so not an identity.
+TOLL_FREE_AREA_CODES = {"800", "833", "844", "855", "866", "877", "888"}
+
+
+def is_toll_free(phone: str) -> bool:
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    return len(digits) == 10 and digits[:3] in TOLL_FREE_AREA_CODES
 
 
 def normalize_state(value: Any) -> str:
@@ -428,7 +446,8 @@ def _lookup_key(d: dict, key: str) -> Any:
     return None
 
 
-NAME_KEYS = ("businessName", "companyName", "name", "displayName", "title", "legalName")
+NAME_KEYS = ("businessName", "companyName", "name", "displayName", "title", "legalName",
+             "organizationName", "orgName", "tradeName", "dbaName", "businessTitle")
 WEBSITE_KEYS = ("websiteUrl", "website", "webAddress", "primaryWebsite", "homepage", "businessUrl", "url")
 PHONE_KEYS = ("phone", "phoneNumber", "primaryPhone", "telephone", "phones.0.number", "phones.0", "phone.0")
 STREET_KEYS = ("address.street", "address.address1", "address.addressLine1", "street", "address1",
@@ -627,6 +646,24 @@ def load_column_map(path) -> tuple:
     return [columns[k] for k in columns], columns
 
 
+# Fields carrying free text straight off BBB. The rest are built by our own
+# normalizers (E.164, bare domains, https URLs, ints) and cannot start with a
+# formula character, so escaping them would only corrupt them.
+FREE_TEXT_FIELDS = {"company_name", "street", "city", "state", "category"}
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_cell(value):
+    """Neutralize a value a spreadsheet would execute as a formula.
+
+    The CSV is opened in Excel and Sheets and fed to other tools, and a company
+    name is attacker-controlled text on a page anyone can get listed on.
+    """
+    if not isinstance(value, str) or not value.startswith(_FORMULA_START):
+        return value
+    return "'" + value
+
+
 def write_csv(path, listings: Iterable[Listing], append: bool = False,
               column_map: Optional[tuple] = None) -> int:
     """Write rows to `path`. Appending skips the header if one is already there."""
@@ -639,6 +676,8 @@ def write_csv(path, listings: Iterable[Listing], append: bool = False,
             writer.writeheader()
         for listing in listings:
             row = listing.as_row()
+            for field in FREE_TEXT_FIELDS:
+                row[field] = sanitize_cell(row[field])
             if mapping:
                 row = {out: row[src] for src, out in mapping.items()}
             writer.writerow(row)
@@ -755,8 +794,23 @@ def dedupe(listings: Iterable[Listing]) -> tuple:
     return unique, dupes
 
 
-def iter_listings_from_payload(payload: Any, default_category: str = "") -> Iterator[Listing]:
+def listings_from_payload(payload: Any, default_category: str = "") -> tuple:
+    """(listings, skipped). Skipped records looked like businesses but had no name.
+
+    A non-zero skip count is the loudest schema-drift signal there is: the
+    records are right there in the payload and we can't read the one field
+    every row needs.
+    """
+    listings, skipped = [], 0
     for record in find_records(payload):
         listing = listing_from_record(record, default_category=default_category)
         if listing.company_name:
-            yield listing
+            listings.append(listing)
+        else:
+            skipped += 1
+    return listings, skipped
+
+
+def iter_listings_from_payload(payload: Any, default_category: str = "") -> Iterator[Listing]:
+    listings, _skipped = listings_from_payload(payload, default_category=default_category)
+    return iter(listings)

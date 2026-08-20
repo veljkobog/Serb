@@ -400,11 +400,14 @@ def collect_via_api(session: ApiSession, category: str, location: str, checkpoin
     client = session.client
     try:
         start_page = max(checkpoint.next_page(), args.skip + 1)
+        skipped_total = 0
         for page, payload in client.iter_pages(category, location, start_page=start_page):
-            listings = list(parse.iter_listings_from_payload(payload, default_category=category))
+            listings, skipped = parse.listings_from_payload(payload, default_category=category)
+            skipped_total += skipped
             collector.add_page(page, listings)
             if collector.full:
                 break
+        warn_unnamed(skipped_total, len(collector.listings))
 
         if not args.no_detail:
             enrich_details(_http_detail_fetcher(client), collector.listings, args,
@@ -417,6 +420,19 @@ def collect_via_api(session: ApiSession, category: str, location: str, checkpoin
     except api_client.EndpointUnavailable as exc:
         print(f"[run] Approach A unavailable: {exc}", file=sys.stderr)
         return False
+
+
+def warn_unnamed(skipped: int, kept: int) -> None:
+    """Records that parsed as businesses but had no readable name.
+
+    Every one is a dropped lead, and a high count means the name key moved --
+    which otherwise looks exactly like a thin result set.
+    """
+    if not skipped:
+        return
+    print(f"[run] warning: {skipped} record(s) had no readable company name and were "
+          f"dropped ({kept} kept). If that's most of them, the name field moved -- "
+          f"run --inspect-har on a capture to see the real keys", file=sys.stderr)
 
 
 def _http_detail_fetcher(client):
@@ -463,10 +479,13 @@ def enrich_details(fetch, listings: List[parse.Listing], args, required=None) ->
     Request volume is the scarce resource, so complete records are never
     re-fetched and the visit count is capped by --max-detail.
     """
-    pending = [l for l in listings if l.needs_detail(required) and l.profile_url][: args.max_detail]
+    candidates = [l for l in listings if l.needs_detail(required) and l.profile_url]
+    pending = candidates[: args.max_detail]
     if not pending:
         return 0
-    print(f"[run] visiting {len(pending)} detail page(s) for missing fields")
+    capped = len(candidates) - len(pending)
+    note = f", {capped} skipped at --max-detail {args.max_detail}" if capped else ""
+    print(f"[run] visiting {len(pending)} detail page(s) for missing fields{note}")
     filled = 0
     for listing in pending:
         try:
@@ -755,11 +774,21 @@ def run(args) -> int:
             progress_path = args.progress or f".progress-{category}-{args.location}.json"
             progress = checkpoint_mod.RunProgress(category=category, scope=args.location,
                                                   path=progress_path)
+            fingerprint = checkpoint_mod.settings_fingerprint(filter_settings(args))
             if len(locations) > 1 and not args.no_resume:
                 progress = checkpoint_mod.RunProgress.load(progress_path, category, args.location)
                 if progress.completed:
                     print(f"[run] resuming state pull -- "
                           f"{len(progress.completed)} metro(s) already done")
+                    if progress.settings and progress.settings != fingerprint:
+                        # Filters run at write time, so metros already collected
+                        # are not re-filtered -- the earlier rows keep the old
+                        # thresholds and the file ends up mixing two rulesets.
+                        print("[run] warning: filter settings changed since the earlier run. "
+                              "Already-collected metros are skipped, so their rows keep the "
+                              "old thresholds. Use --no-resume --overwrite for a clean pull "
+                              "under the new ones.", file=sys.stderr)
+            progress.settings = fingerprint
 
             # A resumed state pull continues into the same CSV -- overwriting it
             # would silently discard metros an earlier invocation already paid
@@ -796,6 +825,23 @@ def run(args) -> int:
     if len(categories) > 1:
         print(f"\n[run] {len(categories)} categories done, {totals['pulled']} listings pulled")
     return worst
+
+
+def filter_settings(args) -> dict:
+    """The settings a resumed run cannot retroactively apply to earlier metros."""
+    return {
+        "min_years": args.min_years,
+        "min_employees": args.min_employees,
+        "min_bbb_reviews": args.min_bbb_reviews,
+        "max_bbb_complaints": args.max_bbb_complaints,
+        "min_google_reviews": args.min_google_reviews,
+        "min_google_rating": args.min_google_rating,
+        "allow_low_match": args.allow_low_match,
+        "drop_unknown": args.drop_unknown,
+        "exclude_name": args.exclude_name or "",
+        "exclude_domain": args.exclude_domain or "",
+        "exclude_file": args.exclude_file or "",
+    }
 
 
 def warn_blind_filters(args, filters) -> None:
