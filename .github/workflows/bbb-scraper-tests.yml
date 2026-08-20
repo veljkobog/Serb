@@ -1,0 +1,36 @@
+name: bbb-scraper tests
+
+on:
+  push:
+    paths:
+      - 'bbb-scraper/**'
+      - '.github/workflows/bbb-scraper-tests.yml'
+  pull_request:
+    paths:
+      - 'bbb-scraper/**'
+      - '.github/workflows/bbb-scraper-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bbb-scraper
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The suite needs no network and no browser -- httpx and bs4 cover
+      # Approach A and the DOM parsing; Playwright is only used at runtime.
+      - name: Install test dependencies
+        run: pip install httpx beautifulsoup4 pyflakes
+
+      - name: Lint
+        run: python -m pyflakes *.py tests/*.py
+
+      - name: Tests
+        run: python -m unittest discover -s tests -t . -v

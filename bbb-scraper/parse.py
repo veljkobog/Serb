@@ -566,6 +566,53 @@ def write_csv(path, listings: Iterable[Listing], append: bool = False) -> int:
     return rows
 
 
+# Fields worth reporting coverage on. company_name/profile_url are effectively
+# always present, so they'd only add noise.
+COVERAGE_FIELDS = [
+    "website", "phone", "street", "city", "state", "zip",
+    "years_in_business", "accredited", "bbb_rating",
+    "bbb_reviews", "bbb_complaints", "employees",
+]
+
+
+def field_coverage(listings) -> dict:
+    """How many listings have a value for each field.
+
+    A field sitting at 0% is the signal that a key name changed (or was
+    guessed wrong) -- without this it just looks like BBB doesn't publish it.
+    """
+    listings = list(listings)
+    counts = {}
+    for name in COVERAGE_FIELDS:
+        filled = 0
+        for listing in listings:
+            value = getattr(listing, name, None)
+            if value not in (None, ""):
+                filled += 1
+        counts[name] = filled
+    return {"total": len(listings), "filled": counts}
+
+
+def format_coverage(coverage: dict, width: int = 3) -> list:
+    """Render coverage as aligned lines, flagging anything at zero."""
+    total = coverage["total"]
+    if not total:
+        return []
+    lines, row = [], []
+    for name, filled in coverage["filled"].items():
+        pct = filled * 100 // total
+        cell = f"{name} {pct}%"
+        if filled == 0:
+            cell += " (!)"
+        row.append(f"{cell:<26}")
+        if len(row) == width:
+            lines.append("".join(row).rstrip())
+            row = []
+    if row:
+        lines.append("".join(row).rstrip())
+    return lines
+
+
 def existing_keys(path) -> set:
     """Dedupe keys already present in a CSV we're about to append to.
 

@@ -43,7 +43,7 @@ class Handler(BaseHTTPRequestHandler):
                 "rating": 3.0 + (n % 21) / 10.0,
                 "userRatingCount": (n % 11) * 25,
                 "websiteUri": f"https://www.testplumbing{n:03d}.com/",
-                "nationalPhoneNumber": f"(910) 555-{1000 + n:04d}",
+                "nationalPhoneNumber": f"(9{n % 10}0) 555-{1000 + (n % 8999):04d}",
             }
         if "no contact" in query:
             # a plausible-but-wrong neighbour: different name, same city

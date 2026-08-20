@@ -41,12 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
             "  --browser                                                (skip the API entirely)\n"
         ),
     )
-    p.add_argument("--category", required=True,
+    p.add_argument("--category", default=None,
                    help="BBB category slug, e.g. heating-and-air-conditioning, plumber, "
                         "roofing-contractors. Comma-separate several to run them in turn.")
     p.add_argument("--categories-file", default=None,
                    help="file of category slugs, one per line, instead of --category")
-    p.add_argument("--location", required=True,
+    p.add_argument("--location", default=None,
                    help="city+state (charlotte-nc) or a whole state (nc, 'north carolina'), "
                         "which expands into a metro-by-metro pull")
     p.add_argument("--max-results", type=int, default=500,
@@ -117,6 +117,12 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--save-endpoints", help="write the endpoints discovered this run to this path")
     src.add_argument("--save-cookies", action="store_true",
                      help="include session cookies in --save-endpoints (they are session credentials)")
+    src.add_argument("--replay", default=None,
+                     help="replay a captured HAR offline: parse its real payloads through the "
+                          "whole pipeline with no network at all")
+    src.add_argument("--inspect-har", default=None,
+                     help="report what a HAR contains (payloads, profile pages, endpoints), "
+                          "then exit")
     src.add_argument("--discover", action="store_true", help="probe the live search page for API routes")
     src.add_argument("--browser", action="store_true", help="skip Approach A, go straight to Playwright")
     src.add_argument("--no-fallback", action="store_true", help="fail instead of falling back to Playwright")
@@ -574,7 +580,7 @@ def resolve_categories(args) -> List[str]:
                 if line:
                     slugs.append(line)
         return slugs
-    return [c.strip() for c in args.category.split(",") if c.strip()]
+    return [c.strip() for c in (args.category or "").split(",") if c.strip()]
 
 
 def output_for(args, category: str, categories: List[str]) -> str:
@@ -588,7 +594,70 @@ def output_for(args, category: str, categories: List[str]) -> str:
     return default_output(category, args.location)
 
 
+def inspect_har(path: str) -> int:
+    """Describe a capture without scraping: what's in it, and what we'd use."""
+    import replay
+
+    try:
+        print(replay.describe(path))
+    except (OSError, ValueError) as exc:
+        print(f"could not read HAR: {exc}", file=sys.stderr)
+        return 2
+
+    payload_count = sum(1 for _ in replay.iter_search_payloads(path))
+    if not payload_count:
+        print("no JSON responses with business records -- re-capture with "
+              "'Save all as HAR with content', which keeps the response bodies")
+
+    specs = api_client.endpoints_from_har(path)
+    if specs:
+        print(f"candidate endpoints ({len(specs)}, best first):")
+        for spec in specs:
+            params = ", ".join(sorted(spec.params)) or "none"
+            print(f"  {spec.method} {spec.url}")
+            print(f"    page={spec.page_param}  category={spec.category_param}  "
+                  f"location={spec.location_param}")
+            print(f"    params: {params}")
+    else:
+        print("no candidate search endpoints found -- was the XHR captured "
+              "with response bodies ('Save all as HAR with content')?")
+
+    listings, payloads = replay.collect(path)
+    print(f"parsed {len(listings)} listing(s) from {payloads} payload(s)")
+    if listings:
+        lines = parse.format_coverage(parse.field_coverage(listings))
+        print("field coverage:")
+        for line in lines:
+            print(f"  {line}")
+        sample = listings[0]
+        print("first listing:")
+        for key, value in sample.as_row().items():
+            print(f"  {key:<18}: {value}")
+    return 0 if listings else 1
+
+
+def collect_from_har(args, category: str) -> RunResult:
+    """Build a RunResult from a capture instead of the network."""
+    import replay
+
+    result = RunResult()
+    listings, payloads = replay.collect(args.replay, category=category,
+                                        max_results=args.max_results)
+    result.listings = listings
+    result.pages = payloads
+    result.per_location.append((args.location, len(listings)))
+
+    if not args.no_detail:
+        required = detail_fields_for(args, build_filters(args))
+        enrich_details(replay.replay_fetcher(args.replay), result.listings, args,
+                       required=required)
+    return result
+
+
 def run(args) -> int:
+    if args.inspect_har:
+        return inspect_har(args.inspect_har)
+
     try:
         categories = resolve_categories(args)
     except OSError as exc:
@@ -611,11 +680,15 @@ def run(args) -> int:
             print(location)
         return 0
 
-    if len(locations) > 1:
+    if args.replay:
+        locations = [args.location]      # a capture is whatever it captured
+        print(f"[run] replaying {args.replay} -- no network")
+    elif len(locations) > 1:
         print(f"[run] {args.location} -> {len(locations)} metros (source: {source})")
         if source.startswith("bundled"):
             print("[run] bundled metro list is a starting point -- "
                   "override with --metros / --metros-file if it misses your markets")
+
     if len(categories) > 1:
         print(f"[run] {len(categories)} categories: {', '.join(categories)}")
         print(f"[run] --max-results {args.max_results} applies per category")
@@ -656,7 +729,11 @@ def run(args) -> int:
             if append and output not in written_to and os.path.exists(output) and not args.append:
                 print(f"[run] appending to existing {output} (--overwrite to start fresh)")
 
-            result = collect_all(args, category, locations, progress, required_fields, clients)
+            if args.replay:
+                result = collect_from_har(args, category)
+            else:
+                result = collect_all(args, category, locations, progress, required_fields,
+                                     clients)
             code = finish(args, result, output, filters, locations, append=append,
                           label=category if len(categories) > 1 else None)
             written_to.add(output)
@@ -812,6 +889,18 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         print(f"                    {len(low_rows)} -> {low_path}")
     print(f"  website coverage: {with_website}/{len(main_rows)} ({pct:.0f}%)")
 
+    coverage = parse.field_coverage(main_rows)
+    lines = parse.format_coverage(coverage)
+    if lines:
+        print("")
+        print("  field coverage (share of rows with a value)")
+        for line in lines:
+            print(f"    {line}")
+        empty = [n for n, filled in coverage["filled"].items() if filled == 0]
+        if empty:
+            print(f"    (!) never populated: {', '.join(empty)} -- if BBB shows these, the "
+                  f"key names moved; capture a HAR and rerun with --replay")
+
     if pulled and not main_rows:
         if rejected:
             print("  (every listing was filtered out -- loosen the thresholds)")
@@ -825,6 +914,12 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    if not args.inspect_har and not (args.category or args.categories_file):
+        print("--category (or --categories-file) is required", file=sys.stderr)
+        return 2
+    if not args.inspect_har and not args.location:
+        print("--location is required", file=sys.stderr)
+        return 2
     if args.min_delay > args.max_delay:
         print("--min-delay cannot exceed --max-delay", file=sys.stderr)
         return 2

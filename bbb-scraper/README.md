@@ -54,6 +54,47 @@ Two other ways in:
 If the API rejects the session (403/429 from Cloudflare), the run falls back to
 Approach B automatically unless you pass `--no-fallback`.
 
+## Checking a capture before you trust it
+
+Two offline modes turn "did this actually work?" into a question you can answer without
+another live run.
+
+**`--inspect-har`** reports what a capture contains — candidate endpoints and their
+pagination params, how many payloads carry records, field coverage, and one fully parsed
+listing:
+
+```bash
+python scraper.py --inspect-har search.har
+```
+
+**`--replay`** runs the *entire* pipeline against the capture's real payloads with no
+network at all — parsing, normalization, detail pages, dedupe, filters, CSV:
+
+```bash
+python scraper.py --category plumber --location wilmington-nc --replay search.har
+```
+
+That's the fastest way to find out whether extraction actually works on live BBB data,
+and it costs nothing to repeat. Profile pages in the capture are replayed too, so the
+years-in-business and headcount parsing gets exercised against real markup.
+
+## Field coverage
+
+Every run ends with the share of rows carrying each field:
+
+```
+  field coverage (share of rows with a value)
+    website 100%              phone 96%                 street 100%
+    years_in_business 84%     accredited 100%           bbb_rating 91%
+    bbb_reviews 0% (!)        bbb_complaints 0% (!)     employees 0% (!)
+    (!) never populated: bbb_reviews, bbb_complaints, employees -- if BBB shows
+    these, the key names moved; capture a HAR and rerun with --replay
+```
+
+A column at **0%** is the tell that a key name is wrong, not that BBB stopped publishing
+the field. Without this the column just looks empty and a size filter quietly passes
+everything. If you see it, `--inspect-har` will show the real key names.
+
 ## Approach B: Playwright
 
 `playwright` + `playwright-stealth`, parsing the **rendered DOM** rather than raw HTML.
@@ -277,6 +318,7 @@ results are exhausted, so a completed run doesn't cause the next one to skip pag
 bbb-scraper/
   scraper.py         # entry, CLI, orchestration, CSV output
   metros.py          # state -> metro expansion for full-state pulls
+  replay.py          # offline HAR replay, for testing against real payloads
   data/metros.json   # bundled metro list, editable
   api_client.py      # Approach A: endpoint discovery (HAR/probe), pagination, backoff
   browser_client.py  # Approach B: Playwright + DOM extraction
@@ -293,7 +335,7 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-109 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+122 tests, no network required. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,
@@ -303,7 +345,10 @@ are proven rather than assumed. The state-pull tests run a multi-metro pull agai
 location-aware fixture, including a regional operator listed in every metro, so
 cross-metro dedupe and cross-invocation appending are checked too. One test asserts the
 dry-run count equals the number of requests the real pass makes, so the preflight can't
-drift from the thing it predicts.
+drift from the thing it predicts. The replay tests run the full pipeline from a
+hand-written HAR, including a sparse card that can only be completed from its profile
+page. CI runs the suite and pyflakes on every push
+([`.github/workflows/bbb-scraper-tests.yml`](../.github/workflows/bbb-scraper-tests.yml)).
 
 ## Out of scope (v1)
 

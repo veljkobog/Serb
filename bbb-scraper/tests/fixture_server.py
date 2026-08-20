@@ -24,7 +24,10 @@ def _business(i: int, dupe_of: int = None) -> dict:
     return {
         "businessName": f"Test Plumbing {n:03d}" + (" (dup)" if dupe_of is not None else ""),
         "websiteUrl": f"https://www.testplumbing{n:03d}.com/",
-        "phone": f"(910) 555-{1000 + n:04d}",
+        # Keep the last four digits four digits wide -- a metro offset pushing
+        # this to five made every phone invalid, which is a fixture bug, not a
+        # parser one.
+        "phone": f"(9{n % 10}0) 555-{1000 + (n % 8999):04d}",
         "address": {
             "street": f"{n} Market St",
             "city": "Wilmington",
