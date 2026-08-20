@@ -18,9 +18,9 @@ from typing import Iterator, List, Optional
 
 from parse import (
     Listing,
+    classify_website,
     parse_count,
     parse_employees,
-    normalize_domain,
     normalize_phone,
     normalize_rating,
     normalize_state,
@@ -268,6 +268,24 @@ def _first_match(text: str, patterns, converter):
     return None
 
 
+def _find_links(soup) -> tuple:
+    """(company_domain, social_url) from a card or profile page.
+
+    A real domain wins over a social link no matter which appears first -- BBB
+    often lists the Facebook page above the website.
+    """
+    domain, social = "", ""
+    for anchor in soup.find_all("a", href=True):
+        candidate_domain, candidate_social = classify_website(anchor["href"])
+        if candidate_domain and not domain:
+            domain = candidate_domain
+        elif candidate_social and not social:
+            social = candidate_social
+        if domain and social:
+            break
+    return domain, social
+
+
 def _find_rating(soup, text: str) -> str:
     node = soup.find(attrs={"class": re.compile("rating", re.I)})
     haystacks = [node.get_text(" ", strip=True)] if node else []
@@ -299,12 +317,7 @@ def listing_from_card_html(html: str, default_category: str = "") -> Listing:
         heading = soup.find(["h1", "h2", "h3", "h4"])
         name = heading.get_text(" ", strip=True) if heading else ""
 
-    website = ""
-    for anchor in soup.find_all("a", href=True):
-        domain = normalize_domain(anchor["href"])
-        if domain:
-            website = domain
-            break
+    website, social_url = _find_links(soup)
 
     phone_match = _PHONE_TEXT_RE.search(text)
 
@@ -337,6 +350,7 @@ def listing_from_card_html(html: str, default_category: str = "") -> Listing:
         accredited=accredited,
         bbb_rating=rating,
         profile_url=_absolutize(profile_url),
+        social_url=social_url,
         bbb_reviews=_first_match(text, _REVIEWS_PATTERNS, parse_count),
     )
 
@@ -363,17 +377,13 @@ def listing_from_detail_html(html: str) -> Listing:
 
     rating = _find_rating(soup, text)
 
-    website = ""
-    for anchor in soup.find_all("a", href=True):
-        domain = normalize_domain(anchor["href"])
-        if domain:
-            website = domain
-            break
+    website, social_url = _find_links(soup)
 
     phone_match = _PHONE_TEXT_RE.search(text)
 
     return Listing(
         website=website,
+        social_url=social_url,
         phone=normalize_phone(phone_match.group(0)) if phone_match else "",
         years_in_business=years,
         accredited=accredited,

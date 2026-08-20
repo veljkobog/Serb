@@ -12,6 +12,7 @@ assuming one shape.
 from __future__ import annotations
 
 import csv
+import json
 import os
 import re
 from dataclasses import dataclass, fields as dataclass_fields
@@ -32,6 +33,7 @@ FIELD_ORDER = [
     "accredited",
     "bbb_rating",
     "profile_url",
+    "social_url",
     # size / traction signals, appended after the spec's columns
     "bbb_reviews",
     "bbb_complaints",
@@ -69,6 +71,7 @@ class Listing:
     accredited: Optional[bool] = None
     bbb_rating: str = ""
     profile_url: str = ""
+    social_url: str = ""
     bbb_reviews: Optional[int] = None
     bbb_complaints: Optional[int] = None
     employees: Optional[int] = None
@@ -122,6 +125,7 @@ class Listing:
             "accredited": "" if self.accredited is None else str(self.accredited).lower(),
             "bbb_rating": self.bbb_rating,
             "profile_url": self.profile_url,
+            "social_url": self.social_url,
             "bbb_reviews": _blank_if_none(self.bbb_reviews),
             "bbb_complaints": _blank_if_none(self.bbb_complaints),
             "employees": _blank_if_none(self.employees),
@@ -137,6 +141,55 @@ class Listing:
 # --------------------------------------------------------------------------
 
 _TRACKING_HOSTS = {"bbb.org", "www.bbb.org"}
+
+# Hosts where the *path* identifies the business, not the domain. A shop whose
+# only web presence is facebook.com/acme-plumbing must not be recorded as
+# owning "facebook.com": every such listing would share one dedupe key and all
+# but the first would be dropped as duplicates. They are also useless to
+# domain-based enrichment downstream, so they are kept separately instead.
+NON_COMPANY_HOSTS = {
+    "facebook.com", "m.facebook.com", "business.facebook.com", "fb.com",
+    "instagram.com", "twitter.com", "x.com", "linkedin.com", "youtube.com",
+    "tiktok.com", "pinterest.com", "nextdoor.com",
+    "yelp.com", "angi.com", "angieslist.com", "homeadvisor.com", "thumbtack.com",
+    "porch.com", "houzz.com", "manta.com", "alignable.com", "bark.com",
+    "yellowpages.com", "superpages.com", "mapquest.com", "foursquare.com",
+    "sites.google.com", "google.com", "maps.google.com", "goo.gl",
+    "linktr.ee", "bit.ly", "wa.me",
+}
+
+
+def is_company_domain(domain: str) -> bool:
+    """False for social profiles, directories and link shorteners."""
+    if not domain:
+        return False
+    return domain not in NON_COMPANY_HOSTS
+
+
+def classify_website(value: Any) -> tuple:
+    """Split a listed URL into (company_domain, social_or_directory_url).
+
+    Exactly one of the two is populated. A social/directory link is still worth
+    keeping -- it's often the only web presence a founder-led shop has -- it
+    just isn't a domain.
+    """
+    domain = normalize_domain(value)
+    if not domain:
+        return "", ""
+    if is_company_domain(domain):
+        return domain, ""
+    return "", _clean_url(value)
+
+
+def _clean_url(value: Any) -> str:
+    if not value or not isinstance(value, str):
+        return ""
+    url = value.strip()
+    if not url:
+        return ""
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url.lstrip("/")
+    return url
 
 
 def normalize_domain(value: Any) -> str:
@@ -461,9 +514,11 @@ def listing_from_record(record: dict, default_category: str = "") -> Listing:
     if isinstance(rating, dict):
         rating = _get(rating, "letter", "grade", "value")
 
+    website, social_url = classify_website(website_raw)
+
     return Listing(
         company_name=_clean_text(_get(record, *NAME_KEYS)),
-        website=normalize_domain(website_raw),
+        website=website,
         phone=normalize_phone(phone),
         street=_clean_text(_get(record, *STREET_KEYS)),
         city=_clean_text(_get(record, *CITY_KEYS)),
@@ -474,6 +529,7 @@ def listing_from_record(record: dict, default_category: str = "") -> Listing:
         accredited=parse_bool(_get(record, *ACCREDITED_KEYS)),
         bbb_rating=normalize_rating(rating if isinstance(rating, str) else None),
         profile_url=_absolutize(profile_raw),
+        social_url=social_url,
         bbb_reviews=parse_count(_get(record, *REVIEW_COUNT_KEYS)),
         bbb_complaints=parse_count(_get(record, *COMPLAINT_KEYS)),
         employees=parse_employees(_get(record, *EMPLOYEE_KEYS)),
@@ -552,16 +608,40 @@ def find_total_count(payload: Any) -> Optional[int]:
 # CSV output
 # --------------------------------------------------------------------------
 
-def write_csv(path, listings: Iterable[Listing], append: bool = False) -> int:
+def load_column_map(path) -> tuple:
+    """Read a column map: {"columns": {"website": "Company Domain", ...}}.
+
+    Returns (fieldnames, mapping). Only the listed columns are written, in the
+    order given, under the names given -- so a CSV can drop straight into
+    whatever Apollo or Smartlead expects without hand-editing headers.
+    """
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    columns = data.get("columns", data)
+    if not isinstance(columns, dict) or not columns:
+        raise ValueError(f"{path}: expected a non-empty 'columns' object")
+    unknown = [k for k in columns if k not in FIELD_ORDER]
+    if unknown:
+        raise ValueError(f"{path}: unknown column(s): {', '.join(sorted(unknown))}. "
+                         f"Available: {', '.join(FIELD_ORDER)}")
+    return [columns[k] for k in columns], columns
+
+
+def write_csv(path, listings: Iterable[Listing], append: bool = False,
+              column_map: Optional[tuple] = None) -> int:
     """Write rows to `path`. Appending skips the header if one is already there."""
     existing = append and os.path.exists(path) and os.path.getsize(path) > 0
+    fieldnames, mapping = (column_map or (FIELD_ORDER, None))
     rows = 0
     with open(path, "a" if existing else "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=FIELD_ORDER)
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
         if not existing:
             writer.writeheader()
         for listing in listings:
-            writer.writerow(listing.as_row())
+            row = listing.as_row()
+            if mapping:
+                row = {out: row[src] for src, out in mapping.items()}
+            writer.writerow(row)
             rows += 1
     return rows
 
@@ -569,7 +649,7 @@ def write_csv(path, listings: Iterable[Listing], append: bool = False) -> int:
 # Fields worth reporting coverage on. company_name/profile_url are effectively
 # always present, so they'd only add noise.
 COVERAGE_FIELDS = [
-    "website", "phone", "street", "city", "state", "zip",
+    "website", "social_url", "phone", "street", "city", "state", "zip",
     "years_in_business", "accredited", "bbb_rating",
     "bbb_reviews", "bbb_complaints", "employees",
 ]
@@ -613,20 +693,36 @@ def format_coverage(coverage: dict, width: int = 3) -> list:
     return lines
 
 
-def existing_keys(path) -> set:
+def existing_keys(path, column_map: Optional[tuple] = None) -> set:
     """Dedupe keys already present in a CSV we're about to append to.
 
     A state pull spread over several invocations appends into one file, and a
     business listed in two metros would otherwise land in it twice.
+
+    With a column map in play the headers are whatever the destination wanted,
+    so the map itself says which columns hold the website and phone -- guessing
+    from header text silently missed "Company Domain" and re-added every row.
     """
     keys = set()
     if not path or not os.path.exists(path) or os.path.getsize(path) == 0:
         return keys
+
+    website_col, phone_col = "website", "phone"
+    if column_map:
+        _fieldnames, mapping = column_map
+        website_col = mapping.get("website")
+        phone_col = mapping.get("phone")
+
     try:
         with open(path, newline="", encoding="utf-8") as fh:
-            for row in csv.DictReader(fh):
-                website = normalize_domain(row.get("website"))
-                phone = normalize_phone(row.get("phone"))
+            reader = csv.DictReader(fh)
+            names = reader.fieldnames or []
+            if website_col not in names and phone_col not in names:
+                # Neither key is in the file; appending can't be deduped.
+                return set()
+            for row in reader:
+                website = normalize_domain(row.get(website_col)) if website_col else ""
+                phone = normalize_phone(row.get(phone_col)) if phone_col else ""
                 if website:
                     keys.add(f"web:{website}")
                 elif phone:

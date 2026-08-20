@@ -118,6 +118,23 @@ The endpoint is resolved once and one session serves the whole batch — categor
 sequence, not concurrently, which keeps the request rate where the anti-bot section says
 it is.
 
+## Handing off to the pipeline
+
+**`--column-map map.json`** reshapes the CSV into whatever ingests it next — only the
+columns you list, in your order, under your headers:
+
+```json
+{ "columns": { "company_name": "Company", "website": "Website", "phone": "Phone" } }
+```
+
+See `column-map.example.json`. An unknown column name is an error naming the offender, not
+a silently missing column. Append-dedupe follows the map, so a renamed `website` header is
+still recognised on a resumed run.
+
+**`--report run.json`** writes the run summary as JSON — counts, per-filter drops, per-metro
+breakdown, field coverage, Google spend — so an automated step doesn't have to scrape
+stdout. On a batch run each category gets its own `run-<category>.json`.
+
 ## Full-state pulls
 
 `--location` accepts a whole state, which runs as a metro-by-metro sequence rather than
@@ -183,6 +200,7 @@ CSV, UTF-8, one row per company:
 | `accredited` | `true` / `false`; blank if unknown |
 | `bbb_rating` | `A+` … `F`; blank if NR |
 | `profile_url` | BBB listing URL |
+| `social_url` | Facebook/Yelp/etc. page, when that's the only web presence |
 | `bbb_reviews` / `bbb_complaints` | BBB customer review + complaint counts |
 | `employees` | headcount; a range like `11-50` records as `11` |
 | `google_rating` / `google_reviews` | only with `--google-key` (see below) |
@@ -191,6 +209,13 @@ CSV, UTF-8, one row per company:
 - Deduped within-run on normalized `website`, falling back to `phone`. When two rows
   collide, the richer one wins — blanks are filled from the duplicate, nothing is
   overwritten.
+- **Social and directory pages are not domains.** A shop whose listed site is
+  `facebook.com/acme-plumbing` gets a blank `website` and the link in `social_url`. This
+  matters twice: those URLs can't be enriched by domain, and treating them as one would
+  make every Facebook-only business share a dedupe key — the first would be kept and the
+  rest dropped as duplicates. Yelp, Angi, Thumbtack, Instagram, Linktree and friends are
+  handled the same way. Expect `website` coverage to look lower and be truer; the run
+  summary reports the social-only count separately.
 - Rows missing **both** website and phone go to `<output>_lowconfidence.csv`, never the
   main file.
 - Every run prints a summary: pulled / deduped / per-filter drops / low-confidence /
@@ -217,6 +242,20 @@ python scraper.py --category plumber --location charlotte-nc   --min-google-revi
 For home-services SMBs the Google review count is usually the best available proxy for job
 volume — BBB review counts are much sparser, and BBB headcount is self-reported and often
 missing entirely. Expect to lean on Google if size is the thing you actually care about.
+
+### Excluding chains and franchises
+
+A category search also returns national chains, franchisors and supply houses. Nothing is
+excluded by default — a bundled blocklist would quietly drop real leads — so name it:
+
+```bash
+python scraper.py ... --exclude-name "roto-rooter,home depot" --exclude-domain homedepot.com
+python scraper.py ... --exclude-file exclusions.txt      # see exclusions.example.txt
+```
+
+Name fragments match case-insensitively anywhere in the company name; a domain also
+matches its subdomains. Excluded rows are counted in the summary and land in `--rejects`
+if you asked for one.
 
 ### How unknowns are treated
 
@@ -335,7 +374,7 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-122 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+141 tests, no network required. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,

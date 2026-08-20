@@ -87,6 +87,15 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Google star rating (requires --google-key)")
     flt.add_argument("--allow-low-match", action="store_true",
                      help="trust low-confidence Google matches when filtering (default: treat as unknown)")
+    flt.add_argument("--exclude-name", default=None,
+                     help="drop listings whose name contains any of these (comma-separated, "
+                          "case-insensitive) -- national chains, franchisors, supply houses")
+    flt.add_argument("--exclude-domain", default=None,
+                     help="drop listings on these domains (comma-separated); a bare domain "
+                          "also matches its subdomains")
+    flt.add_argument("--exclude-file", default=None,
+                     help="file of exclusions, one per line; lines with a dot are treated as "
+                          "domains, everything else as a name fragment")
     flt.add_argument("--drop-unknown", action="store_true",
                      help="drop listings whose value for an active filter is unknown")
     flt.add_argument("--rejects", default=None,
@@ -141,6 +150,12 @@ def build_parser() -> argparse.ArgumentParser:
     beh.add_argument("--headed", action="store_true", help="run Playwright headed (helps with challenges)")
     beh.add_argument("--profile-dir", default=".bbb-browser-profile",
                      help="persistent browser profile dir (keeps cookies between runs)")
+    beh.add_argument("--column-map", default=None,
+                     help="JSON column map for the output CSV (see column-map.example.json), "
+                          "so the file lands in the shape the next pipeline step expects")
+    beh.add_argument("--report", default=None,
+                     help="write a machine-readable JSON run report (counts, filters, "
+                          "coverage, per-metro breakdown)")
     beh.add_argument("-v", "--verbose", action="store_true")
     return p
 
@@ -201,6 +216,35 @@ def _google_value(field, allow_low_match):
             return None
         return getattr(listing, field)
     return getter
+
+
+def load_exclusions(args) -> tuple:
+    """(name fragments, domains) to drop, from the flags and any --exclude-file."""
+    names = [n.strip().lower() for n in (args.exclude_name or "").split(",") if n.strip()]
+    domains = [d.strip().lower().lstrip(".") for d in (args.exclude_domain or "").split(",")
+               if d.strip()]
+    if args.exclude_file:
+        with open(args.exclude_file, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.split("#", 1)[0].strip()
+                if not line:
+                    continue
+                # A dot means a domain; anything else is a name fragment.
+                if "." in line and " " not in line:
+                    domains.append(line.lower().lstrip("."))
+                else:
+                    names.append(line.lower())
+    return names, domains
+
+
+def excluded(listing, names, domains) -> bool:
+    company = (listing.company_name or "").lower()
+    if any(fragment in company for fragment in names):
+        return True
+    website = (listing.website or "").lower()
+    if website and any(website == d or website.endswith("." + d) for d in domains):
+        return True
+    return False
 
 
 def build_filters(args):
@@ -811,12 +855,22 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     unique, dupes = parse.dedupe(result.listings)
 
     filters = filters or []
+
+    names, domains = load_exclusions(args)
+    excluded_rows = []
+    if names or domains:
+        keep = []
+        for listing in unique:
+            (excluded_rows if excluded(listing, names, domains) else keep).append(listing)
+        unique = keep
+
     local = [f for f in filters if not f.needs_google]
     google = [f for f in filters if f.needs_google]
 
     # BBB-side filters run first so Google is only asked about survivors --
     # every uncached lookup is billed, and the cheap filters cut the set hard.
     kept, rejected = apply_filters(unique, local, args.drop_unknown)
+    rejected.extend(excluded_rows)
 
     google_stats = None
     if uses_google(args) and kept and args.google_dry_run:
@@ -826,9 +880,17 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         kept, rejected_google = apply_filters(kept, google, args.drop_unknown)
         rejected.extend(rejected_google)
 
+    column_map = None
+    if args.column_map:
+        try:
+            column_map = parse.load_column_map(args.column_map)
+        except (OSError, ValueError) as exc:
+            print(f"[run] column map ignored: {exc}", file=sys.stderr)
+
     already_written = 0
     if append:
-        seen = parse.existing_keys(output) | parse.existing_keys(lowconfidence_path(output))
+        seen = (parse.existing_keys(output, column_map)
+                | parse.existing_keys(lowconfidence_path(output), column_map))
         if seen:
             before = len(kept)
             kept = [l for l in kept if l.dedupe_key() not in seen]
@@ -837,14 +899,16 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     main_rows = [l for l in kept if not l.is_low_confidence()]
     low_rows = [l for l in kept if l.is_low_confidence()]
 
-    parse.write_csv(output, main_rows, append=append)
+    parse.write_csv(output, main_rows, append=append, column_map=column_map)
     low_path = ""
     if low_rows:
         low_path = lowconfidence_path(output)
-        parse.write_csv(low_path, low_rows, append=append)
+        parse.write_csv(low_path, low_rows, append=append, column_map=column_map)
     if args.rejects and rejected:
+        # Rejects keep the full schema -- they exist to be inspected, not ingested.
         parse.write_csv(args.rejects, rejected, append=append)
 
+    coverage = parse.field_coverage(main_rows)
     with_website = sum(1 for l in main_rows if l.website)
     pct = (with_website / len(main_rows) * 100) if main_rows else 0.0
 
@@ -865,6 +929,8 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     print(f"  deduped         : {len(dupes)}")
     if already_written:
         print(f"  already in file : {already_written}")
+    if excluded_rows:
+        print(f"  excluded        : {len(excluded_rows)} (name/domain exclusions)")
     if google_stats:
         print(f"  google lookups  : {google_stats.looked_up} billed, "
               f"{google_stats.cached} cached, {google_stats.matched} matched "
@@ -887,9 +953,12 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     print(f"  {verb:<16}: {len(main_rows)} -> {output}")
     if low_path:
         print(f"                    {len(low_rows)} -> {low_path}")
+    social_only = sum(1 for l in main_rows if not l.website and l.social_url)
     print(f"  website coverage: {with_website}/{len(main_rows)} ({pct:.0f}%)")
+    if social_only:
+        print(f"  social-only     : {social_only} (facebook/directory page, no domain "
+              f"-- kept in social_url, not enrichable by domain)")
 
-    coverage = parse.field_coverage(main_rows)
     lines = parse.format_coverage(coverage)
     if lines:
         print("")
@@ -901,7 +970,16 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
             print(f"    (!) never populated: {', '.join(empty)} -- if BBB shows these, the "
                   f"key names moved; capture a HAR and rerun with --replay")
 
+    if args.report:
+        write_report(args, result, output, filters, locations, label,
+                     pulled=pulled, dupes=len(dupes), excluded=len(excluded_rows),
+                     rejected=len(rejected), main_rows=main_rows, low_rows=low_rows,
+                     coverage=coverage, google_stats=google_stats)
+
     if pulled and not main_rows:
+        if already_written:
+            print("  (nothing new -- every listing was already in the output file)")
+            return 0
         if rejected:
             print("  (every listing was filtered out -- loosen the thresholds)")
             return 0
@@ -910,6 +988,56 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         print("  (nothing collected -- see errors above)")
         return 1
     return 0
+
+
+def write_report(args, result, output, filters, locations, label, **counts) -> None:
+    """A JSON sidecar, so the next pipeline step doesn't have to scrape stdout."""
+    import json
+
+    coverage = counts["coverage"]
+    google = counts["google_stats"]
+    report = {
+        "category": label or args.category,
+        "location": args.location,
+        "locations_planned": list(locations or []),
+        "locations_pulled": [{"location": loc, "count": n} for loc, n in result.per_location],
+        "approach": "browser" if result.used_browser else "api",
+        "budget_spent": result.budget_spent,
+        "pages_fetched": result.pages,
+        "counts": {
+            "pulled": counts["pulled"],
+            "deduped": counts["dupes"],
+            "excluded": counts["excluded"],
+            "filtered": counts["rejected"],
+            "low_confidence": len(counts["low_rows"]),
+            "written": len(counts["main_rows"]),
+        },
+        "filters": {f.name: {"dropped": f.dropped, "unknown_dropped": f.unknown_dropped}
+                    for f in filters or []},
+        "field_coverage": {
+            name: {"filled": filled, "total": coverage["total"]}
+            for name, filled in coverage["filled"].items()
+        },
+        "output": output,
+        "replayed_from": args.replay,
+    }
+    if google:
+        report["google"] = {
+            "billed": google.looked_up, "cached": google.cached, "matched": google.matched,
+            "low_confidence": google.low_match, "no_result": google.no_result,
+            "errors": google.errors, "skipped_at_cap": google.capped,
+        }
+
+    path = args.report
+    if label:                      # one file per category on a batch run
+        base, ext = os.path.splitext(path)
+        path = f"{base}-{label}{ext or '.json'}"
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2)
+        print(f"  report          : {path}")
+    except OSError as exc:
+        print(f"[run] could not write report: {exc}", file=sys.stderr)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
