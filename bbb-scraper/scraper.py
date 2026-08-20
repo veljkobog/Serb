@@ -150,6 +150,11 @@ def build_parser() -> argparse.ArgumentParser:
     beh.add_argument("--headed", action="store_true", help="run Playwright headed (helps with challenges)")
     beh.add_argument("--profile-dir", default=".bbb-browser-profile",
                      help="persistent browser profile dir (keeps cookies between runs)")
+    beh.add_argument("--browser-executable", default=None,
+                     help="path to an existing Chromium, when Playwright's bundled build "
+                          "isn't installed (or set $BBB_BROWSER_EXECUTABLE)")
+    beh.add_argument("--browser-no-sandbox", action="store_true",
+                     help="pass --no-sandbox to Chromium (needed inside most containers)")
     beh.add_argument("--column-map", default=None,
                      help="JSON column map for the output CSV (see column-map.example.json), "
                           "so the file lands in the shape the next pipeline step expects")
@@ -467,6 +472,8 @@ def open_browser(args):
         min_delay=args.min_delay,
         max_delay=args.max_delay,
         verbose=args.verbose,
+        executable_path=args.browser_executable,
+        extra_args=["--no-sandbox"] if args.browser_no_sandbox else None,
     )
     browser.start()
     return browser

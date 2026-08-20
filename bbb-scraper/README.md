@@ -119,6 +119,22 @@ everything. If you see it, `--inspect-har` will show the real key names.
 The browser profile in `--profile-dir` persists between runs, so the Cloudflare clearance
 cookie survives and challenges stay rare. Add `--headed` if headless gets challenged.
 
+Playwright expects one exact Chromium build and fails with "playwright install" if the
+machine has a different one — common in containers and CI images that already ship a
+browser. Point it at what's there instead:
+
+```bash
+python scraper.py ... --browser --browser-executable /opt/pw-browsers/chromium --browser-no-sandbox
+```
+
+`$BBB_BROWSER_EXECUTABLE` works too. `--browser-no-sandbox` is usually required inside a
+container. A launch failure names both fixes rather than just telling you to install.
+
+This path is tested end-to-end against a stand-in BBB site (`tests/bbb_site.py`) with a
+real headless Chromium: pagination, the empty page past the end, card extraction, the
+detail-page pass, profile persistence between sessions, and the stealth shim. Those tests
+skip automatically where no browser is available, so CI stays green without one.
+
 ## Several trades in one go
 
 `--category` takes a comma-separated list, or `--categories-file` a file of slugs:
@@ -405,7 +421,8 @@ bbb-scraper/
 python -m unittest discover -s tests -t .
 ```
 
-158 tests, no network required. `tests/fixture_server.py` stands in for the search API —
+167 tests. The 158 core tests need no network and no browser; 9 more drive a real
+Chromium against a local stand-in site and skip when none is installed. `tests/fixture_server.py` stands in for the search API —
 unknown JSON envelope, mixed key casing, same-company-second-profile duplicates, rows
 with no contact info, and an empty final page — so the acceptance criteria (≥80% website
 coverage, zero duplicate domains, clean stop at pagination end) are checked on every run,

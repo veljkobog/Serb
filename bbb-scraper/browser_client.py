@@ -10,6 +10,7 @@ never installed browsers.
 
 from __future__ import annotations
 
+import os
 import random
 import re
 import time
@@ -74,6 +75,9 @@ class BrowserClient:
         stealth: bool = True,
         verbose: bool = False,
         timeout_ms: int = 45000,
+        executable_path: Optional[str] = None,
+        extra_args: Optional[List[str]] = None,
+        base_url: str = BBB_BASE,
     ):
         self.user_data_dir = user_data_dir
         self.headless = headless
@@ -83,6 +87,13 @@ class BrowserClient:
         self.stealth = stealth
         self.verbose = verbose
         self.timeout_ms = timeout_ms
+        # Playwright ships expecting one exact Chromium build. Machines that
+        # already have a browser (CI images, containers, this repo's own dev
+        # boxes) otherwise fail with "playwright install" even though a perfectly
+        # good Chromium is sitting there.
+        self.executable_path = executable_path or os.environ.get("BBB_BROWSER_EXECUTABLE")
+        self.extra_args = list(extra_args or [])
+        self.base_url = base_url.rstrip("/")
         self._pw = None
         self._context = None
         self._page = None
@@ -98,11 +109,23 @@ class BrowserClient:
         launch_kwargs = {
             "user_data_dir": self.user_data_dir,   # persisted profile == persisted cookies
             "headless": self.headless,
-            "args": ["--disable-blink-features=AutomationControlled"],
+            "args": ["--disable-blink-features=AutomationControlled"] + self.extra_args,
         }
         if self.user_agent:
             launch_kwargs["user_agent"] = self.user_agent
-        self._context = self._pw.chromium.launch_persistent_context(**launch_kwargs)
+        if self.executable_path:
+            launch_kwargs["executable_path"] = self.executable_path
+            self._log(f"using browser at {self.executable_path}")
+        try:
+            self._context = self._pw.chromium.launch_persistent_context(**launch_kwargs)
+        except Exception as exc:
+            self._pw.stop()
+            self._pw = None
+            raise BrowserUnavailable(
+                f"could not launch Chromium: {exc}\n"
+                f"Run 'playwright install chromium', or point --browser-executable "
+                f"(or $BBB_BROWSER_EXECUTABLE) at an existing browser binary."
+            ) from exc
         self._context.set_default_timeout(self.timeout_ms)
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
 
@@ -152,7 +175,24 @@ class BrowserClient:
             "find_loc": location.replace("-", " "),
             "page": str(page),
         }
-        return SEARCH_URL + "?" + urllib.parse.urlencode(params)
+        return f"{self.base_url}/search?" + urllib.parse.urlencode(params)
+
+    def _absolute(self, url: str) -> str:
+        """Resolve a profile link against the host this client is pointed at.
+
+        Cards are parsed by a shared, client-agnostic function that absolutizes
+        against bbb.org, so the rewrite has to come before the already-absolute
+        passthrough or it never runs.
+        """
+        if not url:
+            return url
+        if self.base_url != BBB_BASE and url.startswith(BBB_BASE):
+            return self.base_url + url[len(BBB_BASE):]
+        if url.startswith("http"):
+            return url
+        if url.startswith("/"):
+            return self.base_url + url
+        return url
 
     def iter_listings(
         self,
@@ -215,6 +255,7 @@ class BrowserClient:
         if self._page is None:
             raise BrowserUnavailable("call start() first")
         self._pace()
+        profile_url = self._absolute(profile_url)
         self._log(f"detail {profile_url}")
         self._page.goto(profile_url, wait_until="domcontentloaded")
         return listing_from_detail_html(self._page.content())
