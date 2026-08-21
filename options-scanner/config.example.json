@@ -1,0 +1,37 @@
+{
+  "provider": "yahoo",
+  "workers": 8,
+  "top": 20,
+  "lookback_days": 260,
+  "darkpool_days": 25,
+  "out_dir": "out",
+  "cache_dir": ".cache",
+  "journal": true,
+  "band_pct": 0.06,
+  "premium_stop_pct": 0.35,
+  "risk_per_trade_pct": 1.0,
+
+  "gates": {
+    "min_price": 15.0,
+    "max_price": 2000.0,
+    "min_market_cap": 2000000000,
+    "min_avg_dollar_volume": 100000000,
+    "min_avg_share_volume": 1000000,
+    "min_option_volume": 3000,
+    "min_option_open_interest": 2000,
+    "max_atm_spread_pct": 0.12,
+    "min_tradable_strikes": 4,
+    "max_dte": 1,
+    "allow_etf": true,
+    "require_darkpool": false,
+    "exclude_earnings_today": false,
+    "min_score": 45.0
+  },
+
+  "weights": {
+    "direction": { "trend": 0.30, "volume": 0.20, "darkpool": 0.25, "options": 0.25 },
+    "quality":   { "trend": 0.15, "volume": 0.25, "darkpool": 0.10, "options": 0.50 },
+    "squeeze_bonus": 8.0,
+    "confluence_floor": 0.40
+  }
+}
