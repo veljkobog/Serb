@@ -64,6 +64,15 @@ Nothing gets scored until it clears all of these:
 Market cap is not enforced on ETFs (it is meaningless there), and everything is
 overridable — `--min-cap 10B --min-dollar-volume 250M` if you only want the giants.
 
+**Gates run in two passes.** Everything that needs no option data — market cap, dollar
+volume, share volume, price, ETF and earnings handling — is checked *first*. Fetching an
+expiry list, a chain, and intraday bars costs three network round trips per symbol, and
+most of a 141-name universe fails on size or liquidity alone, so a name that was never
+tradable never costs those calls. On a universe where half the names fail the size gate
+this cut option round trips by 35%; on a real `wide` scan it is more. Rejected names are
+tagged with the stage they died at (`pre-gate`, `option-gate`, or a score-floor miss),
+and the scan result reports how many chains it actually fetched.
+
 **The contract-volume gate is session-aware**, which matters if you are scanning near
 the open. Option volume accumulates through the day, so at 9:35 nothing on earth has
 traded 3,000 contracts yet — a flat threshold rejects the entire market at exactly the
@@ -118,14 +127,40 @@ is treated as **fuel, not direction**: it can only add to a long (`squeeze_bonus
 capped at 8 points), never pick the side. The fast-moving cousin is the daily
 off-exchange short ratio above.
 
-### 4. Moving averages and trend
+### 4. Intraday — session VWAP and the opening range
+
+The block a daily-bar-only scanner cannot produce, and the one that matters most for a
+same-day trade.
+
+- **Session VWAP** — the reference institutional algos are measured against, which on a
+  0DTE timeframe makes it the line that decides who is in control: above it dip-buyers
+  are defending, below it rallies get sold. Measured three ways — distance from price in
+  ATR units, VWAP slope (a rising VWAP means the average fill is improving all session,
+  which is real demand rather than one spike that already faded), and what share of the
+  session price has spent on the right side of it.
+- **Opening range** — the first 30 minutes' high and low, and whether price has broken
+  out, broken down, or is still trapped inside.
+- **Trend efficiency** — net progress divided by the path walked to get it. A low number
+  means the session is grinding sideways while your premium bleeds; it feeds *quality*,
+  not direction.
+- **Session range vs ATR** — how much of a normal day's move has already happened.
+
+VWAP is not only scored — when it sits between price and the moving average it becomes
+the **trade's stop**, because that is the level a same-day trade is actually invalidated
+at. Computed from today's regular session only: no pre-market, no carry-over.
+
+Providers that cannot supply intraday bars simply return none, and the block drops out
+of the weighting rather than scoring zero. Set `"use_intraday": false` to skip the extra
+call per candidate.
+
+### 5. Moving averages and trend
 
 An 8/21/50/200 EMA stack scored as four independent alignment checks, 21-EMA slope
 measured in ATR-per-day (so it is comparable across a $30 stock and a $900 one), Wilder
 ADX/DI, RSI, position in the 20-day range, and today's move in ATR units. Extension is a
 **penalty**: chasing something 3 ATR above its 21 EMA is how 0DTE calls die.
 
-### 5. Near-dated option flow — direction *and* the tradability gate
+### 6. Near-dated option flow — direction *and* the tradability gate
 
 - **Premium skew** — dollars spent on near-money OTM calls vs OTM puts. Premium-weighted,
   not contract-count-weighted, because 10,000 five-cent lottos are not a signal.
@@ -145,15 +180,17 @@ ADX/DI, RSI, position in the 20-day range, and today's move in ATR units. Extens
 ## Scoring
 
 ```
-direction  = weighted mean of block directions   (trend .30, dark pool .25, options .25, volume .20)
-quality    = weighted mean of block qualities    (options .50, volume .25, trend .15, dark pool .10)
+direction  = weighted mean of block directions
+             (trend .25, options .25, dark pool .20, intraday .15, volume .15)
+quality    = weighted mean of block qualities
+             (options .45, volume .20, intraday .15, trend .12, dark pool .08)
 confluence = share of directional weight that agrees on the side
 conviction = |direction| x (0.40 + 0.60 x confluence)
 score      = 100 x conviction x (0.35 + 0.65 x quality) + squeeze_bonus
 ```
 
-Confluence is what stops one loud signal from carrying a name: four blocks that all
-lean the same way score far above one block screaming into three that disagree.
+Confluence is what stops one loud signal from carrying a name: five blocks that all
+lean the same way score far above one block screaming into four that disagree.
 A name with `|direction| < 0.08` is marked `NONE` and capped at 25 — no side, no trade.
 
 ---
@@ -195,9 +232,10 @@ Every scan writes four things to `out/`:
 - **`journal.jsonl`** — one line per candidate per scan, written *before* the outcome is
   known. `./review.py` replays it against what actually happened (see below).
 
-Alongside the ladder, each ranked name gets a plan: entry trigger, underlying stop (the
-nearer of a half-ATR and the fast EMA, and never on the wrong side of spot), T1/T2 from
-the expected move capped at the OI wall, a premium stop, and sizing math.
+Alongside the ladder, each ranked name gets a plan: entry trigger, underlying stop
+(session VWAP when it is the nearer level, otherwise the nearer of a half-ATR and the
+fast EMA — and never on the wrong side of spot), T1/T2 from the expected move capped at
+the OI wall, a premium stop, and sizing math.
 
 ---
 
@@ -289,6 +327,8 @@ gates and weights.
 | `tradier` | `TRADIER_TOKEN` | real OI, greeks, IV, tight quotes | best free-tier chain; set `TRADIER_BASE=https://sandbox.tradier.com` for sandbox |
 | `polygon` | `POLYGON_API_KEY` | full snapshots with greeks | paid; cleanest data |
 
+All three supply intraday bars for VWAP and the opening range.
+
 Tradier and Polygon are thin on float and short interest, so they are wrapped to fall
 back to Yahoo for fundamentals — you always get a complete record. Adding a source means
 implementing `MarketDataProvider` in `odte/providers/`; nothing in the signal or scoring
@@ -319,7 +359,7 @@ odte/
   config.py                gates, weights, thresholds
   universe.py              preset symbol lists
   engine.py                fan-out, expiry selection, orchestration
-  screen.py                hard gates
+  screen.py                hard gates, split into a cheap pre-pass and an option pass
   score.py                 composite scoring and confluence
   plan.py                  strike ladder, stops, targets, payoff, sizing
   report.py                terminal / JSON / CSV / journal / HTML
@@ -328,8 +368,8 @@ odte/
   http.py                  retries, per-host throttle, disk cache, circuit breaker
   synthetic.py             deterministic fake data for --demo and tests
   providers/               yahoo, tradier, polygon, finra
-  signals/                 trend, volume, darkpool, shortinterest, options_flow
-tests/                     87 offline tests, no network needed
+  signals/                 trend, intraday, volume, darkpool, shortinterest, options_flow
+tests/                     112 offline tests, no network needed
 ```
 
 ## Tests
@@ -344,8 +384,10 @@ direction and quality behaviour, every hard gate, error isolation (one bad symbo
 kills a scan), target/stop sidedness, all four renderers, the strike ladder's breakeven
 and payoff arithmetic, session-aware volume scaling, cache-freshness behaviour, and the
 web app's HTTP endpoints end to end (including malformed and oversized requests), the
-preflight doctor against healthy and broken providers, and the journal reviewer's level
-detection, managed-exit accounting, ambiguity handling, and score-bucket aggregation.
+preflight doctor against healthy and broken providers, the journal reviewer's level
+detection, managed-exit accounting, ambiguity handling and score-bucket aggregation, the
+VWAP and opening-range maths, VWAP-based stop selection, and proof that a name failing
+the pre-gate never triggers a chain or intraday fetch.
 
 ---
 

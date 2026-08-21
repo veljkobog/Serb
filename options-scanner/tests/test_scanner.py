@@ -247,6 +247,9 @@ class TestReports(unittest.TestCase):
     def setUp(self):
         cfg = Config()
         cfg.cache_dir, cfg.workers = "", 2
+        # These tests exercise the renderers, not the scoring calibration — pin the
+        # floor so a weight change cannot turn a rendering test red.
+        cfg.gates.min_score = 10.0
         symbols = ["AAA", "BBB"]
         provider = FakeProvider(symbols, TODAY, drift=0.004, vol=0.009)
         bars = {s: provider.daily_bars(s) for s in symbols}

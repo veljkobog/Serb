@@ -12,9 +12,10 @@ import datetime as dt
 import threading
 from typing import Any, Dict, List, Optional
 
-from ..calendar_utils import parse_date
+from ..calendar_utils import ET, parse_date
 from ..http import Http, HttpError
-from .base import Bar, Fundamentals, MarketDataProvider, OptionChain, OptionContract, Quote
+from .base import (Bar, Fundamentals, IntradayBar, MarketDataProvider, OptionChain,
+                   OptionContract, Quote)
 
 # Yahoo runs the same API on two hosts and they fail independently — one will 403 or
 # rate-limit while the other answers. Every request tries them in order.
@@ -134,6 +135,31 @@ class YahooProvider(MarketDataProvider):
                 continue
             bars.append(Bar(d, float(o), float(h), float(l), float(c), float(v or 0.0)))
         return bars[-lookback:]
+
+    def intraday_bars(self, symbol: str, interval: str = "5m") -> List[IntradayBar]:
+        data = self._fetch(CHART.format(sym=symbol),
+                           {"range": "1d", "interval": interval, "includePrePost": "false"},
+                           cache_ttl=60)
+        result = (data.get("chart") or {}).get("result") or []
+        if not result:
+            return []
+        res = result[0]
+        stamps = res.get("timestamp") or []
+        q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
+        opens, highs, lows, closes, vols = (q.get(k) or [] for k in
+                                            ("open", "high", "low", "close", "volume"))
+        out: List[IntradayBar] = []
+        for i, ts in enumerate(stamps):
+            try:
+                o, h, l, c, v = opens[i], highs[i], lows[i], closes[i], vols[i]
+            except IndexError:
+                continue
+            if None in (o, h, l, c):
+                continue          # Yahoo pads gaps with nulls
+            out.append(IntradayBar(
+                dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).astimezone(ET),
+                float(o), float(h), float(l), float(c), float(v or 0.0)))
+        return out
 
     def quote(self, symbol: str) -> Optional[Quote]:
         data = self._fetch(CHART.format(sym=symbol),

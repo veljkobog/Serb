@@ -10,9 +10,10 @@ import datetime as dt
 import os
 from typing import Any, Dict, List, Optional
 
-from ..calendar_utils import parse_date
+from ..calendar_utils import ET, parse_date
 from ..http import Http
-from .base import Bar, Fundamentals, MarketDataProvider, OptionChain, OptionContract, Quote
+from .base import (Bar, Fundamentals, IntradayBar, MarketDataProvider, OptionChain,
+                   OptionContract, Quote)
 
 DEFAULT_BASE = "https://api.tradier.com"
 
@@ -69,6 +70,26 @@ class TradierProvider(MarketDataProvider):
                             _f(raw.get("low")) or 0.0, _f(raw.get("close")) or 0.0,
                             _f(raw.get("volume")) or 0.0))
         return [b for b in bars if b.close > 0][-lookback:]
+
+    def intraday_bars(self, symbol: str, interval: str = "5m") -> List[IntradayBar]:
+        today = dt.date.today().isoformat()
+        step = {"1m": "1min", "5m": "5min", "15m": "15min"}.get(interval, "5min")
+        data = self._get("/v1/markets/timesales",
+                         {"symbol": symbol, "interval": step, "start": f"{today} 09:30",
+                          "end": f"{today} 16:00", "session_filter": "open"}, 60)
+        out: List[IntradayBar] = []
+        for raw in _listify(data.get("series"), "data"):
+            stamp = raw.get("time") or raw.get("timestamp")
+            try:
+                ts = (dt.datetime.fromisoformat(str(stamp)).replace(tzinfo=ET)
+                      if not isinstance(stamp, (int, float))
+                      else dt.datetime.fromtimestamp(float(stamp), tz=ET))
+            except (TypeError, ValueError):
+                continue
+            out.append(IntradayBar(ts, _f(raw.get("open")) or 0.0, _f(raw.get("high")) or 0.0,
+                                   _f(raw.get("low")) or 0.0, _f(raw.get("close")) or 0.0,
+                                   _f(raw.get("volume")) or 0.0))
+        return [b for b in out if b.close > 0]
 
     def quote(self, symbol: str) -> Optional[Quote]:
         data = self._get("/v1/markets/quotes", {"symbols": symbol, "greeks": "false"}, 30)

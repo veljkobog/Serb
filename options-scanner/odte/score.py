@@ -28,6 +28,8 @@ class Candidate:
     side: str = FLAT
     squeeze_bonus: float = 0.0
     gate_failures: List[str] = field(default_factory=list)
+    stage: str = "scored"          # pre-gate | option-gate | scored
+    fetched_chain: bool = False
     flags: List[str] = field(default_factory=list)
     plan: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
@@ -58,7 +60,8 @@ class Candidate:
             "score": round(self.score, 2), "side": self.side,
             "direction": round(self.direction, 4), "confluence": round(self.confluence, 4),
             "quality": round(self.quality, 4), "squeeze_bonus": round(self.squeeze_bonus, 2),
-            "gate_failures": self.gate_failures, "flags": self.flags,
+            "gate_failures": self.gate_failures, "stage": self.stage,
+            "flags": self.flags,
             "reasons": self.reasons(), "plan": self.plan, "error": self.error,
             "blocks": {k: v.as_dict() for k, v in self.blocks.items()},
         }

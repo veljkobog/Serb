@@ -185,7 +185,14 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
     viable = _viable(chain, right, config)
 
     # Invalidation: the nearer of a half-ATR against you and the fast moving average.
+    # On a same-day trade the session VWAP is the line that decides control, so when
+    # it sits between price and the moving average it is the better invalidation.
+    intra = candidate.blocks.get("intraday")
+    vwap = intra.detail.get("vwap") if (intra and intra.available) else None
     structural = ema8 if (ema8 and (spot - ema8) * sign > 0) else ema21
+    if vwap and (spot - vwap) * sign > 0:
+        if structural is None or (vwap - structural) * sign > 0:
+            structural = vwap
     atr_stop = spot - sign * 0.5 * atr
     if structural and (structural - atr_stop) * sign > 0:
         stop = structural
@@ -240,6 +247,7 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
         "spread_pct": _round(contract.spread_pct, 4) if contract else None,
         "entry_trigger": _round(spot + sign * 0.1 * atr),
         "underlying_stop": _round(stop),
+        "vwap": _round(vwap),
         "target_1": _round(t1),
         "target_2": _round(t2_opt),
         "target_2_capped_at_wall": capped,
@@ -252,6 +260,10 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
     }
 
     notes: List[str] = []
+    if vwap:
+        side_word = "above" if sign > 0 else "below"
+        notes.append(f"Session VWAP {vwap:,.2f} — the trade is only valid while price "
+                     f"holds {side_word} it.")
     if candidate.dte == 0:
         notes.append("0DTE: theta accelerates hard after ~14:00 ET — take the trade in "
                      "the first half of the session or not at all.")

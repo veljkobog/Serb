@@ -8,9 +8,10 @@ import datetime as dt
 import os
 from typing import Any, Dict, List, Optional
 
-from ..calendar_utils import parse_date
+from ..calendar_utils import ET, parse_date
 from ..http import Http, HttpError
-from .base import Bar, Fundamentals, MarketDataProvider, OptionChain, OptionContract, Quote
+from .base import (Bar, Fundamentals, IntradayBar, MarketDataProvider, OptionChain,
+                   OptionContract, Quote)
 
 BASE = "https://api.polygon.io"
 
@@ -51,6 +52,25 @@ class PolygonProvider(MarketDataProvider):
             bars.append(Bar(d, _f(r.get("o")) or 0.0, _f(r.get("h")) or 0.0, _f(r.get("l")) or 0.0,
                             _f(r.get("c")) or 0.0, _f(r.get("v")) or 0.0))
         return [b for b in bars if b.close > 0][-lookback:]
+
+    def intraday_bars(self, symbol: str, interval: str = "5m") -> List[IntradayBar]:
+        today = dt.date.today()
+        minutes = {"1m": 1, "5m": 5, "15m": 15}.get(interval, 5)
+        try:
+            data = self._get(f"/v2/aggs/ticker/{symbol}/range/{minutes}/minute/{today}/{today}",
+                             {"adjusted": "true", "sort": "asc", "limit": 50000}, 60)
+        except HttpError:
+            return []
+        out: List[IntradayBar] = []
+        for r in data.get("results") or []:
+            ts = dt.datetime.fromtimestamp((r.get("t") or 0) / 1000.0,
+                                           tz=dt.timezone.utc).astimezone(ET)
+            if not (9 * 60 + 30) <= (ts.hour * 60 + ts.minute) < 16 * 60:
+                continue          # drop pre/post-market prints
+            out.append(IntradayBar(ts, _f(r.get("o")) or 0.0, _f(r.get("h")) or 0.0,
+                                   _f(r.get("l")) or 0.0, _f(r.get("c")) or 0.0,
+                                   _f(r.get("v")) or 0.0))
+        return out
 
     def quote(self, symbol: str) -> Optional[Quote]:
         try:

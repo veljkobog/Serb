@@ -9,11 +9,13 @@ from __future__ import annotations
 from typing import Optional
 
 from ..http import Http
-from .base import Bar, Fundamentals, MarketDataProvider, OptionChain, OptionContract, Quote
+from .base import (Bar, Fundamentals, IntradayBar, MarketDataProvider, OptionChain,
+                   OptionContract, Quote)
 from .finra import FinraOffExchange, OffExDay
 
 __all__ = [
-    "Bar", "Fundamentals", "MarketDataProvider", "OptionChain", "OptionContract", "Quote",
+    "Bar", "Fundamentals", "IntradayBar", "MarketDataProvider", "OptionChain",
+    "OptionContract", "Quote",
     "FinraOffExchange", "OffExDay", "resolve", "PROVIDERS",
 ]
 
@@ -31,6 +33,9 @@ class _FundamentalsFallback(MarketDataProvider):
 
     def daily_bars(self, symbol, lookback=260):
         return self.primary.daily_bars(symbol, lookback)
+
+    def intraday_bars(self, symbol, interval="5m"):
+        return self.primary.intraday_bars(symbol, interval)
 
     def quote(self, symbol):
         return self.primary.quote(symbol)

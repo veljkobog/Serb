@@ -38,10 +38,10 @@ class Gates:
 class Weights:
     """Block weights. ``direction`` decides the side; ``quality`` decides conviction."""
     direction: Dict[str, float] = field(default_factory=lambda: {
-        "trend": 0.30, "volume": 0.20, "darkpool": 0.25, "options": 0.25,
+        "trend": 0.25, "volume": 0.15, "darkpool": 0.20, "options": 0.25, "intraday": 0.15,
     })
     quality: Dict[str, float] = field(default_factory=lambda: {
-        "trend": 0.15, "volume": 0.25, "darkpool": 0.10, "options": 0.50,
+        "trend": 0.12, "volume": 0.20, "darkpool": 0.08, "options": 0.45, "intraday": 0.15,
     })
     squeeze_bonus: float = 8.0        # max points added to a long from short-interest fuel
     confluence_floor: float = 0.40    # score floor when blocks disagree on direction
@@ -62,6 +62,8 @@ class Config:
     force_fresh: bool = False         # Scan button: bypass the cache for live quotes
     out_dir: str = "out"
     journal: bool = True
+    intraday_interval: str = "5m"     # bar size for VWAP and the opening range
+    use_intraday: bool = True         # set False to skip the extra call per candidate
     band_pct: float = 0.06            # near-money window used for flow and liquidity
     min_unusual_volume: float = 500.0
     premium_stop_pct: float = 0.35    # suggested option-premium stop in the trade plan

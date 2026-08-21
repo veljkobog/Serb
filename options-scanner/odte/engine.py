@@ -14,7 +14,7 @@ from .http import Http
 from .providers import FinraOffExchange, MarketDataProvider, resolve
 from .providers.base import OptionChain
 from .score import Candidate, compose
-from .signals import darkpool, options_flow, shortinterest, trend, volume
+from .signals import darkpool, intraday, options_flow, shortinterest, trend, volume
 
 
 @dataclass
@@ -25,6 +25,7 @@ class ScanResult:
     candidates: List[Candidate] = field(default_factory=list)
     rejected: List[Candidate] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+    chain_fetches: int = 0
     darkpool_days: int = 0
     darkpool_asof: Optional[str] = None
     config: Optional[Config] = None
@@ -34,10 +35,12 @@ class ScanResult:
             "generated_at": self.generated_at.isoformat(),
             "provider": self.provider,
             "universe_size": len(self.universe),
+            "chain_fetches": self.chain_fetches,
             "darkpool_days": self.darkpool_days,
             "darkpool_asof": self.darkpool_asof,
             "candidates": [c.as_dict() for c in self.candidates],
-            "rejected": [{"symbol": c.symbol, "reasons": c.gate_failures, "error": c.error}
+            "rejected": [{"symbol": c.symbol, "reasons": c.gate_failures,
+                          "stage": c.stage, "error": c.error}
                          for c in self.rejected],
             "errors": self.errors,
             "gates": self.config.gates.__dict__ if self.config else {},
@@ -104,20 +107,43 @@ class Scanner:
             offex = self.offex.history(symbol) if (self.offex and self.offex.available) else []
             cand.blocks["darkpool"] = darkpool.analyse(offex, bars)
 
+            # Cheap gates first. A name that fails on market cap or dollar volume never
+            # costs an expiry lookup or a chain fetch — two round trips it would have
+            # paid for nothing.
+            cand.gate_failures = screen.pre_gate(cand, fundamentals, self.config, today)
+            if cand.gate_failures:
+                cand.stage = "pre-gate"
+                compose(cand, self.config)
+                return cand
+
+            # Intraday costs one more call, so it is fetched only for names that have
+            # already earned it by clearing the cheap gates.
+            atr = cand.blocks["trend"].detail.get("atr14")
+            if self.config.use_intraday:
+                try:
+                    minutes = self.provider.intraday_bars(symbol, self.config.intraday_interval)
+                except Exception:
+                    minutes = []      # optional data: never fail a scan over it
+                cand.blocks["intraday"] = intraday.analyse(minutes, cand.spot, atr)
+            else:
+                cand.blocks["intraday"] = intraday.analyse([], cand.spot, atr)
+                cand.blocks["intraday"].notes = ["intraday disabled in config"]
+
             chain: Optional[OptionChain] = None
             expiry = pick_expiry(self.provider.expirations(symbol), today, self.config.gates.max_dte)
             if expiry:
                 cand.expiry = expiry
                 cand.dte = 0 if expiry == today else trading_days_between(today, expiry)
                 chain = self.provider.chain(symbol, expiry)
+                cand.fetched_chain = True
             atr_pct = cand.blocks["trend"].detail.get("atr_pct")
             cand.blocks["options"] = options_flow.analyse(
                 chain, cand.spot, atr_pct, cand.dte,
                 band_pct=self.config.band_pct,
                 min_unusual_volume=self.config.min_unusual_volume)
 
-            cand.gate_failures = screen.apply(cand, fundamentals, chain, self.config, today,
-                                              session_progress=progress)
+            cand.gate_failures = screen.option_gate(cand, chain, self.config, progress)
+            cand.stage = "option-gate" if cand.gate_failures else "scored"
             compose(cand, self.config)
             if cand.passed:
                 cand.plan = plan_mod.build(cand, chain, self.config)
@@ -151,6 +177,8 @@ class Scanner:
                     result.errors.append(f"{symbol}: {exc}")
                     continue
                 self.progress_cb(symbol, f"{done}/{len(symbols)}")
+                if cand.fetched_chain:
+                    result.chain_fetches += 1
                 if cand.error:
                     result.errors.append(f"{symbol}: {cand.error}")
                     result.rejected.append(cand)

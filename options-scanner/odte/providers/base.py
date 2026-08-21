@@ -21,6 +21,20 @@ class Bar:
 
 
 @dataclass
+class IntradayBar:
+    ts: dt.datetime          # bar open time, US/Eastern
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+    @property
+    def typical(self) -> float:
+        return (self.high + self.low + self.close) / 3.0
+
+
+@dataclass
 class Quote:
     symbol: str
     last: float
@@ -128,6 +142,14 @@ class MarketDataProvider:
 
     def daily_bars(self, symbol: str, lookback: int = 260) -> List[Bar]:
         raise NotImplementedError
+
+    def intraday_bars(self, symbol: str, interval: str = "5m") -> List[IntradayBar]:
+        """Today's regular-session bars, oldest first.
+
+        Optional: a provider that cannot supply these returns an empty list and the
+        intraday block is simply marked unavailable, dropping out of the weighting.
+        """
+        return []
 
     def quote(self, symbol: str) -> Optional[Quote]:
         raise NotImplementedError

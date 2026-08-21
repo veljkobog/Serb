@@ -190,6 +190,7 @@ def _card(c: Candidate) -> str:
     dpb = c.blocks.get("darkpool")
     si = c.blocks.get("short_interest")
     trend_b = c.blocks.get("trend")
+    intra = c.blocks.get("intraday")
     e = html.escape
     side_class = "calls" if c.side == "CALLS" else "puts" if c.side == "PUTS" else "flat"
 
@@ -212,12 +213,17 @@ def _card(c: Candidate) -> str:
         ("Put wall", f"{opt.detail.get('put_wall'):g}" if opt and opt.detail.get("put_wall") else "-"),
         ("ATR(14)", f"{trend_b.detail.get('atr14'):.2f}" if trend_b and trend_b.detail.get("atr14") else "-"),
         ("21 EMA", f"{trend_b.detail.get('ema21'):.2f}" if trend_b and trend_b.detail.get("ema21") else "-"),
+        ("Session VWAP", f"{intra.detail.get('vwap'):,.2f}"
+         if intra and intra.available and intra.detail.get("vwap") else "n/a"),
+        ("Opening range", f"{intra.detail.get('or_state')}"
+         if intra and intra.available and intra.detail.get("or_state") else "n/a"),
     ]
     stat_html = "".join(f"<div><dt>{e(k)}</dt><dd>{e(str(v))}</dd></div>" for k, v in stats)
 
     blocks_html = ""
-    for key, label in (("trend", "Trend"), ("volume", "Volume"), ("darkpool", "Dark pool"),
-                       ("options", "Options"), ("short_interest", "Short interest")):
+    for key, label in (("trend", "Trend"), ("intraday", "Intraday"), ("volume", "Volume"),
+                       ("darkpool", "Dark pool"), ("options", "Options"),
+                       ("short_interest", "Short interest")):
         b = c.blocks.get(key)
         if not b or not b.available:
             blocks_html += f'<tr><th>{e(label)}</th><td colspan="2" class="muted">no data</td></tr>'

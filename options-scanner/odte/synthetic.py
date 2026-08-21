@@ -13,8 +13,10 @@ import zlib
 from typing import Dict, List, Optional
 
 from .calendar_utils import recent_trading_days
-from .providers.base import (Bar, Fundamentals, MarketDataProvider, OptionChain,
-                             OptionContract, Quote)
+from .providers.base import (Bar, Fundamentals, IntradayBar, MarketDataProvider,
+                             OptionChain, OptionContract, Quote)
+from .calendar_utils import ET
+from .signals.volume import expected_volume_fraction
 from .providers.finra import FinraOffExchange, OffExDay
 
 
@@ -39,6 +41,49 @@ def make_bars(symbol: str, days: int = 260, start: float = 100.0, drift: float =
         volume = base_volume * (0.7 + 0.6 * rng.random()) * (1.6 if i == len(dates) - 1 else 1.0)
         bars.append(Bar(d, open_, high, low, price, volume))
     return bars
+
+
+def make_intraday(symbol: str, bar: Bar, interval_minutes: int = 5,
+                  session_fraction: float = 1.0) -> List[IntradayBar]:
+    """Explode one daily bar into intraday bars that respect its OHLC.
+
+    A Brownian bridge from open to close, rescaled so the path actually touches the
+    day's high and low, with volume distributed along the real U-shaped intraday curve.
+    ``session_fraction`` truncates the day, so tests can simulate scanning at 09:45.
+    """
+    rng = random.Random(_seed(symbol) + 31)
+    total = max(1, int(390 / interval_minutes))
+    n = max(2, int(total * max(0.02, min(session_fraction, 1.0))))
+
+    steps = [rng.gauss(0.0, 1.0) for _ in range(total)]
+    cum, running = [], 0.0
+    for step in steps:
+        running += step
+        cum.append(running)
+    drift = bar.close - bar.open
+    amplitude = (bar.high - bar.low) * 0.45
+    scale = amplitude / (max(abs(x) for x in cum) or 1.0)
+
+    path = [bar.open + drift * (i + 1) / total + (cum[i] - (i + 1) / total * cum[-1]) * scale
+            for i in range(total)]
+    path = [min(max(p, bar.low), bar.high) for p in path]
+    path[-1] = bar.close
+    path[cum.index(max(cum))] = bar.high      # make sure the extremes are actually printed
+    path[cum.index(min(cum))] = bar.low
+
+    open_ts = dt.datetime.combine(bar.date, dt.time(9, 30), tzinfo=ET)
+    out: List[IntradayBar] = []
+    prev = bar.open
+    for i in range(n):
+        close = path[i]
+        high = min(bar.high, max(prev, close) * (1 + abs(rng.gauss(0, 0.0004))))
+        low = max(bar.low, min(prev, close) * (1 - abs(rng.gauss(0, 0.0004))))
+        share = (expected_volume_fraction((i + 1) / total)
+                 - expected_volume_fraction(i / total))
+        out.append(IntradayBar(open_ts + dt.timedelta(minutes=interval_minutes * i),
+                               prev, high, low, close, max(1.0, bar.volume * share)))
+        prev = close
+    return out
 
 
 def make_chain(symbol: str, expiry: dt.date, spot: float, *, skew: float = 1.0,
@@ -96,7 +141,8 @@ class FakeProvider(MarketDataProvider):
     def __init__(self, symbols: List[str], today: dt.date, *, expiry_offset_days: int = 0,
                  market_cap: float = 500e9, spot_override: Optional[Dict[str, float]] = None,
                  skew: float = 1.6, spread: float = 0.02, chain_volume: float = 3_000.0,
-                 drift: float = 0.0015, vol: float = 0.014, mixed: bool = False):
+                 drift: float = 0.0015, vol: float = 0.014, mixed: bool = False,
+                 session_fraction: float = 1.0, intraday: bool = True):
         self.symbols = symbols
         self.today = today
         self.expiry = today + dt.timedelta(days=expiry_offset_days)
@@ -108,6 +154,8 @@ class FakeProvider(MarketDataProvider):
         self.drift = drift
         self.vol = vol
         self.mixed = mixed
+        self.session_fraction = session_fraction
+        self.intraday = intraday
         self._bars: Dict[str, List[Bar]] = {}
 
     def _tilt(self, symbol: str) -> int:
@@ -123,6 +171,12 @@ class FakeProvider(MarketDataProvider):
 
     def _spot(self, symbol: str) -> float:
         return self.spot_override.get(symbol, self.daily_bars(symbol)[-1].close)
+
+    def intraday_bars(self, symbol: str, interval: str = "5m") -> List[IntradayBar]:
+        if not self.intraday:
+            return []
+        step = {"1m": 1, "5m": 5, "15m": 15}.get(interval, 5)
+        return make_intraday(symbol, self.daily_bars(symbol)[-1], step, self.session_fraction)
 
     def quote(self, symbol: str) -> Quote:
         bars = self.daily_bars(symbol)

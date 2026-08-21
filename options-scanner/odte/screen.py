@@ -33,10 +33,15 @@ def required_option_volume(config: Config, session_progress: float) -> float:
     return g.min_option_volume * share
 
 
-def apply(candidate: Candidate, fundamentals: Optional[Fundamentals],
-          chain: Optional[OptionChain], config: Config,
-          today: Optional[dt.date] = None, session_progress: float = 1.0) -> List[str]:
-    """Return the list of failed gates (empty means the name is tradable)."""
+def pre_gate(candidate: Candidate, fundamentals: Optional[Fundamentals], config: Config,
+             today: Optional[dt.date] = None) -> List[str]:
+    """Size and liquidity gates that need no option data.
+
+    Run first, on purpose: fetching an expiry list and a chain is two network round
+    trips per symbol, and most of a 141-name universe fails on market cap or dollar
+    volume alone. Gating here cuts the expensive calls by roughly two thirds, which is
+    the difference between a scan you can press at 9:35 and one you cannot.
+    """
     g = config.gates
     fails: List[str] = []
     spot = candidate.spot
@@ -69,25 +74,6 @@ def apply(candidate: Candidate, fundamentals: Optional[Fundamentals],
     else:
         fails.append("insufficient price history")
 
-    opt = candidate.blocks.get("options")
-    if not opt or not opt.available or chain is None:
-        fails.append("no near-dated option chain")
-    else:
-        d = opt.detail
-        needed = required_option_volume(config, session_progress)
-        if (d.get("total_volume") or 0) < needed:
-            fails.append(f"{d.get('total_volume', 0):,.0f} contracts < {needed:,.0f} "
-                         f"(session-adjusted)")
-        if (d.get("open_interest") or 0) < g.min_option_open_interest:
-            fails.append(f"{d.get('open_interest', 0):,.0f} OI < {g.min_option_open_interest:,.0f}")
-        spread = d.get("atm_spread")
-        if spread is None:
-            fails.append("no two-sided ATM quote")
-        elif spread > g.max_atm_spread_pct:
-            fails.append(f"ATM spread {spread*100:.1f}% > {g.max_atm_spread_pct*100:.0f}%")
-        if (d.get("tradable_strikes") or 0) < g.min_tradable_strikes:
-            fails.append(f"only {d.get('tradable_strikes', 0)} liquid strikes")
-
     dp = candidate.blocks.get("darkpool")
     if g.require_darkpool and (not dp or not dp.available):
         fails.append("no off-exchange data")
@@ -98,3 +84,37 @@ def apply(candidate: Candidate, fundamentals: Optional[Fundamentals],
             if g.exclude_earnings_today:
                 fails.append(f"earnings on {fundamentals.earnings_date}")
     return fails
+
+
+def option_gate(candidate: Candidate, chain: Optional[OptionChain], config: Config,
+                session_progress: float = 1.0) -> List[str]:
+    """Gates that need the near-dated chain. Only reached by names that pre-gated."""
+    g = config.gates
+    fails: List[str] = []
+    opt = candidate.blocks.get("options")
+    if not opt or not opt.available or chain is None:
+        return ["no near-dated option chain"]
+
+    d = opt.detail
+    needed = required_option_volume(config, session_progress)
+    if (d.get("total_volume") or 0) < needed:
+        fails.append(f"{d.get('total_volume', 0):,.0f} contracts < {needed:,.0f} "
+                     f"(session-adjusted)")
+    if (d.get("open_interest") or 0) < g.min_option_open_interest:
+        fails.append(f"{d.get('open_interest', 0):,.0f} OI < {g.min_option_open_interest:,.0f}")
+    spread = d.get("atm_spread")
+    if spread is None:
+        fails.append("no two-sided ATM quote")
+    elif spread > g.max_atm_spread_pct:
+        fails.append(f"ATM spread {spread*100:.1f}% > {g.max_atm_spread_pct*100:.0f}%")
+    if (d.get("tradable_strikes") or 0) < g.min_tradable_strikes:
+        fails.append(f"only {d.get('tradable_strikes', 0)} liquid strikes")
+    return fails
+
+
+def apply(candidate: Candidate, fundamentals: Optional[Fundamentals],
+          chain: Optional[OptionChain], config: Config,
+          today: Optional[dt.date] = None, session_progress: float = 1.0) -> List[str]:
+    """Every gate at once. Kept for callers that already hold a chain."""
+    return (pre_gate(candidate, fundamentals, config, today)
+            + option_gate(candidate, chain, config, session_progress))
