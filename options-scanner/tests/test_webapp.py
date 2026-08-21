@@ -341,6 +341,14 @@ class TestHttpEndpoints(unittest.TestCase):
 
 
 class TestAppRendering(unittest.TestCase):
+    def test_check_text_is_escaped_before_it_reaches_innerHTML(self):
+        """Doctor details contain '<urlopen error ...>'; raw interpolation eats them."""
+        page = render_app(Config())
+        self.assertIn("function esc(", page)
+        self.assertIn("esc(c.detail)", page)
+        self.assertIn("esc(c.fix)", page)
+        self.assertNotIn("${c.detail}", page)
+
     def test_app_page_has_no_external_requests(self):
         page = render_app(Config(), auto_at="09:35")
         self.assertNotIn("//cdn.", page)

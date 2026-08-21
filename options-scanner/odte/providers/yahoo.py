@@ -9,17 +9,23 @@ Caveats, so nobody is surprised in production:
 from __future__ import annotations
 
 import datetime as dt
+import threading
 from typing import Any, Dict, List, Optional
 
 from ..calendar_utils import parse_date
 from ..http import Http, HttpError
 from .base import Bar, Fundamentals, MarketDataProvider, OptionChain, OptionContract, Quote
 
-CHART = "https://query2.finance.yahoo.com/v8/finance/chart/{sym}"
-OPTIONS = "https://query2.finance.yahoo.com/v7/finance/options/{sym}"
-SUMMARY = "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{sym}"
-CRUMB = "https://query2.finance.yahoo.com/v1/test/getcrumb"
+# Yahoo runs the same API on two hosts and they fail independently — one will 403 or
+# rate-limit while the other answers. Every request tries them in order.
+HOSTS = ("https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com")
+CHART = "/v8/finance/chart/{sym}"
+OPTIONS = "/v7/finance/options/{sym}"
+SUMMARY = "/v10/finance/quoteSummary/{sym}"
+CRUMB = "/v1/test/getcrumb"
 COOKIE_SEED = "https://fc.yahoo.com"
+# Statuses that mean "your crumb/cookie went stale", as opposed to "no such symbol".
+STALE_AUTH = (401, 403)
 
 
 def _f(node: Any) -> Optional[float]:
@@ -43,39 +49,71 @@ class YahooProvider(MarketDataProvider):
         self.http = http or Http(min_interval=0.35)
         self._crumb: Optional[str] = None
         self._crumb_tried = False
+        self._crumb_lock = threading.Lock()   # the scanner fans out across threads
 
     # -- auth --------------------------------------------------------------
-    def _get_crumb(self) -> Optional[str]:
-        """Yahoo gates some endpoints behind a cookie+crumb pair. Best effort."""
-        if self._crumb or self._crumb_tried:
-            return self._crumb
-        self._crumb_tried = True
-        try:
-            self.http.get_text(COOKIE_SEED, cache_ttl=0)
-        except Exception:
-            pass  # this call is expected to 404; we only want the Set-Cookie
-        try:
-            crumb = self.http.get_text(CRUMB, cache_ttl=0).strip()
-            self._crumb = crumb if crumb and "<" not in crumb else None
-        except Exception:
-            self._crumb = None
-        return self._crumb
+    def _get_crumb(self, refresh: bool = False) -> Optional[str]:
+        """Yahoo gates some endpoints behind a cookie+crumb pair. Best effort.
 
-    def _params(self, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        A crumb expires, and the endpoint answers 401/403 rather than saying so. When
+        that happens callers re-enter here with ``refresh=True`` for exactly one retry.
+        """
+        with self._crumb_lock:
+            if refresh:
+                self._crumb, self._crumb_tried = None, False
+            if self._crumb or self._crumb_tried:
+                return self._crumb
+            self._crumb_tried = True
+            try:
+                self.http.get_text(COOKIE_SEED, cache_ttl=0)
+            except Exception:
+                pass  # expected to 404; we only want the Set-Cookie
+            for host in HOSTS:
+                try:
+                    crumb = self.http.get_text(host + CRUMB, cache_ttl=0).strip()
+                except Exception:
+                    continue
+                if crumb and "<" not in crumb and len(crumb) < 32:
+                    self._crumb = crumb
+                    break
+            return self._crumb
+
+    def _params(self, extra: Optional[Dict[str, Any]] = None,
+                crumb: Optional[str] = None) -> Dict[str, Any]:
         params = dict(extra or {})
-        crumb = self._get_crumb()
+        crumb = crumb if crumb is not None else self._get_crumb()
         if crumb:
             params["crumb"] = crumb
         return params
 
+    # -- transport ---------------------------------------------------------
+    def _fetch(self, path: str, params: Optional[Dict[str, Any]] = None,
+               cache_ttl: int = 300, with_crumb: bool = False) -> Any:
+        """GET a Yahoo path, trying both hosts and refreshing a stale crumb once."""
+        attempts = ((False,), (False, True))[1 if with_crumb else 0]
+        last: Optional[Exception] = None
+        for refresh in attempts:
+            query = self._params(params, crumb=self._get_crumb(refresh=refresh)) \
+                if with_crumb else dict(params or {})
+            for host in HOSTS:
+                try:
+                    return self.http.get_json(host + path, params=query, cache_ttl=cache_ttl)
+                except HttpError as exc:
+                    last = exc
+                    if exc.status in STALE_AUTH and with_crumb:
+                        break        # try the other host only after refreshing the crumb
+                except Exception as exc:
+                    last = exc
+        if last:
+            raise last
+        raise HttpError(0, path, "no response")
+
     # -- prices ------------------------------------------------------------
     def daily_bars(self, symbol: str, lookback: int = 260) -> List[Bar]:
         rng = "2y" if lookback > 250 else "1y"
-        data = self.http.get_json(
-            CHART.format(sym=symbol),
-            params={"range": rng, "interval": "1d", "includePrePost": "false", "events": "div,split"},
-            cache_ttl=900,
-        )
+        data = self._fetch(CHART.format(sym=symbol),
+                           {"range": rng, "interval": "1d", "includePrePost": "false",
+                            "events": "div,split"}, cache_ttl=900)
         result = (data.get("chart") or {}).get("result") or []
         if not result:
             return []
@@ -98,11 +136,9 @@ class YahooProvider(MarketDataProvider):
         return bars[-lookback:]
 
     def quote(self, symbol: str) -> Optional[Quote]:
-        data = self.http.get_json(
-            CHART.format(sym=symbol),
-            params={"range": "1d", "interval": "1m", "includePrePost": "false"},
-            cache_ttl=60,
-        )
+        data = self._fetch(CHART.format(sym=symbol),
+                           {"range": "1d", "interval": "1m", "includePrePost": "false"},
+                           cache_ttl=60)
         result = (data.get("chart") or {}).get("result") or []
         if not result:
             return None
@@ -123,12 +159,11 @@ class YahooProvider(MarketDataProvider):
     def fundamentals(self, symbol: str) -> Fundamentals:
         out = Fundamentals(symbol=symbol)
         try:
-            data = self.http.get_json(
-                SUMMARY.format(sym=symbol),
-                params=self._params({"modules": "price,summaryDetail,defaultKeyStatistics,calendarEvents"}),
-                cache_ttl=21600,
-            )
-        except HttpError:
+            data = self._fetch(SUMMARY.format(sym=symbol),
+                               {"modules": "price,summaryDetail,defaultKeyStatistics,"
+                                           "calendarEvents"},
+                               cache_ttl=21600, with_crumb=True)
+        except Exception:
             return out
         results = ((data.get("quoteSummary") or {}).get("result")) or []
         if not results:
@@ -167,8 +202,8 @@ class YahooProvider(MarketDataProvider):
         if expiry:
             params["date"] = int(dt.datetime.combine(expiry, dt.time(0, 0), tzinfo=dt.timezone.utc).timestamp())
         try:
-            data = self.http.get_json(OPTIONS.format(sym=symbol), params=self._params(params), cache_ttl=120)
-        except HttpError:
+            data = self._fetch(OPTIONS.format(sym=symbol), params, cache_ttl=120, with_crumb=True)
+        except Exception:
             return None
         results = ((data.get("optionChain") or {}).get("result")) or []
         return results[0] if results else None

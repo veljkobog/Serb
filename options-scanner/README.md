@@ -27,7 +27,16 @@ There is also a plain CLI if you prefer it:
 ```bash
 ./scan.py --demo          # see the output shape with synthetic data, no network
 ./scan.py                 # real scan, default universe, free Yahoo data
+./scan.py --doctor        # preflight: is the live data path actually working?
+./review.py               # forward-test the journal against what happened next
 ```
+
+**If a scan comes back empty, run `./scan.py --doctor` before assuming there were no
+setups.** "Nothing set up today" and "the data never arrived" produce an identical
+empty table, and the preflight is what tells them apart — it probes reachability, price
+history, quotes, fundamentals, expiries, chain depth and greeks, and the FINRA feed,
+and every failure carries the fix rather than just the error. It is also a button in
+the web UI. It finishes in a couple of seconds even when the network is dead.
 
 ---
 
@@ -183,15 +192,56 @@ Every scan writes four things to `out/`:
 - **`latest.html`** — a self-contained dashboard (no scripts, no external requests):
   per-name stat grid, direction/quality bars per block, why it ranked, and the plan.
 - **`scan-*.json` / `scan-*.csv`** — every signal value, for your own analysis.
-- **`journal.jsonl`** — one line per candidate per scan. This is the point: run the
-  scanner daily for a month, then join the journal against actual outcomes and find out
-  whether the weights are worth anything **before** you trade them.
+- **`journal.jsonl`** — one line per candidate per scan, written *before* the outcome is
+  known. `./review.py` replays it against what actually happened (see below).
 
 Alongside the ladder, each ranked name gets a plan: entry trigger, underlying stop (the
 nearer of a half-ATR and the fast EMA, and never on the wrong side of spot), T1/T2 from
 the expected move capped at the OI wall, a premium stop, and sizing math.
 
 ---
+
+## Reviewing the journal
+
+Run the scanner daily for a few weeks, then:
+
+```bash
+./review.py                     # summary
+./review.py --detail            # ...plus every entry
+./review.py --since 2026-08-01  # only recent expiries
+./review.py --json              # machine-readable
+```
+
+It reports two returns per pick, and **the gap between them is the lesson**:
+
+| | what it measures |
+|---|---|
+| **managed** | what the plan would have produced traded as written — exit at T1 when T1 was reached, take the premium stop when the stop was hit, otherwise hold to expiry. Exits priced by delta. |
+| **expiry** | intrinsic value at the close. The pessimistic bound: an ATM 0DTE long expires worthless unless the stock *closes* through the strike, however far it travelled intraday. |
+
+On a sample run those came out at **57% win rate, +29% median managed** against
+**−100% median held to expiry**, on picks whose T1 was reached 70% of the time. That
+spread is the single most important thing to internalise about buying 0DTE: being right
+about direction and holding to the close are almost unrelated outcomes.
+
+It also breaks results down by score bucket (does a higher score actually pay more?),
+by side, by ladder rung (the anchor rung usually has the best managed mean and the
+runner the worst), and — the part worth acting on — **by signal block**:
+
+```
+block                    agreed              disagreed      edge
+volume            n=43 mean -9.9%     n=2 mean -100.0%    +90.1%
+darkpool          n=42 mean -9.2%      n=9 mean -26.2%    +17.0%
+```
+
+`edge` is the mean return when a block agreed with the traded side minus when it
+disagreed. **A block whose edge sits near zero is contributing noise, not signal** —
+that is your evidence for reweighting it, and the reason the weights are configurable.
+
+Two limits are enforced rather than papered over: daily bars cannot say whether the
+stop or the target was touched first, so sessions that touched both are **excluded**
+from the managed numbers instead of being resolved in the flattering direction; and the
+T1 exit is priced by delta, which is an estimate, not a fill.
 
 ## Usage
 
@@ -221,6 +271,8 @@ only pass `--host 0.0.0.0` if you genuinely mean it.
 ./scan.py --verbose                        # also show what was rejected and why
 ./scan.py --demo                           # synthetic data, no network
 ./scan.py --open                           # open the HTML dashboard when done
+./scan.py --doctor                         # preflight the live data path
+./scan.py --doctor --json                  # ...machine-readable
 ```
 
 Presets: `./scan.py --list-presets` → `daily`, `core`, `megacap`, `movers`, `leveraged`,
@@ -233,7 +285,7 @@ gates and weights.
 
 | Provider | Key | Options data | Notes |
 |---|---|---|---|
-| `yahoo` *(default)* | none | delayed, no greeks | works today, zero setup; unofficial endpoints that occasionally break |
+| `yahoo` *(default)* | none | delayed, no greeks | works today, zero setup; unofficial endpoints that occasionally break. Requests try both Yahoo hosts and refresh a stale cookie/crumb once before giving up |
 | `tradier` | `TRADIER_TOKEN` | real OI, greeks, IV, tight quotes | best free-tier chain; set `TRADIER_BASE=https://sandbox.tradier.com` for sandbox |
 | `polygon` | `POLYGON_API_KEY` | full snapshots with greeks | paid; cleanest data |
 
@@ -258,9 +310,12 @@ so a Monday expiry is 1DTE from Friday, not 3DTE.
 
 ```
 serve.py                   press-the-button UI (start here)
-scan.py                    CLI entry point
+scan.py                    CLI entry point (also --doctor)
+review.py                  forward-test the journal
 odte/
   webapp.py                the Scan button: HTTP handlers, progress, auto-scan
+  doctor.py                preflight checks with actionable fixes
+  review.py                journal replay: managed vs expiry returns, per-block edge
   config.py                gates, weights, thresholds
   universe.py              preset symbol lists
   engine.py                fan-out, expiry selection, orchestration
@@ -270,11 +325,11 @@ odte/
   report.py                terminal / JSON / CSV / journal / HTML
   indicators.py            EMA, ATR, ADX, RSI, OBV, CMF, z-score (no numpy)
   calendar_utils.py        NYSE calendar, trading-day DTE, session progress
-  http.py                  retries, per-host throttle, disk cache
+  http.py                  retries, per-host throttle, disk cache, circuit breaker
   synthetic.py             deterministic fake data for --demo and tests
   providers/               yahoo, tradier, polygon, finra
   signals/                 trend, volume, darkpool, shortinterest, options_flow
-tests/                     57 offline tests, no network needed
+tests/                     87 offline tests, no network needed
 ```
 
 ## Tests
@@ -288,7 +343,9 @@ hours. Covers indicator math, the NYSE calendar and trading-day DTE, each signal
 direction and quality behaviour, every hard gate, error isolation (one bad symbol never
 kills a scan), target/stop sidedness, all four renderers, the strike ladder's breakeven
 and payoff arithmetic, session-aware volume scaling, cache-freshness behaviour, and the
-web app's HTTP endpoints end to end (including malformed and oversized requests).
+web app's HTTP endpoints end to end (including malformed and oversized requests), the
+preflight doctor against healthy and broken providers, and the journal reviewer's level
+detection, managed-exit accounting, ambiguity handling, and score-bucket aggregation.
 
 ---
 
@@ -301,8 +358,9 @@ web app's HTTP endpoints end to end (including malformed and oversized requests)
   an execution system — pressing Scan gives you a ranked shortlist to go look at, not
   an order.
 - **The weights are a starting hypothesis, not a backtested edge.** They were chosen to
-  be reasonable, not fitted. That is what `journal.jsonl` is for — forward-test before
-  you size up.
+  be reasonable, not fitted. `./review.py` is how you find out whether they are worth
+  anything — forward-test before you size up, and reweight the blocks whose measured
+  edge is near zero.
 - **DPI is a proxy.** Off-exchange short volume is mostly market-maker hedging, not
   directional shorting.
 - **Gamma exposure is approximate.** Dealer positioning is inferred with the standard

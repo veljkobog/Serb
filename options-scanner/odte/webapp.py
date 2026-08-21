@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
-from . import report, universe as universe_mod
+from . import doctor, report, universe as universe_mod
 from .calendar_utils import market_is_open, now_et, session_progress
 from .config import Config
 from .engine import Scanner, ScanResult
@@ -215,7 +215,16 @@ def render_app(cfg: Config, auto_at: Optional[str] = None, demo: bool = False) -
 .scanbtn:hover:not(:disabled) {{ background:#2ea043; }}
 .scanbtn:active:not(:disabled) {{ transform:translateY(1px); }}
 .scanbtn:disabled {{ background:#30363d; color:var(--muted); cursor:not-allowed; }}
+.ghostbtn {{ appearance:none; border:1px solid var(--line); border-radius:8px;
+             padding:10px 16px; font-size:13px; cursor:pointer; background:transparent;
+             color:var(--muted); }}
+.ghostbtn:hover {{ color:var(--text); border-color:var(--muted); }}
 .clock {{ font-variant-numeric:tabular-nums; font-size:13px; color:var(--muted); }}
+table.checks {{ width:100%; margin-top:6px; }}
+table.checks td {{ padding:4px 10px 4px 0; vertical-align:top; font-size:12px; }}
+td.mark {{ font-weight:700; white-space:nowrap; }}
+td.mark.ok {{ color:var(--green); }} td.mark.warn {{ color:#d29922; }}
+td.mark.fail {{ color:var(--red); }}
 .dot {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px;
         background:#f85149; vertical-align:middle; }}
 .dot.open {{ background:#3fb950; }}
@@ -242,6 +251,7 @@ def render_app(cfg: Config, auto_at: Optional[str] = None, demo: bool = False) -
 <div class="wrap">
   <div class="topbar">
     <button id="scan" class="scanbtn">SCAN</button>
+    <button id="preflight" class="ghostbtn" title="Check the live data path">Preflight</button>
     <div>
       <div class="clock"><span id="dot" class="dot"></span><span id="clock">--:--:--</span></div>
       <div class="clock" id="auto">{auto_note}</div>
@@ -294,6 +304,15 @@ function loadSettings() {{
 loadSettings();
 SETTINGS.forEach(k => $(k).addEventListener("change", saveSettings));
 
+// Check details are error strings from urllib and vendor APIs; they routinely contain
+// angle brackets ("<urlopen error ...>"), which the browser would parse as markup and
+// silently swallow. Escape everything that is not markup we wrote ourselves.
+function esc(s) {{
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}}
+
 function banner(kind, text) {{
   $("banner").innerHTML = text ? `<div class="banner ${{kind}}">${{text}}</div>` : "";
 }}
@@ -329,6 +348,27 @@ async function poll() {{
   }}
 }}
 
+async function preflight() {{
+  const btn = $("preflight");
+  btn.disabled = true; btn.textContent = "CHECKING";
+  banner("info", "Running preflight checks...");
+  try {{
+    const d = await (await fetch("/api/doctor")).json();
+    const rows = d.checks.map(c =>
+      `<tr><td class="mark ${{esc(c.status)}}">${{esc(c.status).toUpperCase()}}</td>` +
+      `<td><strong>${{esc(c.name)}}</strong></td><td>${{esc(c.detail)}}` +
+      (c.fix ? `<br><span class="muted">${{esc(c.fix)}}</span>` : "") +
+      `</td><td class="muted">${{c.ms ? esc(c.ms) + "ms" : ""}}</td></tr>`).join("");
+    const kind = d.verdict === "fail" ? "warn" : "info";
+    banner(kind, `<strong>Preflight: ${{d.verdict.toUpperCase()}}</strong>` +
+                 `<table class="checks">${{rows}}</table>`);
+  }} catch (e) {{
+    banner("warn", "Preflight could not run: " + esc(e));
+  }}
+  btn.disabled = false; btn.textContent = "Preflight";
+}}
+$("preflight").addEventListener("click", preflight);
+
 async function showResults() {{
   const top = parseInt($("top").value || "3", 10);
   const r = await (await fetch("/api/result?top=" + top)).json();
@@ -342,9 +382,10 @@ async function showResults() {{
   $("results").innerHTML = r.cards;
   if (!m.passed) {{
     banner("info", "Nothing cleared the gates. Lower the min score, widen the universe, " +
-                   "or wait for the chains to fill in after the open.");
+                   "or wait for the chains to fill in after the open. If that seems wrong, " +
+                   "press Preflight to check whether the data actually arrived.");
   }} else if (m.errors) {{
-    banner("info", `${{m.errors}} data error(s) during the scan. First: ${{m.first_error}}`);
+    banner("info", `${{m.errors}} data error(s) during the scan. First: ${{esc(m.first_error)}}`);
   }} else if (!m.darkpool_days) {{
     banner("info", "FINRA off-exchange data was unavailable, so dark pool signals were skipped.");
   }} else {{
@@ -369,7 +410,7 @@ $("scan").addEventListener("click", async () => {{
     body: JSON.stringify(body)
   }})).json();
   if (!res.started) {{
-    banner("info", res.reason || "could not start");
+    banner("info", esc(res.reason || "could not start"));
     $("scan").disabled = false;
     $("scan").textContent = "SCAN";
     return;
@@ -439,6 +480,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(self.runner.snapshot(top))
         elif route.path in ("/favicon.svg", "/favicon.ico"):
             self._send(200, FAVICON, "image/svg+xml")
+        elif route.path == "/api/doctor":
+            checks = doctor.run_checks(self.config)
+            self._json({"verdict": doctor.verdict(checks),
+                        "checks": [c.as_dict() for c in checks]})
         elif route.path == "/api/health":
             self._json({"ok": True})
         else:

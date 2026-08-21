@@ -45,6 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="sessions of FINRA off-exchange history to load (default 25)")
     src.add_argument("--no-darkpool", action="store_true",
                      help="skip the FINRA download entirely")
+    src.add_argument("--doctor", action="store_true",
+                     help="run preflight checks against the live data path and exit — "
+                          "use this first if a scan comes back empty")
     src.add_argument("--demo", action="store_true",
                      help="run against deterministic synthetic data — no network, no keys. "
                           "Use it to see the output shape and tune gates off-hours.")
@@ -138,6 +141,18 @@ def main(argv=None) -> int:
         return 0
 
     cfg = apply_args(Config.load(args.config), args)
+
+    if args.doctor:
+        from odte import doctor
+        checks = doctor.run_checks(cfg)
+        if args.json_only:
+            print(json.dumps({"verdict": doctor.verdict(checks),
+                              "checks": [c.as_dict() for c in checks]}, indent=2))
+        else:
+            print(doctor.render_terminal(
+                checks, colour=not args.no_color and sys.stdout.isatty()))
+        return 0 if doctor.verdict(checks) != "fail" else 2
+
     symbols = universe_mod.load(
         spec=args.universe,
         explicit=args.symbols.split(",") if args.symbols else (cfg.universe or None),

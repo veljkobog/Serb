@@ -43,8 +43,15 @@ def make_bars(symbol: str, days: int = 260, start: float = 100.0, drift: float =
 
 def make_chain(symbol: str, expiry: dt.date, spot: float, *, skew: float = 1.0,
                spread: float = 0.02, base_oi: float = 4_000.0,
-               base_volume: float = 3_000.0, greeks: bool = True) -> OptionChain:
-    """A realistic-looking chain: OI peaks near the money, IV smiles, spreads widen OTM."""
+               base_volume: float = 3_000.0, greeks: bool = True,
+               atm_extrinsic_pct: float = 0.0035) -> OptionChain:
+    """A realistic-looking chain: OI peaks near the money, IV smiles, spreads widen OTM.
+
+    ``atm_extrinsic_pct`` is the ATM contract's time value as a fraction of spot. The
+    default puts the ATM straddle near 0.7% of spot, which is roughly where a real
+    same-day chain prices against a ~1% daily range. Set it higher to simulate rich
+    premium (and watch the scanner start recommending spreads instead of naked longs).
+    """
     chain = OptionChain(underlying=symbol, expiry=expiry)
     # Real listed increments, so demo ladders pick realistic neighbouring strikes.
     step = 0.5 if spot < 25 else 1.0 if spot < 200 else 2.5
@@ -62,7 +69,7 @@ def make_chain(symbol: str, expiry: dt.date, spot: float, *, skew: float = 1.0,
         iv = 0.28 + 0.9 * moneyness ** 2 - 0.15 * moneyness
         for right in ("C", "P"):
             intrinsic = max(0.0, (spot - strike) if right == "C" else (strike - spot))
-            extrinsic = max(0.02, 1.2 * spot * 0.01 * decay)
+            extrinsic = max(0.01, spot * atm_extrinsic_pct * decay)
             mid = intrinsic + extrinsic
             width = max(0.01, mid * spread * (2.0 - decay))
             tilt = skew if right == "C" else 1.0 / skew
