@@ -81,12 +81,20 @@ def render_terminal(result: ScanResult, top: int = 20, colour: bool = True,
                 lines.append(_colour(colour, GREY, f"       - {reason}"))
             plan = c.plan
             if plan.get("strike"):
-                lines.append(_colour(colour, CYAN,
-                             f"       > {plan['expiry']} {plan['strike']:g}{plan['right']} "
-                             f"@ ~${plan.get('premium_mid') or 0:.2f}  "
-                             f"stop {plan.get('underlying_stop')}  "
+                lines.append(_colour(colour, BOLD,
+                             f"       {plan['expiry']}  stop {plan.get('underlying_stop')}  "
                              f"T1 {plan.get('target_1')}"
                              + (f"  T2 {plan['target_2']}" if plan.get("target_2") else "")))
+            for rung in plan.get("ladder", []):
+                outcomes = "  ".join(
+                    f"{o['target']}:{o['return_pct']:+.0f}%" for o in rung.get("outcomes", [])
+                    if o.get("return_pct") is not None)
+                lines.append(_colour(colour, CYAN,
+                             f"       {rung['rung']:<7}{rung['strike']:>9g}{rung['right']} "
+                             f"{rung['moneyness']:<4} ${rung['mid']:>6.2f}  "
+                             f"d={str(rung['delta'] or '-'):<6} OI {rung['open_interest']:>7,.0f}  "
+                             f"BE {rung['breakeven']:g} ({rung['pct_move_to_breakeven']:+.2f}%)  "
+                             f"x{rung['suggested_contracts']:<3} {outcomes}"))
             for note in plan.get("notes", [])[:3]:
                 lines.append(_colour(colour, DIM, f"       ! {note}"))
             lines.append("")
@@ -222,6 +230,34 @@ def _card(c: Candidate) -> str:
 
     reasons = "".join(f"<li>{e(r)}</li>" for r in c.reasons(6))
     plan = c.plan
+    ladder_html = ""
+    if plan.get("ladder"):
+        head = ("<tr><th>Rung</th><th>Strike</th><th>Mid</th><th>Δ</th><th>OI</th><th>Vol</th>"
+                "<th>Spread</th><th>Cost</th><th>Breakeven</th><th>Move</th><th>Qty</th></tr>")
+        rows = ""
+        for r in plan["ladder"]:
+            outcomes = " &middot; ".join(
+                f"{o['target']} {o['underlying']:g} &rarr; ${o['value_at_expiry']:.2f} "
+                f"({o['return_pct']:+.0f}%)" for o in r.get("outcomes", [])
+                if o.get("return_pct") is not None)
+            rows += (
+                f'<tr class="rung {e(r["rung"])}">'
+                f'<td><strong>{e(r["rung"])}</strong><br><span class="muted">{e(r["moneyness"])}</span></td>'
+                f'<td>{r["strike"]:g}{e(r["right"])}</td>'
+                f'<td>${r["mid"]:.2f}<br><span class="muted">{r["bid"]:.2f}/{r["ask"]:.2f}</span></td>'
+                f'<td>{r["delta"] if r["delta"] is not None else "-"}</td>'
+                f'<td>{r["open_interest"]:,.0f}</td>'
+                f'<td>{r["volume"]:,.0f}</td>'
+                f'<td>{(r["spread_pct"] * 100):.1f}%</td>'
+                f'<td>${r["cost_per_contract"]:,.0f}</td>'
+                f'<td>{r["breakeven"]:g}</td>'
+                f'<td>{r["pct_move_to_breakeven"]:+.2f}%</td>'
+                f'<td>{r["suggested_contracts"]}</td>'
+                f'</tr>'
+                f'<tr class="outcome"><td colspan="11" class="muted">at expiry: {outcomes}</td></tr>')
+        ladder_html = (f"<h4>Strike ladder <span class='muted'>(pick your risk)</span></h4>"
+                       f"<div class='scroll'><table class='ladder'>{head}{rows}</table></div>")
+
     plan_html = ""
     if plan.get("strike"):
         rows = [
@@ -259,8 +295,68 @@ def _card(c: Candidate) -> str:
       <h4>Signal blocks <span class="muted">(direction / quality)</span></h4>
       <table class="blocks">{blocks_html}</table>
       <h4>Why it ranked</h4><ul class="reasons">{reasons}</ul>
+      {ladder_html}
       {plan_html}
     </article>"""
+
+
+STYLE = """  :root { color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d;
+           --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149; --blue:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,
+          BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1200px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 4px; }
+  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); margin-top:24px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:16px; border-top:3px solid var(--line); }
+  .card.calls { border-top-color:var(--green); }
+  .card.puts { border-top-color:var(--red); }
+  .card header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .card h3 { margin:0; font-size:20px; letter-spacing:.5px; }
+  .name { color:var(--muted); font-size:12px; display:block; max-width:220px;
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .verdict { text-align:right; }
+  .side { display:block; font-size:11px; letter-spacing:1px; color:var(--muted); }
+  .calls .side { color:var(--green); } .puts .side { color:var(--red); }
+  .score { font-size:28px; font-weight:700; }
+  .flags { margin:8px 0 0; }
+  .flag { display:inline-block; background:#2d333b; border:1px solid var(--line);
+           border-radius:999px; padding:1px 8px; font-size:11px; margin-right:6px; }
+  dl.stats { display:grid; grid-template-columns:repeat(2,1fr); gap:6px 14px; margin:14px 0; }
+  dl.stats div { display:flex; justify-content:space-between; border-bottom:1px dotted #21262d; }
+  dt { color:var(--muted); font-size:12px; } dd { margin:0; font-size:12px; font-variant-numeric:tabular-nums; }
+  h4 { margin:16px 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  table th { text-align:left; font-weight:500; color:var(--muted); padding:3px 6px 3px 0; white-space:nowrap; }
+  table td { padding:3px 0; }
+  .bar { display:inline-block; width:70px; height:6px; background:#21262d; border-radius:3px;
+          overflow:hidden; vertical-align:middle; margin-right:6px; }
+  .bar span { display:block; height:100%; }
+  .num { font-variant-numeric:tabular-nums; color:var(--muted); }
+  ul.reasons, ul.notes { margin:0; padding-left:18px; font-size:12px; color:var(--text); }
+  ul.notes { color:var(--muted); margin-top:8px; }
+  ul.reasons li, ul.notes li { margin:2px 0; }
+  table.plan th { width:42%; }
+  .scroll { overflow-x:auto; }
+  table.ladder { font-size:11px; min-width:560px; }
+  table.ladder th { border-bottom:1px solid var(--line); padding-bottom:4px; }
+  table.ladder td { padding:5px 6px 5px 0; border-bottom:1px solid #21262d;
+                     font-variant-numeric:tabular-nums; vertical-align:top; }
+  tr.rung.core td { background:rgba(88,166,255,.07); }
+  tr.outcome td { border-bottom:1px solid var(--line); padding-bottom:8px; font-size:11px; }
+  .muted { color:var(--muted); }
+  .empty { color:var(--muted); padding:40px; text-align:center; border:1px dashed var(--line);
+            border-radius:10px; }
+  details { margin-top:32px; } details table { margin-top:8px; }
+  footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--line);
+            padding-top:16px; }"""
+
+
+def render_cards(result: ScanResult, top: int = 20) -> str:
+    """Just the candidate cards — shared by the static page and the Scan-button app."""
+    return "".join(_card(c) for c in result.candidates[:top])
 
 
 def render_html(result: ScanResult, top: int = 20) -> str:
@@ -269,7 +365,7 @@ def render_html(result: ScanResult, top: int = 20) -> str:
     dp_note = (f"FINRA off-exchange: {result.darkpool_days} sessions loaded, latest "
                f"{result.darkpool_asof}" if result.darkpool_days
                else "FINRA off-exchange data unavailable — dark pool signals were skipped")
-    cards = "".join(_card(c) for c in result.candidates[:top])
+    cards = render_cards(result, top)
     if not cards:
         cards = ('<p class="empty">Nothing cleared the gates. Loosen the filters, widen the '
                  'universe, or re-run once the option chains populate after the open.</p>')
@@ -290,51 +386,7 @@ def render_html(result: ScanResult, top: int = 20) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>0/1DTE Options Scanner</title>
 <style>
-  :root {{ color-scheme: dark; --bg:#0d1117; --panel:#161b22; --line:#30363d;
-           --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149; --blue:#58a6ff; }}
-  * {{ box-sizing:border-box; }}
-  body {{ margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,
-          BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
-  .wrap {{ max-width:1200px; margin:0 auto; padding:24px 16px 64px; }}
-  h1 {{ font-size:22px; margin:0 0 4px; }}
-  .sub {{ color:var(--muted); font-size:13px; margin:0 0 4px; }}
-  .grid {{ display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); margin-top:24px; }}
-  .card {{ background:var(--panel); border:1px solid var(--line); border-radius:10px;
-           padding:16px; border-top:3px solid var(--line); }}
-  .card.calls {{ border-top-color:var(--green); }}
-  .card.puts {{ border-top-color:var(--red); }}
-  .card header {{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }}
-  .card h3 {{ margin:0; font-size:20px; letter-spacing:.5px; }}
-  .name {{ color:var(--muted); font-size:12px; display:block; max-width:220px;
-           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
-  .verdict {{ text-align:right; }}
-  .side {{ display:block; font-size:11px; letter-spacing:1px; color:var(--muted); }}
-  .calls .side {{ color:var(--green); }} .puts .side {{ color:var(--red); }}
-  .score {{ font-size:28px; font-weight:700; }}
-  .flags {{ margin:8px 0 0; }}
-  .flag {{ display:inline-block; background:#2d333b; border:1px solid var(--line);
-           border-radius:999px; padding:1px 8px; font-size:11px; margin-right:6px; }}
-  dl.stats {{ display:grid; grid-template-columns:repeat(2,1fr); gap:6px 14px; margin:14px 0; }}
-  dl.stats div {{ display:flex; justify-content:space-between; border-bottom:1px dotted #21262d; }}
-  dt {{ color:var(--muted); font-size:12px; }} dd {{ margin:0; font-size:12px; font-variant-numeric:tabular-nums; }}
-  h4 {{ margin:16px 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); }}
-  table {{ width:100%; border-collapse:collapse; font-size:12px; }}
-  table th {{ text-align:left; font-weight:500; color:var(--muted); padding:3px 6px 3px 0; white-space:nowrap; }}
-  table td {{ padding:3px 0; }}
-  .bar {{ display:inline-block; width:70px; height:6px; background:#21262d; border-radius:3px;
-          overflow:hidden; vertical-align:middle; margin-right:6px; }}
-  .bar span {{ display:block; height:100%; }}
-  .num {{ font-variant-numeric:tabular-nums; color:var(--muted); }}
-  ul.reasons, ul.notes {{ margin:0; padding-left:18px; font-size:12px; color:var(--text); }}
-  ul.notes {{ color:var(--muted); margin-top:8px; }}
-  ul.reasons li, ul.notes li {{ margin:2px 0; }}
-  table.plan th {{ width:42%; }}
-  .muted {{ color:var(--muted); }}
-  .empty {{ color:var(--muted); padding:40px; text-align:center; border:1px dashed var(--line);
-            border-radius:10px; }}
-  details {{ margin-top:32px; }} details table {{ margin-top:8px; }}
-  footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--line);
-            padding-top:16px; }}
+{STYLE}
 </style>
 </head>
 <body>

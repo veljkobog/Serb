@@ -7,8 +7,24 @@ then hands you a concrete contract, stop, and targets.
 
 Pure Python standard library. No pip install, no API key required to run it.
 
+## Press Scan
+
 ```bash
 cd options-scanner
+./serve.py                    # opens http://127.0.0.1:8765 — press SCAN
+./serve.py --auto 09:35       # ...and scan automatically at 9:35 ET each trading day
+./serve.py --demo             # synthetic data, works any time, no network
+```
+
+One button. It pulls live data at that moment — bypassing the cache, so "Scan" means
+scan, not "show me what I fetched ten minutes ago" — streams progress while it runs,
+and renders the top setups with a full strike ladder and every number behind the
+ranking. Settings (universe, expiry, side, how many to show, account size, risk per
+trade) persist in the browser. Defaults to the **top 3**.
+
+There is also a plain CLI if you prefer it:
+
+```bash
 ./scan.py --demo          # see the output shape with synthetic data, no network
 ./scan.py                 # real scan, default universe, free Yahoo data
 ```
@@ -30,7 +46,7 @@ Nothing gets scored until it clears all of these:
 | Avg dollar volume | ≥ $100M/day | you can get filled in the stock |
 | Avg share volume | ≥ 1M/day | ditto |
 | Price | $15 – $2000 | below $15 the options are penny-wide junk |
-| Near-expiry contract volume | ≥ 3,000 | someone is actually trading this expiry |
+| Near-expiry contract volume | ≥ 3,000 *(session-scaled)* | someone is actually trading this expiry |
 | Near-expiry open interest | ≥ 2,000 | there is a book, not a quote |
 | ATM bid/ask | ≤ 12% of mid | the spread is not the whole edge |
 | Liquid near-money strikes | ≥ 4 | you can pick a strike, not just the ATM |
@@ -38,6 +54,16 @@ Nothing gets scored until it clears all of these:
 
 Market cap is not enforced on ETFs (it is meaningless there), and everything is
 overridable — `--min-cap 10B --min-dollar-volume 250M` if you only want the giants.
+
+**The contract-volume gate is session-aware**, which matters if you are scanning near
+the open. Option volume accumulates through the day, so at 9:35 nothing on earth has
+traded 3,000 contracts yet — a flat threshold rejects the entire market at exactly the
+moment a 0DTE scan is most useful. The requirement is scaled by the share of the
+session's volume that has typically printed by that time (about 4% of the target at
+9:31, all of it by the close), with a floor so a pre-open scan still demands a pulse
+rather than nothing. Open interest, which comes from the prior session, is gated at
+full strength throughout. Turn the scaling off with
+`"scale_option_volume_by_session": false`.
 
 ---
 
@@ -123,6 +149,32 @@ A name with `|direction| < 0.08` is marked `NONE` and capped at 25 — no side, 
 
 ---
 
+## The strike ladder
+
+"Which contract" is a risk decision the scanner should not make for you, so every
+ranked name comes with three rungs rather than one strike:
+
+| Rung | Target | What it is |
+|---|---|---|
+| **anchor** | ~0.60 delta, ITM | Costs most, decays least, moves most like the stock. The measured-move trade. |
+| **core** | ~0.45 delta, ATM | The default. Best liquidity, balanced payoff. |
+| **runner** | ~0.30 delta, OTM | Cheapest, highest percentage upside, needs most of the expected move. The one that goes to zero. |
+
+Rungs only come from strikes with a real two-sided quote and real open interest, and
+the three are always distinct. Each carries bid/ask/mid, delta, OI, volume, spread,
+cost per contract, breakeven, the percentage move required to reach it, **payoff at
+expiry at both targets** (pure intrinsic — for 0DTE that is the honest number, since
+every cent of extrinsic value is gone by the close), and a position size from your
+account and risk-per-trade settings.
+
+A typical ladder reads like this — the same setup, three risk postures:
+
+```
+anchor  297.5C ITM  $5.44  d=0.658  BE 302.94 (+1.16%)   T1 +7%   T2 +38%
+core      300C OTM  $3.58  d=0.455  BE 303.58 (+1.37%)   T1 -7%   T2 +40%
+runner  302.5C OTM  $3.30  d=0.266  BE 305.80 (+2.12%)   T1 -75%  T2 -24%
+```
+
 ## Output
 
 Every scan writes four things to `out/`:
@@ -135,14 +187,29 @@ Every scan writes four things to `out/`:
   scanner daily for a month, then join the journal against actual outcomes and find out
   whether the weights are worth anything **before** you trade them.
 
-Each ranked name gets a plan: contract (targeting ~0.40 delta when greeks are available,
-a quarter of the expected move OTM when they are not, and only from strikes with real OI
-and a tight quote), entry trigger, underlying stop (the nearer of a half-ATR and the fast
-EMA), T1/T2 from the expected move capped at the OI wall, a premium stop, and sizing math.
+Alongside the ladder, each ranked name gets a plan: entry trigger, underlying stop (the
+nearer of a half-ATR and the fast EMA, and never on the wrong side of spot), T1/T2 from
+the expected move capped at the OI wall, a premium stop, and sizing math.
 
 ---
 
 ## Usage
+
+### The button
+
+```bash
+./serve.py                          # localhost:8765
+./serve.py --auto 09:35             # auto-scan just after the open, every trading day
+./serve.py --provider tradier       # real-time chains instead of delayed Yahoo
+./serve.py --port 9000 --no-browser
+./serve.py --demo                   # synthetic data
+```
+
+The server binds `127.0.0.1` on purpose. It holds no credentials itself, but whatever
+provider key is in your environment is usable by anything that can reach the port, so
+only pass `--host 0.0.0.0` if you genuinely mean it.
+
+### The CLI
 
 ```bash
 ./scan.py                                  # default: 141 names, ≤1DTE, both sides
@@ -190,14 +257,16 @@ so a Monday expiry is 1DTE from Friday, not 3DTE.
 ## Layout
 
 ```
+serve.py                   press-the-button UI (start here)
 scan.py                    CLI entry point
 odte/
+  webapp.py                the Scan button: HTTP handlers, progress, auto-scan
   config.py                gates, weights, thresholds
   universe.py              preset symbol lists
   engine.py                fan-out, expiry selection, orchestration
   screen.py                hard gates
   score.py                 composite scoring and confluence
-  plan.py                  strike selection, stops, targets, sizing
+  plan.py                  strike ladder, stops, targets, payoff, sizing
   report.py                terminal / JSON / CSV / journal / HTML
   indicators.py            EMA, ATR, ADX, RSI, OBV, CMF, z-score (no numpy)
   calendar_utils.py        NYSE calendar, trading-day DTE, session progress
@@ -205,7 +274,7 @@ odte/
   synthetic.py             deterministic fake data for --demo and tests
   providers/               yahoo, tradier, polygon, finra
   signals/                 trend, volume, darkpool, shortinterest, options_flow
-tests/                     28 offline tests, no network needed
+tests/                     57 offline tests, no network needed
 ```
 
 ## Tests
@@ -217,15 +286,20 @@ python3 -m unittest discover -s tests -t .
 Everything runs against deterministic synthetic data — no network, no keys, no market
 hours. Covers indicator math, the NYSE calendar and trading-day DTE, each signal block's
 direction and quality behaviour, every hard gate, error isolation (one bad symbol never
-kills a scan), target/stop sidedness, and all four renderers.
+kills a scan), target/stop sidedness, all four renderers, the strike ladder's breakeven
+and payoff arithmetic, session-aware volume scaling, cache-freshness behaviour, and the
+web app's HTTP endpoints end to end (including malformed and oversized requests).
 
 ---
 
 ## Limits — read these
 
 - **Everything here is end-of-day or delayed.** FINRA off-exchange data publishes after
-  the close. Yahoo option quotes are delayed ~15 minutes. This is a *setup finder* you
-  run pre-market or early in the session, not an execution system.
+  the close, so the dark pool read on any given morning describes *yesterday*. Yahoo
+  option quotes are delayed ~15 minutes; if you are trading off the button near the
+  open, use Tradier or Polygon so the chain is real-time. This is a *setup finder*, not
+  an execution system — pressing Scan gives you a ranked shortlist to go look at, not
+  an order.
 - **The weights are a starting hypothesis, not a backtested edge.** They were chosen to
   be reasonable, not fitted. That is what `journal.jsonl` is for — forward-test before
   you size up.

@@ -1,8 +1,18 @@
 """Turn a ranked candidate into a concrete, checkable trade plan.
 
-Strike selection favours a contract that still has real delta but is not so far out
-that a normal expected move cannot reach it, and it will only pick a contract that
-actually has a tight two-sided quote and open interest.
+Produces a three-rung strike ladder rather than a single strike, because "which
+contract" is a risk decision the scanner should not make for you:
+
+  ANCHOR   ~0.60 delta, in the money.  Costs the most, decays the least, moves most
+                                       like the stock. The measured-move trade.
+  CORE     ~0.45 delta, at the money.  The default. Best liquidity, balanced payoff.
+  RUNNER   ~0.30 delta, out of money.  Cheapest and highest percentage upside; needs
+                                       most of the expected move to pay, and is the
+                                       one that goes to zero.
+
+Every rung only comes from strikes with a real two-sided quote and real open
+interest, and each carries its own breakeven, percentage move required, expiry
+payoff at both targets, and position sizing.
 """
 from __future__ import annotations
 
@@ -12,7 +22,14 @@ from .config import Config
 from .providers.base import OptionChain, OptionContract
 from .score import LONG, SHORT, Candidate
 
-TARGET_DELTA = 0.40
+TARGET_DELTA = 0.45
+
+# (label, target delta, offset from spot in expected-move units when greeks are absent)
+RUNGS = (
+    ("anchor", 0.60, -0.35),
+    ("core", 0.45, 0.00),
+    ("runner", 0.30, 0.45),
+)
 
 
 def _viable(chain: OptionChain, right: str, config: Config) -> List[OptionContract]:
@@ -45,6 +62,110 @@ def _round(x: Optional[float], nd: int = 2) -> Optional[float]:
     return None if x is None else round(x, nd)
 
 
+def _expiry_value(contract: OptionContract, underlying: float) -> float:
+    """What the contract is worth at expiry if the stock is at ``underlying``.
+
+    For 0DTE this is the honest number: every cent of extrinsic value is gone by the
+    close, so the payoff is pure intrinsic.
+    """
+    if contract.right == "C":
+        return max(0.0, underlying - contract.strike)
+    return max(0.0, contract.strike - underlying)
+
+
+def _rung_economics(contract: OptionContract, spot: float, sign: int, targets: List[float],
+                    config: Config, label: str) -> Dict[str, Any]:
+    # Round the premium once and derive everything from it, so the numbers on the card
+    # are arithmetically consistent with each other (a displayed breakeven that does not
+    # equal displayed strike + displayed mid reads as a bug, and is one).
+    premium = round(contract.mid or 0.0, 2)
+    cost = premium * 100.0
+    breakeven = contract.strike + premium if sign > 0 else contract.strike - premium
+    move_needed = ((breakeven - spot) / spot * 100.0) * sign if spot else None
+
+    outcomes = []
+    for i, target in enumerate(targets, 1):
+        if target is None:
+            continue
+        value = _expiry_value(contract, target)
+        pnl = (value - premium) * 100.0
+        row = {
+            "target": f"T{i}",
+            "underlying": _round(target),
+            "value_at_expiry": _round(value),
+            "pnl_per_contract": _round(pnl),
+            "return_pct": _round((value / premium - 1.0) * 100.0, 1) if premium > 0 else None,
+        }
+        # With greeks we can also say what it is worth if it gets there *now*, before
+        # theta has eaten the extrinsic value. That number is always the friendlier one.
+        if contract.delta is not None:
+            move = target - spot
+            est = premium + contract.delta * move + 0.5 * (contract.gamma or 0.0) * move * move
+            row["value_if_immediate"] = _round(max(0.0, est))
+        outcomes.append(row)
+
+    risk_per_contract = cost * config.premium_stop_pct
+    budget = config.account_size * config.risk_per_trade_pct / 100.0
+    qty = int(budget // risk_per_contract) if risk_per_contract > 0 else 0
+
+    return {
+        "rung": label,
+        "contract": contract.symbol,
+        "strike": contract.strike,
+        "right": contract.right,
+        "moneyness": "ITM" if (contract.strike - spot) * sign < 0 else
+                     ("ATM" if abs(contract.strike - spot) < 1e-9 else "OTM"),
+        "bid": _round(contract.bid),
+        "ask": _round(contract.ask),
+        "mid": _round(premium),
+        "spread_pct": _round(contract.spread_pct, 4),
+        "delta": _round(contract.delta, 3),
+        "gamma": _round(contract.gamma, 5),
+        "iv": _round(contract.iv, 4),
+        "open_interest": contract.open_interest,
+        "volume": contract.volume,
+        "vol_oi": _round(contract.volume / contract.open_interest, 2) if contract.open_interest else None,
+        "cost_per_contract": _round(cost),
+        "breakeven": _round(breakeven),
+        "pct_move_to_breakeven": _round(move_needed, 2),
+        "premium_stop": _round(premium * (1 - config.premium_stop_pct)),
+        "risk_per_contract": _round(risk_per_contract),
+        "suggested_contracts": max(qty, 0),
+        "total_cost": _round(cost * qty) if qty else None,
+        "total_risk": _round(risk_per_contract * qty) if qty else None,
+        "outcomes": outcomes,
+    }
+
+
+def _ladder(contracts: List[OptionContract], spot: float, sign: int,
+            expected_move: Optional[float], targets: List[float],
+            config: Config) -> List[Dict[str, Any]]:
+    """Pick three distinct strikes spanning ITM / ATM / OTM."""
+    if not contracts:
+        return []
+    em = expected_move or spot * 0.005
+    has_greeks = any(c.delta is not None and abs(c.delta) > 0.01 for c in contracts)
+    pool = sorted(contracts, key=lambda c: c.strike)
+    rungs: List[Dict[str, Any]] = []
+    used: set = set()
+
+    for label, target_delta, em_offset in RUNGS:
+        available = [c for c in pool if c.strike not in used]
+        if not available:
+            break
+        if has_greeks:
+            pick = min(available, key=lambda c: abs(abs(c.delta or 0.0) - target_delta))
+        else:
+            want = spot + sign * em_offset * em
+            pick = min(available, key=lambda c: abs(c.strike - want))
+        used.add(pick.strike)
+        rungs.append(_rung_economics(pick, spot, sign, targets, config, label))
+
+    # Keep the ladder ordered ITM -> OTM regardless of how the picks landed.
+    rungs.sort(key=lambda r: r["strike"] * sign)
+    return rungs
+
+
 def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) -> Dict[str, Any]:
     if candidate.side not in (LONG, SHORT) or chain is None:
         return {}
@@ -61,7 +182,7 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
     call_wall = opt.detail.get("call_wall") if opt else None
     put_wall = opt.detail.get("put_wall") if opt else None
 
-    contract = _pick(_viable(chain, right, config), spot, sign, em)
+    viable = _viable(chain, right, config)
 
     # Invalidation: the nearer of a half-ATR against you and the fast moving average.
     structural = ema8 if (ema8 and (spot - ema8) * sign > 0) else ema21
@@ -94,6 +215,14 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
             t1, t2_opt = t2_opt, None
         wall_inside_em = abs(wall - spot) < 0.5 * em
 
+    targets = [t for t in (t1, t2_opt) if t is not None]
+    ladder = _ladder(viable, spot, sign, em, targets, config)
+    # The primary contract is the middle rung — the balanced default.
+    core = next((r for r in ladder if r["rung"] == "core"), ladder[len(ladder) // 2] if ladder else None)
+    contract = next((c for c in viable if core and c.symbol == core["contract"]), None)
+    if contract is None:
+        contract = _pick(viable, spot, sign, em)
+
     premium = contract.mid if contract else None
     plan: Dict[str, Any] = {
         "side": candidate.side,
@@ -114,6 +243,7 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
         "target_1": _round(t1),
         "target_2": _round(t2_opt),
         "target_2_capped_at_wall": capped,
+        "ladder": ladder,
         "expected_move": _round(em),
         "atr14": _round(atr),
         "premium_stop_pct": config.premium_stop_pct,

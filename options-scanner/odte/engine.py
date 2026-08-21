@@ -66,7 +66,8 @@ class Scanner:
                  offex: Optional[FinraOffExchange] = None,
                  progress_cb: Optional[Callable[[str, str], None]] = None):
         self.config = config
-        self.http = Http(cache_dir=config.cache_dir, cache_ttl=300)
+        self.http = Http(cache_dir=config.cache_dir, cache_ttl=300,
+                         force_fresh=config.force_fresh)
         self.provider = provider or resolve(config.provider, http=self.http)
         self.offex = offex
         self.progress_cb = progress_cb or (lambda sym, msg: None)
@@ -115,7 +116,8 @@ class Scanner:
                 band_pct=self.config.band_pct,
                 min_unusual_volume=self.config.min_unusual_volume)
 
-            cand.gate_failures = screen.apply(cand, fundamentals, chain, self.config, today)
+            cand.gate_failures = screen.apply(cand, fundamentals, chain, self.config, today,
+                                              session_progress=progress)
             compose(cand, self.config)
             if cand.passed:
                 cand.plan = plan_mod.build(cand, chain, self.config)

@@ -65,7 +65,8 @@ class FinraOffExchange:
     def load(self, end: Optional[dt.date] = None) -> "FinraOffExchange":
         for day in recent_trading_days(self.days, end):
             try:
-                text = self.http.get_text(DAILY_URL.format(ymd=day.strftime("%Y%m%d")), cache_ttl=30 * 86400)
+                text = self.http.get_text(DAILY_URL.format(ymd=day.strftime("%Y%m%d")),
+                                          cache_ttl=30 * 86400, immutable=True)
             except HttpError as exc:
                 # 404 is normal: today's file is not posted until after the close.
                 if getattr(exc, "status", None) != 404:

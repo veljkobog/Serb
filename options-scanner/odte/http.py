@@ -34,9 +34,14 @@ class HttpError(RuntimeError):
 
 class Http:
     def __init__(self, cache_dir: Optional[str] = None, cache_ttl: int = 300,
-                 min_interval: float = 0.2, timeout: int = 20, retries: int = 3):
+                 min_interval: float = 0.2, timeout: int = 20, retries: int = 3,
+                 force_fresh: bool = False):
         self.cache_dir = cache_dir
         self.cache_ttl = cache_ttl
+        # When set, live quotes and chains skip the cache. Files marked ``immutable``
+        # (a published FINRA session file never changes) are still served from disk,
+        # so pressing Scan does not re-download 25 days of history every time.
+        self.force_fresh = force_fresh
         self.min_interval = min_interval
         self.timeout = timeout
         self.retries = retries
@@ -86,10 +91,14 @@ class Http:
             _LAST_CALL[host] = time.time()
 
     def get_text(self, url: str, params: Optional[Dict[str, Any]] = None,
-                 headers: Optional[Dict[str, str]] = None, cache_ttl: Optional[int] = None) -> str:
+                 headers: Optional[Dict[str, str]] = None, cache_ttl: Optional[int] = None,
+                 immutable: bool = False) -> str:
         if params:
             url = url + ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
-        cached = self._cache_get(url, cache_ttl)
+        if self.force_fresh and not immutable:
+            cached = None
+        else:
+            cached = self._cache_get(url, cache_ttl)
         if cached is not None:
             return cached
 
@@ -126,5 +135,7 @@ class Http:
         raise last_err if last_err else RuntimeError("request failed")
 
     def get_json(self, url: str, params: Optional[Dict[str, Any]] = None,
-                 headers: Optional[Dict[str, str]] = None, cache_ttl: Optional[int] = None) -> Any:
-        return json.loads(self.get_text(url, params=params, headers=headers, cache_ttl=cache_ttl))
+                 headers: Optional[Dict[str, str]] = None, cache_ttl: Optional[int] = None,
+                 immutable: bool = False) -> Any:
+        return json.loads(self.get_text(url, params=params, headers=headers,
+                                        cache_ttl=cache_ttl, immutable=immutable))

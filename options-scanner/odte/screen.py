@@ -16,9 +16,26 @@ def _fmt_money(x: float) -> str:
     return f"${x:.0f}"
 
 
+def required_option_volume(config: Config, session_progress: float) -> float:
+    """The contract-volume bar for this moment in the session.
+
+    Option volume accumulates through the day, so comparing 9:35 volume against a
+    full-day threshold rejects every name near the open — exactly when a 0DTE scan is
+    most useful. Scale the requirement by the share of the session's volume that has
+    typically printed by now, with a floor so a pre-open scan still demands *some*
+    interest rather than none.
+    """
+    g = config.gates
+    if not g.scale_option_volume_by_session:
+        return g.min_option_volume
+    from .signals.volume import expected_volume_fraction
+    share = max(expected_volume_fraction(session_progress), g.min_option_volume_floor)
+    return g.min_option_volume * share
+
+
 def apply(candidate: Candidate, fundamentals: Optional[Fundamentals],
           chain: Optional[OptionChain], config: Config,
-          today: Optional[dt.date] = None) -> List[str]:
+          today: Optional[dt.date] = None, session_progress: float = 1.0) -> List[str]:
     """Return the list of failed gates (empty means the name is tradable)."""
     g = config.gates
     fails: List[str] = []
@@ -57,8 +74,10 @@ def apply(candidate: Candidate, fundamentals: Optional[Fundamentals],
         fails.append("no near-dated option chain")
     else:
         d = opt.detail
-        if (d.get("total_volume") or 0) < g.min_option_volume:
-            fails.append(f"{d.get('total_volume', 0):,.0f} contracts < {g.min_option_volume:,.0f}")
+        needed = required_option_volume(config, session_progress)
+        if (d.get("total_volume") or 0) < needed:
+            fails.append(f"{d.get('total_volume', 0):,.0f} contracts < {needed:,.0f} "
+                         f"(session-adjusted)")
         if (d.get("open_interest") or 0) < g.min_option_open_interest:
             fails.append(f"{d.get('open_interest', 0):,.0f} OI < {g.min_option_open_interest:,.0f}")
         spread = d.get("atm_spread")

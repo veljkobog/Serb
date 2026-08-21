@@ -10,7 +10,6 @@
   "band_pct": 0.06,
   "premium_stop_pct": 0.35,
   "risk_per_trade_pct": 1.0,
-
   "gates": {
     "min_price": 15.0,
     "max_price": 2000.0,
@@ -19,6 +18,8 @@
     "min_avg_share_volume": 1000000,
     "min_option_volume": 3000,
     "min_option_open_interest": 2000,
+    "scale_option_volume_by_session": true,
+    "min_option_volume_floor": 0.04,
     "max_atm_spread_pct": 0.12,
     "min_tradable_strikes": 4,
     "max_dte": 1,
@@ -27,11 +28,22 @@
     "exclude_earnings_today": false,
     "min_score": 45.0
   },
-
   "weights": {
-    "direction": { "trend": 0.30, "volume": 0.20, "darkpool": 0.25, "options": 0.25 },
-    "quality":   { "trend": 0.15, "volume": 0.25, "darkpool": 0.10, "options": 0.50 },
+    "direction": {
+      "trend": 0.3,
+      "volume": 0.2,
+      "darkpool": 0.25,
+      "options": 0.25
+    },
+    "quality": {
+      "trend": 0.15,
+      "volume": 0.25,
+      "darkpool": 0.1,
+      "options": 0.5
+    },
     "squeeze_bonus": 8.0,
-    "confluence_floor": 0.40
-  }
+    "confluence_floor": 0.4
+  },
+  "force_fresh": false,
+  "account_size": 25000.0
 }

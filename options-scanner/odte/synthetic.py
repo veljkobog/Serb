@@ -46,14 +46,19 @@ def make_chain(symbol: str, expiry: dt.date, spot: float, *, skew: float = 1.0,
                base_volume: float = 3_000.0, greeks: bool = True) -> OptionChain:
     """A realistic-looking chain: OI peaks near the money, IV smiles, spreads widen OTM."""
     chain = OptionChain(underlying=symbol, expiry=expiry)
-    step = max(round(spot * 0.01, 2), 0.5)
+    # Real listed increments, so demo ladders pick realistic neighbouring strikes.
+    step = 0.5 if spot < 25 else 1.0 if spot < 200 else 2.5
     atm = round(spot / step) * step
-    for k in range(-12, 13):
+    for k in range(-16, 17):
         strike = round(atm + k * step, 2)
         if strike <= 0:
             continue
         moneyness = (strike - spot) / spot
         decay = math.exp(-((moneyness / 0.035) ** 2))
+        # Volume concentrates at the money; open interest peaks out of the money, where
+        # the call/put walls actually sit in a real chain.
+        call_oi_decay = math.exp(-(((moneyness - 0.018) / 0.030) ** 2))
+        put_oi_decay = math.exp(-(((moneyness + 0.018) / 0.030) ** 2))
         iv = 0.28 + 0.9 * moneyness ** 2 - 0.15 * moneyness
         for right in ("C", "P"):
             intrinsic = max(0.0, (spot - strike) if right == "C" else (strike - spot))
@@ -69,7 +74,8 @@ def make_chain(symbol: str, expiry: dt.date, spot: float, *, skew: float = 1.0,
                 bid=round(max(0.01, mid - width / 2), 2), ask=round(mid + width / 2, 2),
                 last=round(mid, 2),
                 volume=round(base_volume * decay * tilt),
-                open_interest=round(base_oi * (decay + 0.15)),
+                open_interest=round(base_oi * ((call_oi_decay if right == "C"
+                                                else put_oi_decay) + 0.15)),
                 iv=iv, delta=delta if greeks else None,
                 gamma=(0.02 * decay / max(spot * 0.01, 0.01)) if greeks else None,
             ))

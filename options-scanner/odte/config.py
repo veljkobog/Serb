@@ -18,8 +18,13 @@ class Gates:
     min_market_cap: float = 2_000_000_000.0        # $2B floor on the underlying
     min_avg_dollar_volume: float = 100_000_000.0   # $100M/day in the stock
     min_avg_share_volume: float = 1_000_000.0
-    min_option_volume: float = 3_000.0             # contracts on the 0/1DTE expiry
+    min_option_volume: float = 3_000.0             # contracts on the 0/1DTE expiry, full day
     min_option_open_interest: float = 2_000.0
+    # Near the open the day's option volume is almost zero, so a flat contract-volume
+    # gate rejects everything at 9:35. The requirement is scaled by how much of the
+    # session has actually elapsed, with a floor so a 9:31 scan still demands a pulse.
+    scale_option_volume_by_session: bool = True
+    min_option_volume_floor: float = 0.04          # never require less than 4% of the target
     max_atm_spread_pct: float = 0.12               # 12% of mid, ATM
     min_tradable_strikes: int = 4
     max_dte: int = 1                               # 0 = same-day only, 1 = include next session
@@ -54,12 +59,14 @@ class Config:
     gates: Gates = field(default_factory=Gates)
     weights: Weights = field(default_factory=Weights)
     cache_dir: str = ".cache"
+    force_fresh: bool = False         # Scan button: bypass the cache for live quotes
     out_dir: str = "out"
     journal: bool = True
     band_pct: float = 0.06            # near-money window used for flow and liquidity
     min_unusual_volume: float = 500.0
     premium_stop_pct: float = 0.35    # suggested option-premium stop in the trade plan
     risk_per_trade_pct: float = 1.0   # % of account risked per idea, used for sizing math
+    account_size: float = 25_000.0    # only used to turn risk % into a contract count
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "Config":
