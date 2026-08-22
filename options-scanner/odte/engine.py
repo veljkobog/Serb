@@ -4,10 +4,11 @@ from __future__ import annotations
 import datetime as dt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from . import plan as plan_mod
 from . import screen
+from . import session as session_mod
 from .calendar_utils import now_et, session_progress, trading_days_between
 from .config import Config
 from .http import Http
@@ -15,6 +16,35 @@ from .providers import FinraOffExchange, MarketDataProvider, resolve
 from .providers.base import OptionChain
 from .score import Candidate, compose
 from .signals import darkpool, intraday, options_flow, shortinterest, trend, volume
+
+
+# Rejection strings carry the offending numbers, so counting them raw gives 141
+# unique "reasons". These patterns collapse them into families a human can act on.
+REASON_FAMILIES: List[Tuple[str, str]] = [
+    ("no near-dated option chain", "no expiry in range"),
+    ("no market cap available", "no market cap data"),
+    ("market cap", "market cap too small"),
+    ("/day <", "dollar volume too low"),
+    ("shares/day", "share volume too low"),
+    ("price $", "price outside band"),
+    ("contracts <", "option volume too low"),
+    ("OI <", "open interest too low"),
+    ("no two-sided ATM quote", "no two-sided quote"),
+    ("ATM spread", "spread too wide"),
+    ("liquid strikes", "too few liquid strikes"),
+    ("insufficient price history", "not enough price history"),
+    ("ETF excluded", "ETF excluded"),
+    ("no off-exchange data", "no dark pool data"),
+    ("earnings on", "earnings"),
+    ("score ", "below score floor"),
+]
+
+
+def reason_family(text: str) -> str:
+    for needle, label in REASON_FAMILIES:
+        if needle in text:
+            return label
+    return text[:40]
 
 
 @dataclass
@@ -29,6 +59,31 @@ class ScanResult:
     darkpool_days: int = 0
     darkpool_asof: Optional[str] = None
     config: Optional[Config] = None
+    brief: Optional[session_mod.SessionBrief] = None
+
+    def reason_rollup(self) -> List[Tuple[str, int]]:
+        """Why names were dropped, collapsed into families, most common first.
+
+        This is what turns an empty table into an explanation. On a Monday the answer
+        is overwhelmingly "no expiry in range", which is the calendar rather than a
+        fault, and the generic "lower your score floor" advice would be actively wrong.
+        """
+        counts: Dict[str, int] = {}
+        for cand in self.rejected:
+            seen = set()
+            for reason in (cand.gate_failures or ([cand.error] if cand.error else [])):
+                family = reason_family(str(reason))
+                if family in seen:
+                    continue
+                seen.add(family)
+                counts[family] = counts.get(family, 0) + 1
+        return sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+
+    def expiry_coverage(self) -> Dict[str, int]:
+        """How many evaluated names actually had a contract in the DTE window."""
+        with_expiry = sum(1 for c in self.candidates + self.rejected if c.expiry)
+        return {"with_expiry": with_expiry,
+                "without_expiry": len(self.candidates) + len(self.rejected) - with_expiry}
 
     def as_dict(self) -> Dict:
         return {
@@ -43,6 +98,9 @@ class ScanResult:
                           "stage": c.stage, "error": c.error}
                          for c in self.rejected],
             "errors": self.errors,
+            "reason_rollup": self.reason_rollup(),
+            "expiry_coverage": self.expiry_coverage(),
+            "brief": self.brief.as_dict() if self.brief else None,
             "gates": self.config.gates.__dict__ if self.config else {},
         }
 
@@ -159,7 +217,8 @@ class Scanner:
 
         self.load_darkpool()
         result = ScanResult(generated_at=now, provider=self.provider.name, universe=list(symbols),
-                            config=self.config)
+                            config=self.config,
+                            brief=session_mod.describe(today, self.config.gates.max_dte))
         if self.offex:
             result.darkpool_days = len(self.offex.loaded_dates)
             result.darkpool_asof = str(self.offex.loaded_dates[-1]) if self.offex.loaded_dates else None

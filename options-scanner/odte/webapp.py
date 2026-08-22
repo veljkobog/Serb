@@ -54,6 +54,7 @@ class ScanRunner:
 
     # -- introspection -----------------------------------------------------
     def status(self) -> Dict[str, Any]:
+        from .session import describe
         with self.lock:
             elapsed = ((self.finished or time.time()) - self.started) if self.started else 0.0
             payload = {
@@ -63,6 +64,7 @@ class ScanRunner:
                 "market_open": market_is_open(),
                 "session_progress": round(session_progress(), 3),
                 "now": now_et().strftime("%Y-%m-%d %H:%M:%S ET"),
+                "brief": describe(now_et().date()).as_dict(),
             }
             if self.result is not None:
                 payload["candidates"] = len(self.result.candidates)
@@ -78,6 +80,8 @@ class ScanRunner:
             "ok": True,
             "cards": report.render_cards(result, top),
             "summary": self._summary(result, top),
+            "brief": result.brief.as_dict() if result.brief else None,
+            "rollup": result.reason_rollup()[:6],
             "result": result.as_dict(),
         }
 
@@ -115,7 +119,7 @@ class ScanRunner:
         cfg.journal = True
         if settings.get("provider") in PROVIDERS:
             cfg.provider = settings["provider"]
-        if settings.get("max_dte") in (0, 1):
+        if settings.get("max_dte") is not None and 0 <= int(settings["max_dte"]) <= 5:
             cfg.gates.max_dte = int(settings["max_dte"])
         for key, attr in (("min_score", "min_score"), ("min_cap", "min_market_cap"),
                           ("min_dollar_volume", "min_avg_dollar_volume"),
@@ -245,6 +249,14 @@ td.mark.fail {{ color:var(--red); }}
 .banner.warn {{ border-color:#f85149; background:rgba(248,81,73,.10); }}
 .banner.info {{ border-color:var(--line); background:#161b22; color:var(--muted); }}
 .summary {{ color:var(--muted); font-size:13px; margin:16px 0 0; }}
+.brief {{ margin:16px 0 0; padding:12px 16px; border-left:3px solid var(--blue);
+          background:var(--panel); border-radius:0 6px 6px 0; font-size:13px;
+          display:none; }}
+.brief.on {{ display:block; }}
+.brief strong {{ color:var(--text); }}
+.brief .why {{ margin:10px 0 0; padding-left:18px; color:var(--muted); }}
+.brief .why li {{ margin:3px 0; }}
+.brief button.apply {{ margin-top:10px; }}
 </style>
 </head>
 <body>
@@ -260,10 +272,14 @@ td.mark.fail {{ color:var(--red); }}
 
   {demo_note}
 
+  <div id="brief" class="brief"></div>
+
   <div class="settings">
     <label>Universe<select id="universe">{_options(presets, universe_mod.DEFAULT)}</select></label>
     <label>Or symbols<input id="symbols" placeholder="NVDA,SPY,AMD"></label>
-    <label>Expiry<select id="max_dte">{_options([(1, "0 or 1 DTE"), (0, "same day only")], cfg.gates.max_dte)}</select></label>
+    <label>Expiry<select id="max_dte">{_options(
+        [(1, "0 or 1 DTE"), (0, "same day only"), (2, "up to 2 DTE"), (3, "up to 3 DTE"),
+         (4, "up to 4 DTE"), (5, "up to 5 DTE")], cfg.gates.max_dte)}</select></label>
     <label>Side<select id="side">{_options([("both", "both"), ("calls", "calls only"), ("puts", "puts only")], "both")}</select></label>
     <label>Show top<input id="top" type="number" min="1" max="25" value="3"></label>
     <label>Min score<input id="min_score" type="number" min="0" max="100" value="{cfg.gates.min_score:.0f}"></label>
@@ -320,6 +336,36 @@ function banner(kind, text) {{
 function tickClock(s) {{
   $("clock").textContent = s.now || "--:--:--";
   $("dot").className = "dot" + (s.market_open ? " open" : "");
+  if (s.brief && !window.__briefShown) {{
+    window.__briefShown = true;
+    showBrief(s.brief, null);
+  }}
+}}
+
+// The expiry calendar decides what is even scannable today: single names only expire
+// on Fridays, so on a Monday almost nothing has a 0/1DTE contract. Say so up front
+// rather than letting it look like an empty market or a broken feed.
+function showBrief(brief, rollup) {{
+  if (!brief) return;
+  var html = "<strong>" + esc(brief.headline) + "</strong>";
+  if (brief.advice) html += "<br>" + esc(brief.advice);
+  if (rollup && rollup.length) {{
+    html += "<ul class='why'>" + rollup.map(function (r) {{
+      return "<li><strong>" + esc(r[1]) + "</strong> &middot; " + esc(r[0]) + "</li>";
+    }}).join("") + "</ul>";
+  }}
+  if (!brief.equities_expire_today && brief.suggested_max_dte > 1) {{
+    html += `<br><button class="ghostbtn apply" id="applyBrief">` +
+            `Switch to ${{brief.suggested_max_dte}} DTE and rescan</button>`;
+  }}
+  $("brief").innerHTML = html;
+  $("brief").classList.add("on");
+  var apply = $("applyBrief");
+  if (apply) apply.addEventListener("click", function () {{
+    $("max_dte").value = String(brief.suggested_max_dte);
+    saveSettings();
+    $("scan").click();
+  }});
 }}
 
 async function poll() {{
@@ -380,10 +426,11 @@ async function showResults() {{
     (m.darkpool_days ? `off-exchange ${{m.darkpool_days}}d to ${{m.darkpool_asof}}`
                      : "off-exchange unavailable");
   $("results").innerHTML = r.cards;
+  if (m.passed) showBrief(r.brief, null);
   if (!m.passed) {{
-    banner("info", "Nothing cleared the gates. Lower the min score, widen the universe, " +
-                   "or wait for the chains to fill in after the open. If that seems wrong, " +
-                   "press Preflight to check whether the data actually arrived.");
+    showBrief(r.brief, r.rollup);
+    banner("info", "Nothing cleared the gates — see the note above for why. If the reasons " +
+                   "look like a data problem rather than a market one, press Preflight.");
   }} else if (m.errors) {{
     banner("info", `${{m.errors}} data error(s) during the scan. First: ${{esc(m.first_error)}}`);
   }} else if (!m.darkpool_days) {{

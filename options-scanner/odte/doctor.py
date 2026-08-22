@@ -72,8 +72,16 @@ def _env(config: Config) -> List[Check]:
             checks.append(Check("Cache", WARN, f"{cache} is not writable: {exc}",
                                 "Point cache_dir somewhere writable, or scans will be slow."))
 
+    from .session import describe
     now = now_et()
     today = now.date()
+    brief = describe(today, config.gates.max_dte)
+    # The expiry calendar is a first-class preflight concern: on a Monday nothing in a
+    # single-name universe has a 0/1DTE contract, and that is not a fault to hunt for.
+    expiry_status = OK if brief.equities_expire_today or config.gates.max_dte >= brief.suggested_max_dte else WARN
+    checks.append(Check("Expiry calendar", expiry_status, brief.headline,
+                        "" if expiry_status == OK else brief.advice,
+                        data=brief.as_dict()))
     if not is_trading_day(today):
         detail = f"{now:%a %H:%M} ET — market closed (not a trading day)"
         fix = ("Quotes and chains will be stale. Run --demo to exercise the tool, or "

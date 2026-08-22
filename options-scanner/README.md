@@ -59,7 +59,7 @@ Nothing gets scored until it clears all of these:
 | Near-expiry open interest | ≥ 2,000 | there is a book, not a quote |
 | ATM bid/ask | ≤ 12% of mid | the spread is not the whole edge |
 | Liquid near-money strikes | ≥ 4 | you can pick a strike, not just the ATM |
-| DTE | 0 or 1 **trading** sessions | the actual point |
+| DTE | 0 or 1 **trading** sessions (raisable) | the actual point |
 
 Market cap is not enforced on ETFs (it is meaningless there), and everything is
 overridable — `--min-cap 10B --min-dollar-volume 250M` if you only want the giants.
@@ -302,6 +302,8 @@ only pass `--host 0.0.0.0` if you genuinely mean it.
 ```bash
 ./scan.py                                  # default: 141 names, ≤1DTE, both sides
 ./scan.py --max-dte 0                      # same-day expiries only
+./scan.py --universe daily                 # Mon-Wed: the products that expire every day
+./scan.py --max-dte 4                      # Mon: this week's Friday, as a swing
 ./scan.py --universe movers --side calls    # high-beta names, longs only
 ./scan.py --symbols NVDA,AMD,SPY,QQQ
 ./scan.py --min-cap 10B --min-dollar-volume 250M --min-score 55 --top 10
@@ -336,13 +338,51 @@ layers knows which vendor the numbers came from.
 
 ---
 
-## A note on "0DTE"
+## Which day is it? (the thing that decides what you can scan)
 
 Only index and ETF products (SPY, QQQ, IWM, SPX and friends) list expirations *every*
-trading day. Most single stocks expire Friday — so for equities "0DTE" means Friday and
-"1DTE" means Thursday. The scanner never assumes: it reads each symbol's actual chain and
-keeps whatever really lists a 0/1-DTE contract. DTE is counted in **trading sessions**,
-so a Monday expiry is 1DTE from Friday, not 3DTE.
+trading day. **Single stocks expire Friday.** So for an equity, "0DTE" means Friday and
+"1DTE" means Thursday — and on a Monday its nearest contract is four sessions out.
+
+That is not a footnote, it is the single biggest determinant of what a scan returns:
+
+| Day | What has a 0/1DTE contract |
+|---|---|
+| **Monday–Wednesday** | index and ETF products only |
+| **Thursday** | everything, at 1DTE |
+| **Friday** | everything, at 0DTE — the widest universe of the week |
+| **3rd Friday** | as above, plus monthly OPEX: peak open interest, so the walls and pin risk matter most |
+
+Every scan opens with a **session briefing** that says which of these today is, and the
+preflight checks it too. Run a default scan on a Monday and most single names are dropped
+for "no near-dated option chain" — so instead of generic advice, the report leads with the
+reason and offers the two real options: scan the daily-expiry products (`--universe daily`),
+or widen to this week's Friday (`--max-dte 4`) and accept that it is a swing trade, which
+the trade plan then says out loud.
+
+The scanner never assumes any of this. It reads each symbol's actual chain and keeps
+whatever really lists a contract in range. DTE is counted in **trading sessions**, so a
+Monday expiry is 1DTE from Friday, not 3DTE.
+
+### Why nothing passed
+
+An empty table has several possible causes and they need different responses, so the
+report never guesses. It rolls the rejections up into families and leads with the
+dominant one:
+
+```
+No names cleared the gates and score floor.
+Why names were dropped:
+     8  no expiry in range
+
+Monday 24 Aug — equities don't expire until Fri 28 Aug, 4 sessions out.
+True 0DTE today is index and ETF products only.
+```
+
+`no expiry in range` is the calendar. `below score floor` means everything passed the
+gates and you should lower `--min-score`. `no market cap data` or `not enough price
+history` is a data fault and sends you to `--doctor`. Telling you to loosen the score
+floor on a Monday would have been actively wrong.
 
 ---
 
@@ -360,6 +400,7 @@ odte/
   universe.py              preset symbol lists
   engine.py                fan-out, expiry selection, orchestration
   screen.py                hard gates, split into a cheap pre-pass and an option pass
+  session.py               expiry calendar, session briefing, horizon-aware notes
   score.py                 composite scoring and confluence
   plan.py                  strike ladder, stops, targets, payoff, sizing
   report.py                terminal / JSON / CSV / journal / HTML
@@ -369,7 +410,7 @@ odte/
   synthetic.py             deterministic fake data for --demo and tests
   providers/               yahoo, tradier, polygon, finra
   signals/                 trend, intraday, volume, darkpool, shortinterest, options_flow
-tests/                     112 offline tests, no network needed
+tests/                     138 offline tests, no network needed
 ```
 
 ## Tests
@@ -386,8 +427,11 @@ and payoff arithmetic, session-aware volume scaling, cache-freshness behaviour, 
 web app's HTTP endpoints end to end (including malformed and oversized requests), the
 preflight doctor against healthy and broken providers, the journal reviewer's level
 detection, managed-exit accounting, ambiguity handling and score-bucket aggregation, the
-VWAP and opening-range maths, VWAP-based stop selection, and proof that a name failing
-the pre-gate never triggers a chain or intraday fetch.
+VWAP and opening-range maths, VWAP-based stop selection, proof that a name failing the
+pre-gate never triggers a chain or intraday fetch, and the expiry calendar — including
+that a holiday Friday falls back to Thursday, that a Monday scan drops everything for
+the right reason, and that widening to 4DTE relabels the plan as a swing and stops
+offering an intraday VWAP stop for a multi-day hold.
 
 ---
 

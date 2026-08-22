@@ -18,6 +18,55 @@ def _colour(enabled: bool, code: str, text: str) -> str:
     return f"{code}{text}{RESET}" if enabled else text
 
 
+def _wrap(text: str, width: int) -> List[str]:
+    words, lines, current = text.split(), [], ""
+    for word in words:
+        if current and len(current) + 1 + len(word) > width:
+            lines.append(current)
+            current = word
+        else:
+            current = f"{current} {word}".strip()
+    if current:
+        lines.append(current)
+    return lines
+
+
+def scan_title(max_dte: int) -> str:
+    if max_dte <= 0:
+        return "0DTE scan"
+    if max_dte == 1:
+        return "0/1DTE scan"
+    return f"0-{max_dte}DTE scan (swing horizon)"
+
+
+def _rollup_lines(result: ScanResult) -> List[str]:
+    """Explain an empty table with the actual reasons, not generic advice.
+
+    On a Monday the dominant reason is "no expiry in range", which is the calendar
+    rather than a fault — and telling someone to lower their score floor would send
+    them the wrong way entirely.
+    """
+    rollup = result.reason_rollup()
+    if not rollup:
+        return ["Nothing was evaluated. Run ./scan.py --doctor to check the data path."]
+    out = ["Why names were dropped:"]
+    for family, count in rollup[:6]:
+        out.append(f"  {count:>4}  {family}")
+    top = rollup[0][0]
+    if top == "no expiry in range" and result.brief:
+        out.append("")
+        out += _wrap(result.brief.advice or "", 92)
+    elif top == "below score floor":
+        out.append("")
+        out.append("Everything passed the gates but nothing scored high enough — "
+                   "lower --min-score to see the near misses.")
+    elif top in ("no market cap data", "not enough price history"):
+        out.append("")
+        out.append("That looks like a data problem, not a market one. "
+                   "Run ./scan.py --doctor.")
+    return out
+
+
 def _money(x: Optional[float]) -> str:
     if not x:
         return "-"
@@ -36,18 +85,24 @@ def render_terminal(result: ScanResult, top: int = 20, colour: bool = True,
                     verbose: bool = False) -> str:
     lines: List[str] = []
     ts = result.generated_at.strftime("%Y-%m-%d %H:%M ET")
-    lines.append(_colour(colour, BOLD, f"0/1DTE scan  {ts}  provider={result.provider}  "
+    title = scan_title(result.config.gates.max_dte if result.config else 1)
+    lines.append(_colour(colour, BOLD, f"{title}  {ts}  provider={result.provider}  "
                                       f"universe={len(result.universe)}"))
     dp = (f"off-exchange: {result.darkpool_days}d loaded, as of {result.darkpool_asof}"
           if result.darkpool_days else
           _colour(colour, YELLOW, "off-exchange: UNAVAILABLE (dark pool signals disabled)"))
     lines.append(_colour(colour, DIM, dp))
+    if result.brief:
+        lines.append(_colour(colour, CYAN, result.brief.headline))
+        if result.brief.advice:
+            for chunk in _wrap(result.brief.advice, 92):
+                lines.append(_colour(colour, DIM, f"  {chunk}"))
     lines.append("")
 
     if not result.candidates:
         lines.append(_colour(colour, YELLOW, "No names cleared the gates and score floor."))
-        lines.append(_colour(colour, DIM, "Loosen --min-score, widen --universe, or check that "
-                                          "the market data provider returned chains."))
+        for line in _rollup_lines(result):
+            lines.append(_colour(colour, DIM, line))
     else:
         header = (f"{'#':>2}  {'SYM':<6} {'SIDE':<5} {'SCORE':>5} {'LAST':>9} {'CHG':>7} "
                   f"{'EXP':<10} {'EM%':>6} {'RVOL':>5} {'DPI':>6} {'OPTVOL':>9} {'STRIKE':>9}")
@@ -368,13 +423,23 @@ def render_cards(result: ScanResult, top: int = 20) -> str:
 def render_html(result: ScanResult, top: int = 20) -> str:
     e = html.escape
     ts = result.generated_at.strftime("%Y-%m-%d %H:%M ET")
+    brief_html = ""
+    if result.brief:
+        brief_html = (f'<p class="brief"><strong>{e(result.brief.headline)}</strong>'
+                      + (f' <span class="muted">{e(result.brief.advice)}</span>'
+                         if result.brief.advice else "") + "</p>")
     dp_note = (f"FINRA off-exchange: {result.darkpool_days} sessions loaded, latest "
                f"{result.darkpool_asof}" if result.darkpool_days
                else "FINRA off-exchange data unavailable — dark pool signals were skipped")
     cards = render_cards(result, top)
     if not cards:
-        cards = ('<p class="empty">Nothing cleared the gates. Loosen the filters, widen the '
-                 'universe, or re-run once the option chains populate after the open.</p>')
+        rollup = "".join(f"<li><strong>{n}</strong> &middot; {e(f)}</li>"
+                         for f, n in result.reason_rollup()[:6])
+        advice = e(result.brief.advice) if result.brief and result.brief.advice else ""
+        cards = ('<div class="empty"><p>Nothing cleared the gates.</p>'
+                 + (f"<ul class='why'>{rollup}</ul>" if rollup else "")
+                 + (f"<p class='muted'>{advice}</p>" if advice else "")
+                 + "</div>")
     rejected = "".join(
         f"<tr><td>{e(c.symbol)}</td><td>{e(c.error or '; '.join(c.gate_failures))}</td></tr>"
         for c in result.rejected[:80])
@@ -397,10 +462,11 @@ def render_html(result: ScanResult, top: int = 20) -> str:
 </head>
 <body>
 <div class="wrap">
-  <h1>0/1DTE Options Scanner</h1>
+  <h1>{e(scan_title(g.max_dte if g else 1)).replace("scan", "Options Scanner")}</h1>
   <p class="sub">{e(ts)} &middot; provider <strong>{e(result.provider)}</strong> &middot;
      {len(result.universe)} symbols screened &middot; {len(result.candidates)} passed</p>
   <p class="sub">{e(dp_note)}</p>
+  {brief_html}
   <p class="sub">Gates: {gate_line}</p>
   <div class="grid">{cards}</div>
   <details><summary class="muted">Rejected names ({len(result.rejected)})</summary>

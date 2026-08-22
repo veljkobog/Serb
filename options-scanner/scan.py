@@ -60,8 +60,10 @@ def build_parser() -> argparse.ArgumentParser:
     uni.add_argument("--list-presets", action="store_true", help="print the presets and exit")
 
     flt = p.add_argument_group("filters")
-    flt.add_argument("--max-dte", type=int, default=None, choices=[0, 1],
-                     help="0 = same-day expiry only, 1 = include the next session (default 1)")
+    flt.add_argument("--max-dte", type=int, default=None, choices=[0, 1, 2, 3, 4, 5],
+                     help="0 = same-day only, 1 = include the next session (default). "
+                          "Higher reaches this week's Friday on a Mon-Wed, when single "
+                          "names have nothing near-dated — a swing trade, not a 0DTE trade")
     flt.add_argument("--min-score", type=float, default=None, help="score floor, 0-100")
     flt.add_argument("--min-cap", type=_num, default=None, help="minimum market cap, e.g. 2e9 or 2B")
     flt.add_argument("--min-dollar-volume", type=_num, default=None,

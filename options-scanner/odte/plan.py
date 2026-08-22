@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from .config import Config
+from .session import horizon_notes
 from .providers.base import OptionChain, OptionContract
 from .score import LONG, SHORT, Candidate
 
@@ -260,16 +261,11 @@ def build(candidate: Candidate, chain: Optional[OptionChain], config: Config) ->
     }
 
     notes: List[str] = []
-    if vwap:
+    if vwap and candidate.dte <= 1:
         side_word = "above" if sign > 0 else "below"
         notes.append(f"Session VWAP {vwap:,.2f} — the trade is only valid while price "
                      f"holds {side_word} it.")
-    if candidate.dte == 0:
-        notes.append("0DTE: theta accelerates hard after ~14:00 ET — take the trade in "
-                     "the first half of the session or not at all.")
-    else:
-        notes.append("1DTE: overnight gap risk is the whole trade; size for a gap through "
-                     "your stop, not to it.")
+    notes.extend(horizon_notes(candidate.dte))
     if capped:
         notes.append(f"Target 2 is capped at the {wall:g} OI wall — that strike is a magnet, "
                      "not a level to trade through.")
