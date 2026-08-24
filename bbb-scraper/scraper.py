@@ -675,9 +675,39 @@ def inspect_har(path: str) -> int:
         return 2
 
     payload_count = sum(1 for _ in replay.iter_search_payloads(path))
+
+    rows = replay.inventory(path)
+    if not rows:
+        print("no bbb.org responses in this capture at all -- was DevTools open "
+              "before the page loaded?")
+    else:
+        print(f"\nbbb.org responses ({len(rows)}):")
+        empty = 0
+        for row in sorted(rows, key=lambda r: -(r["records"] * 1000 + r["profile_links"]))[:15]:
+            if not row["bytes"]:
+                empty += 1
+                continue
+            notes = []
+            if row["records"]:
+                notes.append(f"{row['records']} records")
+            if row["profile_links"]:
+                notes.append(f"{row['profile_links']} profile links")
+            notes.extend(row["markers"])
+            trailer = f"  [{', '.join(notes)}]" if notes else ""
+            print(f"  {row['status']} {row['mime'] or '?':<24} {row['bytes']:>8,}B  "
+                  f"{row['url'][:88]}{trailer}")
+        if empty:
+            print(f"  ({empty} response(s) had no saved body -- exported without content)")
+
     if not payload_count:
-        print("no JSON responses with business records -- re-capture with "
-              "'Save all as HAR with content', which keeps the response bodies")
+        with_links = [r for r in rows if r["profile_links"] > 3]
+        print("\nno JSON response carried business records.")
+        if with_links:
+            print("the listings appear to be rendered into the HTML instead -- see the rows "
+                  "above with profile links. That means Approach A needs to read the search "
+                  "page itself, not an XHR.")
+        else:
+            print("re-capture with 'Save all as HAR with content', which keeps response bodies.")
 
     specs = api_client.endpoints_from_har(path)
     if specs:

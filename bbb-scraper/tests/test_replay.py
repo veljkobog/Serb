@@ -223,5 +223,85 @@ class CoverageReportTest(unittest.TestCase):
         self.assertEqual(parse.format_coverage(parse.field_coverage([])), [])
 
 
+
+class HostMatchingTest(unittest.TestCase):
+    """Ad pixels carry the page address in a query parameter."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.har = os.path.join(self.tmp.name, "c.har")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_tracker_carrying_a_bbb_url_param_is_not_an_endpoint(self):
+        import api_client
+        pixel = ("https://www.googleadservices.com/pagead/conversion/836757218/"
+                 "?category=x&page=1&url=https%3A%2F%2Fwww.bbb.org%2Fsearch")
+        real = "https://www.bbb.org/api/businesssearch?find_text=plumber&page=1"
+        write_har(self.har, [
+            har_entry(pixel, json.dumps({"ok": True})),
+            har_entry(real, json.dumps({"searchResults": [
+                {"businessName": "Acme", "phone": "9105550134", "city": "W", "reportUrl": "/a"}]})),
+        ])
+        urls = [spec.url for spec in api_client.endpoints_from_har(self.har)]
+        self.assertEqual(urls, ["https://www.bbb.org/api/businesssearch"])
+        self.assertFalse(api_client.is_bbb_url(pixel))
+        self.assertTrue(api_client.is_bbb_url(real))
+        self.assertFalse(api_client.is_bbb_url("https://notbbb.org/x"))
+        self.assertTrue(api_client.is_bbb_url("https://www.bbb.org/x"))
+
+
+class InventoryTest(unittest.TestCase):
+    """What the capture holds, when the search API turns out not to exist."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.har = os.path.join(self.tmp.name, "c.har")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_server_rendered_search_page_is_surfaced(self):
+        html = ("<html><body>" + "".join(
+            f'<a href="/us/nc/wilmington/profile/plumber/co-{i}">Co {i}</a>' for i in range(8)
+        ) + '<script id="__NEXT_DATA__">{"props":{}}</script></body></html>')
+        write_har(self.har, [
+            har_entry("https://www.bbb.org/search?find_text=plumber", html, mime="text/html"),
+            har_entry("https://www.googleadservices.com/pagead/conversion/1/?url=https%3A%2F%2Fwww.bbb.org",
+                      '{"ok":true}'),
+        ])
+        rows = replay.inventory(self.har)
+        self.assertEqual(len(rows), 1, "only bbb.org hosts belong in the inventory")
+        row = rows[0]
+        self.assertEqual(row["profile_links"], 8)
+        self.assertIn("Next.js page data", row["markers"])
+        self.assertEqual(row["records"], 0)
+
+    def test_inspect_says_where_the_data_lives(self):
+        html = "<html>" + "".join(
+            f'<a href="/us/nc/w/profile/plumber/co-{i}">Co {i}</a>' for i in range(9)) + "</html>"
+        write_har(self.har, [
+            har_entry("https://www.bbb.org/search?find_text=plumber", html, mime="text/html"),
+        ])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            scraper.main(["--inspect-har", self.har])
+        output = buf.getvalue()
+        self.assertIn("bbb.org responses", output)
+        self.assertIn("profile links", output)
+        self.assertIn("rendered into the HTML", output)
+
+    def test_bodyless_export_is_called_out(self):
+        write_har(self.har, [
+            {"request": {"url": "https://www.bbb.org/search", "method": "GET",
+                         "headers": [], "cookies": []},
+             "response": {"content": {"mimeType": "text/html"}}},
+        ])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            scraper.main(["--inspect-har", self.har])
+        self.assertIn("no saved body", buf.getvalue())
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

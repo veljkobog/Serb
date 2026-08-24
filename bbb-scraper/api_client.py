@@ -163,6 +163,19 @@ def save_endpoints(path: str, specs: List[EndpointSpec], include_cookies: bool =
 # discovery: HAR
 # --------------------------------------------------------------------------
 
+def is_bbb_url(url: str) -> bool:
+    """True only when the *host* is bbb.org.
+
+    A substring check is not enough: ad and analytics pixels carry the page
+    address in a query parameter (url=https%3A%2F%2Fwww.bbb.org%2F...), so
+    every tracker on the page looked like a BBB endpoint.
+    """
+    if not url:
+        return False
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    return host == "bbb.org" or host.endswith(".bbb.org")
+
+
 _JSON_HINT = re.compile(r"json", re.I)
 _SEARCH_HINT = re.compile(r"(search|seek|find|business|accredited|typeahead)", re.I)
 _PAGE_PARAM_NAMES = ("page", "pageNumber", "page_number", "pg", "offset", "start", "from", "skip")
@@ -191,7 +204,7 @@ def endpoints_from_har(path: str, max_endpoints: int = 5) -> List[EndpointSpec]:
         request = entry.get("request", {})
         response = entry.get("response", {})
         url = request.get("url", "")
-        if not url or "bbb.org" not in url:
+        if not is_bbb_url(url):
             continue
 
         mime = (response.get("content", {}) or {}).get("mimeType", "")

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.parse
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import parse
@@ -97,6 +98,61 @@ def collect(path: str, category: str = "", max_results: Optional[int] = None) ->
             if max_results is not None and len(listings) >= max_results:
                 return listings, payloads
     return listings, payloads
+
+
+# Server-rendered pages hide their data in the HTML rather than an XHR.
+_EMBEDDED_MARKERS = (
+    ("__NEXT_DATA__", "Next.js page data"),
+    ("self.__next_f", "React Server Components stream"),
+    ("application/ld+json", "JSON-LD structured data"),
+    ("window.__INITIAL_STATE__", "inlined app state"),
+)
+
+
+def _host(url: str) -> str:
+    return (urllib.parse.urlsplit(url).hostname or "").lower()
+
+
+def is_bbb_url(url: str) -> bool:
+    host = _host(url)
+    return host == "bbb.org" or host.endswith(".bbb.org")
+
+
+def inventory(path: str) -> list:
+    """Every bbb.org response in the capture, with what it appears to contain.
+
+    When the search API turns out not to exist, this is what says where the
+    data actually lives.
+    """
+    rows = []
+    for entry in _entries(path):
+        url = (entry.get("request", {}) or {}).get("url", "")
+        if not is_bbb_url(url):
+            continue
+        response = entry.get("response", {}) or {}
+        content = response.get("content", {}) or {}
+        body = content.get("text", "") or ""
+        mime = (content.get("mimeType") or "").split(";")[0]
+
+        markers = [label for token, label in _EMBEDDED_MARKERS if token in body]
+        profile_links = body.count("/profile/")
+        records = 0
+        if body.strip().startswith(("{", "[")):
+            try:
+                records = len(parse.find_records(json.loads(body)))
+            except ValueError:
+                records = 0
+
+        rows.append({
+            "url": url,
+            "status": response.get("status"),
+            "mime": mime,
+            "bytes": len(body),
+            "records": records,
+            "profile_links": profile_links,
+            "markers": markers,
+        })
+    return rows
 
 
 def describe(path: str) -> str:
