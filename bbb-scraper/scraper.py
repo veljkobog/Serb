@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from typing import List, Optional
 
@@ -129,6 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--replay", default=None,
                      help="replay a captured HAR offline: parse its real payloads through the "
                           "whole pipeline with no network at all")
+    src.add_argument("--dump-sample", default=None,
+                     help="print the raw JSON-LD and markup samples from a HAR, and write "
+                          "sample-search.html / sample-profile.html for inspection")
     src.add_argument("--inspect-har", default=None,
                      help="report what a HAR contains (payloads, profile pages, endpoints), "
                           "then exit")
@@ -735,6 +739,64 @@ def inspect_har(path: str) -> int:
     return 0 if listings else 1
 
 
+def _excerpt(html: str, needle: str, before: int = 900, after: int = 1600) -> str:
+    index = html.find(needle)
+    if index < 0:
+        return ""
+    return html[max(0, index - before): index + after]
+
+
+def dump_sample(path: str) -> int:
+    """Show what the real markup actually contains.
+
+    JSON-LD gives identity and location but not the commercial fields, so this
+    prints one raw business node plus the surrounding card markup -- enough to
+    write extraction against without guessing.
+    """
+    import json as json_mod
+    import replay
+
+    pages = list(replay.iter_search_pages(path))
+    if not pages:
+        print("no rendered search pages in this capture", file=sys.stderr)
+        return 1
+
+    url, html = max(pages, key=lambda pair: len(pair[1]))
+    print(f"=== search page: {url[:110]}")
+    print(f"=== {len(html):,} bytes\n")
+
+    node = None
+    for block in parse.find_jsonld_blocks(html):
+        node = next(parse.iter_jsonld_businesses(block), None)
+        if node:
+            break
+    print("--- first JSON-LD business node (raw) ---")
+    print(json_mod.dumps(node, indent=1)[:1800] if node else "(none found)")
+
+    print("\n--- markup around the first result card ---")
+    card = _excerpt(html, "/profile/")
+    print(re.sub(r"\s+", " ", card)[:2200] if card else "(no profile link found)")
+
+    details = replay.detail_pages(path)
+    if details:
+        detail_url, detail_html = next(iter(details.items()))
+        print(f"\n=== profile page: {detail_url[:110]}")
+        for marker in ("Years in Business", "Number of Employees", "Business Started",
+                       "BBB Rating", "Accredited", "Website"):
+            excerpt = _excerpt(detail_html, marker, before=200, after=500)
+            if excerpt:
+                print(f"\n--- profile: '{marker}' ---")
+                print(re.sub(r"\s+", " ", excerpt)[:700])
+
+    for name, content in (("sample-search.html", html),
+                          ("sample-profile.html", next(iter(details.values()), ""))):
+        if content:
+            with open(name, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            print(f"\nwrote {name} ({len(content):,} bytes)")
+    return 0
+
+
 def collect_from_har(args, category: str) -> RunResult:
     """Build a RunResult from a capture instead of the network."""
     import replay
@@ -754,6 +816,8 @@ def collect_from_har(args, category: str) -> RunResult:
 
 
 def run(args) -> int:
+    if args.dump_sample:
+        return dump_sample(args.dump_sample)
     if args.inspect_har:
         return inspect_har(args.inspect_har)
 
@@ -1124,10 +1188,11 @@ def write_report(args, result, output, filters, locations, label, **counts) -> N
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    if not args.inspect_har and not (args.category or args.categories_file):
+    diagnostic = args.inspect_har or args.dump_sample
+    if not diagnostic and not (args.category or args.categories_file):
         print("--category (or --categories-file) is required", file=sys.stderr)
         return 2
-    if not args.inspect_har and not args.location:
+    if not diagnostic and not args.location:
         print("--location is required", file=sys.stderr)
         return 2
     if args.min_delay > args.max_delay:
