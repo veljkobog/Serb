@@ -130,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--replay", default=None,
                      help="replay a captured HAR offline: parse its real payloads through the "
                           "whole pipeline with no network at all")
+    src.add_argument("--base-url", default=None,
+                     help="override the site root (an enterprise proxy, or a test double)")
+    src.add_argument("--find-entity", default=None,
+                     help="BBB's own category id (tob_id, e.g. 10113-000 for Plumber) to pin "
+                          "the search to one category instead of matching on text")
     src.add_argument("--dump-sample", default=None,
                      help="print the raw JSON-LD and markup samples from a HAR, and write "
                           "sample-search.html / sample-profile.html for inspection")
@@ -350,25 +355,79 @@ def _default_paths(args, category, locations):
 
 
 class ApiSession:
-    """One HTTP client and one resolved endpoint for the whole run.
+    """One HTTP session for the whole run, in one of two modes.
 
-    Resolving the endpoint per metro would re-probe (and re-pay in requests)
-    for every city, and a client per metro would throw away the session
-    cookies and User-Agent that make the run look like one person browsing.
+    Default is `html`: BBB renders search results into the page, so Approach A
+    is a plain GET of the search URL, parsed via its schema.org JSON-LD. The
+    `json` mode is kept for an explicit --endpoints/--from-har config, in case
+    an XHR API exists on some pages or returns later.
+
+    Either way it is resolved once for the whole run -- re-probing per metro
+    would cost extra requests, and a client per metro would throw away the
+    cookies and User-Agent that make a long run look like one person browsing.
     """
 
     def __init__(self, args):
         self.args = args
         self.limiter = api_client.RateLimiter(min_delay=args.min_delay, max_delay=args.max_delay)
-        self.client = api_client.ApiClient(limiter=self.limiter, verbose=args.verbose)
+        self.mode = "json" if (args.endpoints or args.from_har or args.discover) else "html"
+        self.client = None
+        self.search = None
         self.spec = None
 
     def close(self):
-        self.client.close()
+        for closer in (self.client, self.search):
+            if closer is not None:
+                closer.close()
+        self.client = self.search = None
 
+    # ------------------------------------------------------------------
     def resolve(self, location: str):
-        """Find and verify a working endpoint. Raises EndpointUnavailable."""
+        if self.mode == "html":
+            return self._resolve_html(location)
+        return self._resolve_json(location)
+
+    def _resolve_html(self, location: str):
+        import search_client
+
+        base_url = self.args.base_url or search_client.BBB_BASE
+        self.search = search_client.SearchClient(
+            limiter=self.limiter, entity=self.args.find_entity, base_url=base_url,
+            verbose=self.args.verbose,
+        )
+        url = search_client.build_search_url(self.args.category or "", location,
+                                             base_url=base_url, entity=self.args.find_entity)
+        found = self.search.probe(self.args.category or "", location)
+        if not found:
+            self.search.close()
+            self.search = None
+            raise api_client.EndpointUnavailable(
+                f"no listings on {url} -- Cloudflare may be challenging the request; "
+                f"--browser runs the same search through Playwright"
+            )
+        print(f"[run] reading rendered search pages ({found} listings on page 1)")
+        return self.search
+
+    def iter_listings(self, category: str, location: str, start_page: int = 1):
+        """Yield (page_number, listings) regardless of which mode is active."""
+        if self.mode == "html":
+            yield from self.search.iter_pages(category, location, start_page=start_page)
+            return
+        for page, payload in self.client.iter_pages(category, location, start_page=start_page):
+            listings, skipped = parse.listings_from_payload(payload, default_category=category)
+            warn_unnamed(skipped, len(listings))
+            yield page, listings
+
+    def fetch_detail(self, profile_url: str):
+        if self.mode == "html":
+            return self.search.fetch_detail(profile_url)
+        return _http_detail_fetcher(self.client)(profile_url)
+
+    # ------------------------------------------------------------------
+    def _resolve_json(self, location: str):
+        """Find and verify a working JSON endpoint. Raises EndpointUnavailable."""
         args = self.args
+        self.client = api_client.ApiClient(limiter=self.limiter, verbose=args.verbose)
         specs = []
         if args.from_har:
             specs.extend(api_client.endpoints_from_har(args.from_har))
@@ -380,7 +439,7 @@ class ApiSession:
         if args.discover or not specs:
             try:
                 discovered = api_client.discover_endpoints(
-                    self.client.client, args.category, location, limiter=self.limiter
+                    self.client.client, args.category or "", location, limiter=self.limiter
                 )
                 if args.verbose:
                     print(f"[run] {len(discovered)} candidate endpoint(s) discovered", flush=True)
@@ -393,7 +452,7 @@ class ApiSession:
                 "no candidate endpoints -- capture a HAR (--from-har) or use --browser"
             )
 
-        self.spec = self.client.select_endpoint(specs, args.category, location)
+        self.spec = self.client.select_endpoint(specs, args.category or "", location)
         print(f"[run] using endpoint {self.spec.url} (source: {self.spec.source})")
         if args.save_endpoints:
             api_client.save_endpoints(args.save_endpoints, [self.spec],
@@ -406,20 +465,15 @@ def collect_via_api(session: ApiSession, category: str, location: str, checkpoin
                     collector: Collector, required_fields=None) -> bool:
     """Approach A for one location. False means fall back to Approach B."""
     args = session.args
-    client = session.client
     try:
         start_page = max(checkpoint.next_page(), args.skip + 1)
-        skipped_total = 0
-        for page, payload in client.iter_pages(category, location, start_page=start_page):
-            listings, skipped = parse.listings_from_payload(payload, default_category=category)
-            skipped_total += skipped
+        for page, listings in session.iter_listings(category, location, start_page=start_page):
             collector.add_page(page, listings)
             if collector.full:
                 break
-        warn_unnamed(skipped_total, len(collector.listings))
 
         if not args.no_detail:
-            enrich_details(_http_detail_fetcher(client), collector.listings, args,
+            enrich_details(session.fetch_detail, collector.listings, args,
                            required=required_fields)
         return True
 
@@ -523,6 +577,7 @@ class RunResult:
         self.listings: List[parse.Listing] = []
         self.pages = 0
         self.used_browser = False
+        self.approach = ""            # what actually served the run
         self.per_location = []          # (location, count) in pull order
         self.budget_spent = False
 
@@ -614,6 +669,8 @@ def collect_all(args, category, locations, progress, required_fields, clients) -
             ok = False
             session = clients.api(location)
             if session is not None:
+                result.approach = ("A (rendered html)" if session.mode == "html"
+                                   else "A (json api)")
                 ok = collect_via_api(session, category, location, checkpoint, collector,
                                      required_fields)
                 if not ok and not args.no_fallback:
@@ -1062,7 +1119,8 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     print("")
     print(heading)
     print("-" * len(heading))
-    print(f"  approach        : {'B (playwright)' if result.used_browser else 'A (json api)'}")
+    approach = "B (playwright)" if result.used_browser else (result.approach or "A")
+    print(f"  approach        : {approach}")
     if locations and len(locations) > 1:
         pulled_from = [f"{loc} {n}" for loc, n in result.per_location if n]
         print(f"  metros pulled   : {len(result.per_location)}/{len(locations)}")

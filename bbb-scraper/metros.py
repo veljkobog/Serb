@@ -69,6 +69,42 @@ def metros_for_state(code: str, path: str = DATA_PATH) -> List[str]:
     return [f"{city}-{suffix}" for city in cities]
 
 
+def location_label(slug: str) -> str:
+    """A location slug as BBB writes it: "wichita-ks" -> "Wichita, KS".
+
+    Captured search URLs use find_loc=Cheney%2C+KS, i.e. "City, ST" -- so the
+    trailing two-letter state is split off and the rest title-cased.
+    """
+    if not slug:
+        return ""
+    text = slug.strip()
+    if "," in text:                       # already "City, ST"
+        return text
+    parts = [p for p in re.split(r"[-_\s]+", text) if p]
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0].upper() if len(parts[0]) == 2 else parts[0].title()
+    if len(parts[-1]) == 2 and parts[-1].isalpha():
+        return f"{' '.join(p.title() for p in parts[:-1])}, {parts[-1].upper()}"
+    return " ".join(p.title() for p in parts)
+
+
+_SMALL_WORDS = {"and", "of", "the", "in", "for", "or"}
+
+
+def category_label(slug: str) -> str:
+    """A category slug as search text: "heating-and-air-conditioning" ->
+    "Heating and Air Conditioning"."""
+    if not slug:
+        return ""
+    parts = [p for p in re.split(r"[-_\s]+", slug.strip()) if p]
+    return " ".join(
+        part.lower() if index and part.lower() in _SMALL_WORDS else part.title()
+        for index, part in enumerate(parts)
+    )
+
+
 def parse_metros_arg(value: str) -> List[str]:
     """Comma- or whitespace-separated slugs from --metros."""
     if not value:

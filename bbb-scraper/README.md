@@ -17,6 +17,38 @@ pip install -r requirements.txt
 playwright install chromium      # only needed for the Approach B fallback
 ```
 
+## How it reads BBB
+
+BBB has **no JSON search API**. Results are rendered into the page, with
+schema.org JSON-LD alongside them, so Approach A is a plain GET of
+
+```
+https://www.bbb.org/search?find_country=USA&find_text=Plumber&find_loc=Wichita%2C+KS&page=2
+```
+
+parsed via that JSON-LD. Nothing to configure — this is the default:
+
+```bash
+python scraper.py --category plumber --location wichita-ks --max-results 100
+```
+
+The search page carries **name, address, phone and profile URL only**. Website, BBB rating,
+accreditation and years in business live on the profile page, which is why the detail pass
+exists — and why filtering on `--min-years` costs one extra request per business.
+
+Page size is 15. `--find-entity 10113-000` pins a search to BBB's own category id instead
+of matching on text, if free-text search ever proves too loose.
+
+A Cloudflare challenge is a 200 with no results, which is otherwise indistinguishable from
+"this city has no plumbers", so it's detected explicitly and raises rather than quietly
+returning an empty run. That's what triggers the fallback to Playwright.
+
+### If a JSON API ever appears
+
+The endpoint-discovery machinery below still works and takes over when you pass
+`--endpoints` or `--from-har`. It's kept because an undocumented API may exist on other
+pages, or return later.
+
 ## First run: point it at the search API
 
 The search endpoint is **not hardcoded**, on purpose. BBB's search API is undocumented,
