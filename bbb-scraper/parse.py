@@ -909,9 +909,11 @@ def listing_from_jsonld(node: dict, default_category: str = "") -> Listing:
         elif candidate_social and not social:
             social = candidate_social
 
-    category = _get(node, "additionalType", "knowsAbout") or default_category
+    category = _get(node, "additionalType", "knowsAbout")
     if isinstance(category, list):
-        category = category[0] if category else default_category
+        category = category[0] if category else None
+    # BBB's search JSON-LD carries no category, but its profile URLs embed one.
+    category = category or category_from_profile_url(profile) or default_category
 
     return Listing(
         company_name=_clean_text(_get(node, "name", "legalName", "alternateName")),
@@ -947,6 +949,135 @@ def listings_from_html(html: str, default_category: str = "") -> tuple:
             else:
                 skipped += 1
     return listings, skipped
+
+
+# --------------------------------------------------------------------------
+# Business profile pages
+# --------------------------------------------------------------------------
+#
+# Written against real BBB markup. Two sources sit on every profile: the
+# rendered HTML, and a large embedded JSON blob the app ships for analytics.
+# The blob is the more stable of the two, so it wins where both exist.
+#
+# React server-rendering splits text nodes with an empty HTML comment
+# (`<strong>Years in Business:</strong> <!-- -->78`), which every pattern here
+# has to tolerate.
+
+_GAP = r"\s*(?:<!--\s*-->)?\s*"
+
+
+def _labelled(label: str) -> "re.Pattern":
+    """Match `Label:` followed by its value across whatever markup separates them.
+
+    BBB uses <dt>/<dd> in one place and <strong> in another, with React's empty
+    comment between text nodes; a pattern tied to one of those shapes breaks on
+    the next redesign for no good reason.
+    """
+    return re.compile(
+        label + r"\s*:?\s*(?:</?[^>]{1,200}>|<!--\s*-->|\s)*([^<\n]{1,40})",
+        re.I,
+    )
+
+
+_PROFILE_PATTERNS = {
+    "years": (
+        _labelled(r"Years in Business"),
+    ),
+    "started": (
+        _labelled(r"Business Started"),
+    ),
+    "rating": (
+        re.compile(r'"business_rating"\s*:\s*"([A-DF][+-]?)"'),
+        re.compile(r'class="bpr-letter-grade"[^>]*>\s*([A-DF][+-]?)\s*<', re.I),
+        _labelled(r"BBB Rating"),
+    ),
+    "website": (
+        re.compile(r'"additionalWebsiteAddresses"\s*:\s*\[\s*"([^"]+)"'),
+        re.compile(r'"websiteAddress(?:es)?"\s*:\s*"([^"]+)"'),
+        re.compile(r'"website(?:Url|Uri)"\s*:\s*"([^"]+)"', re.I),
+    ),
+    "accredited_status": (
+        re.compile(r'"accredited_status"\s*:\s*"([A-Za-z]*)"'),
+    ),
+    "accredited_since": (
+        _labelled(r"BBB Accredited Since"),
+    ),
+    "reviews": (
+        re.compile(r'"(?:customerReviewCount|reviewCount)"\s*:\s*"?(\d+)"?'),
+        re.compile(r"([\d,]+)\s*Customer Reviews?", re.I),
+    ),
+    "complaints": (
+        re.compile(r'"complaintCount"\s*:\s*"?(\d+)"?'),
+        re.compile(r"([\d,]+)\s*(?:Customer )?Complaints?\b", re.I),
+    ),
+    "employees": (
+        _labelled(r"Number of Employees"),
+    ),
+}
+
+
+def _first(html: str, key: str) -> Optional[str]:
+    for pattern in _PROFILE_PATTERNS[key]:
+        match = pattern.search(html or "")
+        if match:
+            return match.group(1)
+    return None
+
+
+def category_from_profile_url(url: Any) -> str:
+    """BBB profile URLs embed the category: /us/ks/wichita/profile/plumber/name-0714-15740."""
+    if not url or not isinstance(url, str):
+        return ""
+    match = re.search(r"/profile/([^/]+)/", url)
+    return match.group(1) if match else ""
+
+
+_CANONICAL_PATTERNS = (
+    re.compile(r'<link[^>]+rel="canonical"[^>]+href="([^"]+)"', re.I),
+    re.compile(r'"canonical"\s*:\s*"([^"]+)"'),
+    re.compile(r'(/us/[a-z]{2}/[^"\s]*?/profile/[^"\s]+)'),
+)
+
+
+def _profile_url_in(html: str) -> str:
+    """The profile's own URL, for reading the category slug out of the path."""
+    for pattern in _CANONICAL_PATTERNS:
+        match = pattern.search(html or "")
+        if match:
+            return match.group(1)
+    return ""
+
+
+def listing_from_profile_html(html: str) -> Listing:
+    """Everything a profile page adds to a search result. Stdlib only.
+
+    Deliberately not DOM-based: this has to run wherever --replay does, which
+    includes machines with nothing installed but Python.
+    """
+    years = parse_count(_first(html, "years"))
+    if years is None:
+        years = parse_years_in_business(_first(html, "started"))
+
+    status = _first(html, "accredited_status")
+    accredited = None
+    if status:
+        accredited = status.upper() == "AB"
+    elif _first(html, "accredited_since"):
+        accredited = True
+
+    website, social = classify_website(_first(html, "website"))
+
+    return Listing(
+        website=website,
+        social_url=social,
+        category=category_from_profile_url(_profile_url_in(html)),
+        years_in_business=years if years is not None and years <= 200 else None,
+        accredited=accredited,
+        bbb_rating=normalize_rating(_first(html, "rating")),
+        bbb_reviews=parse_count(_first(html, "reviews")),
+        bbb_complaints=parse_count(_first(html, "complaints")),
+        employees=parse_employees(_first(html, "employees")),
+    )
 
 
 def listings_from_payload(payload: Any, default_category: str = "") -> tuple:

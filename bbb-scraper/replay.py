@@ -88,15 +88,17 @@ def detail_pages(path: str) -> Dict[str, str]:
 
 
 def replay_fetcher(path: str):
-    """Detail fetcher backed by the HAR instead of the network."""
-    from browser_client import listing_from_detail_html
+    """Detail fetcher backed by the HAR instead of the network.
 
+    Uses the stdlib profile parser rather than the DOM one, so replaying a
+    capture needs no third-party packages.
+    """
     pages = detail_pages(path)
     by_suffix = {url.split("bbb.org", 1)[-1]: html for url, html in pages.items()}
 
     def fetch(url: str):
         html = pages.get(url) or by_suffix.get(url.split("bbb.org", 1)[-1])
-        return listing_from_detail_html(html) if html else None
+        return parse.listing_from_profile_html(html) if html else None
 
     return fetch
 

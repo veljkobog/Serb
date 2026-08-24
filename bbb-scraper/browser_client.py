@@ -20,6 +20,7 @@ from typing import Iterator, List, Optional
 from parse import (
     Listing,
     classify_website,
+    listing_from_profile_html,
     parse_count,
     parse_employees,
     normalize_phone,
@@ -397,7 +398,18 @@ def listing_from_card_html(html: str, default_category: str = "") -> Listing:
 
 
 def listing_from_detail_html(html: str) -> Listing:
-    """Pull years_in_business / accreditation / website off a profile page."""
+    """Pull years / accreditation / rating / website off a profile page.
+
+    The stdlib extractor in parse.py handles the real BBB markup and its
+    embedded JSON; the DOM pass below only fills anything it left blank, so
+    this keeps working if the page shape changes underneath us.
+    """
+    listing = listing_from_profile_html(html)
+    listing.merge(_listing_from_detail_dom(html))
+    return listing
+
+
+def _listing_from_detail_dom(html: str) -> Listing:
     soup = _soup(html)
     text = soup.get_text(" ", strip=True)
 
