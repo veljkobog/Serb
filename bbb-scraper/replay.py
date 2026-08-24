@@ -52,6 +52,20 @@ def iter_search_payloads(path: str) -> Iterator[Tuple[str, dict]]:
             yield url, payload
 
 
+def iter_search_pages(path: str) -> Iterator[Tuple[str, str]]:
+    """(url, html) for server-rendered search pages in the capture."""
+    for entry in _entries(path):
+        url = (entry.get("request", {}) or {}).get("url", "")
+        if not is_bbb_url(url) or "/search" not in urllib.parse.urlsplit(url).path:
+            continue
+        mime = ((entry.get("response", {}) or {}).get("content", {}) or {}).get("mimeType", "")
+        if "html" not in mime.lower():
+            continue
+        body = _body(entry)
+        if body:
+            yield url, body
+
+
 def detail_pages(path: str) -> Dict[str, str]:
     """HTML profile pages in the capture, keyed by URL.
 
@@ -88,16 +102,30 @@ def replay_fetcher(path: str):
 
 
 def collect(path: str, category: str = "", max_results: Optional[int] = None) -> Tuple[list, int]:
-    """Every listing in the capture. Returns (listings, payloads_seen)."""
+    """Every listing in the capture, from JSON payloads and rendered pages alike.
+
+    Returns (listings, sources_seen).
+    """
     listings: List[parse.Listing] = []
-    payloads = 0
+    sources = 0
+
     for _url, payload in iter_search_payloads(path):
-        payloads += 1
+        sources += 1
         for listing in parse.iter_listings_from_payload(payload, default_category=category):
             listings.append(listing)
             if max_results is not None and len(listings) >= max_results:
-                return listings, payloads
-    return listings, payloads
+                return listings, sources
+
+    # BBB renders results into the page, so the HTML is the real source.
+    for _url, html in iter_search_pages(path):
+        sources += 1
+        found, _skipped = parse.listings_from_html(html, default_category=category)
+        for listing in found:
+            listings.append(listing)
+            if max_results is not None and len(listings) >= max_results:
+                return listings, sources
+
+    return listings, sources
 
 
 # Server-rendered pages hide their data in the HTML rather than an XHR.
@@ -158,6 +186,7 @@ def inventory(path: str) -> list:
 def describe(path: str) -> str:
     """A one-line summary of what a capture contains."""
     payload_count = sum(1 for _ in iter_search_payloads(path))
+    search_pages = sum(1 for _ in iter_search_pages(path))
     details = len(detail_pages(path))
     return (f"{os.path.basename(path)}: {payload_count} search payload(s) with records, "
-            f"{details} profile page(s)")
+            f"{search_pages} rendered search page(s), {details} profile page(s)")

@@ -699,13 +699,12 @@ def inspect_har(path: str) -> int:
         if empty:
             print(f"  ({empty} response(s) had no saved body -- exported without content)")
 
+    search_pages = sum(1 for _ in replay.iter_search_pages(path))
     if not payload_count:
-        with_links = [r for r in rows if r["profile_links"] > 3]
         print("\nno JSON response carried business records.")
-        if with_links:
-            print("the listings appear to be rendered into the HTML instead -- see the rows "
-                  "above with profile links. That means Approach A needs to read the search "
-                  "page itself, not an XHR.")
+        if search_pages:
+            print(f"{search_pages} rendered search page(s) found -- BBB serves results in the "
+                  f"HTML, so that is what gets parsed.")
         else:
             print("re-capture with 'Save all as HAR with content', which keeps response bodies.")
 
@@ -718,12 +717,12 @@ def inspect_har(path: str) -> int:
             print(f"    page={spec.page_param}  category={spec.category_param}  "
                   f"location={spec.location_param}")
             print(f"    params: {params}")
-    else:
+    elif not search_pages:
         print("no candidate search endpoints found -- was the XHR captured "
               "with response bodies ('Save all as HAR with content')?")
 
-    listings, payloads = replay.collect(path)
-    print(f"parsed {len(listings)} listing(s) from {payloads} payload(s)")
+    listings, sources = replay.collect(path)
+    print(f"\nparsed {len(listings)} listing(s) from {sources} source(s)")
     if listings:
         lines = parse.format_coverage(parse.field_coverage(listings))
         print("field coverage:")

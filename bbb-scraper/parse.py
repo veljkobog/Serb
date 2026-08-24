@@ -794,6 +794,161 @@ def dedupe(listings: Iterable[Listing]) -> tuple:
     return unique, dupes
 
 
+# --------------------------------------------------------------------------
+# JSON-LD (schema.org) embedded in server-rendered pages
+# --------------------------------------------------------------------------
+
+_JSONLD_RE = re.compile(
+    r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+    re.I | re.S,
+)
+
+# schema.org types that describe a business we want.
+_BUSINESS_TYPES = {
+    "localbusiness", "organization", "corporation", "homeandconstructionbusiness",
+    "plumber", "electrician", "roofingcontractor", "hvacbusiness", "generalcontractor",
+    "movingcompany", "professionalservice", "store", "locksmith", "painter",
+}
+
+
+def find_jsonld_blocks(html: str) -> list:
+    """Parsed <script type="application/ld+json"> payloads. Stdlib only.
+
+    Deliberately regex-based rather than DOM-based: this runs in --inspect-har
+    on machines that have nothing installed but Python.
+    """
+    blocks = []
+    for match in _JSONLD_RE.finditer(html or ""):
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        try:
+            blocks.append(json.loads(raw))
+        except ValueError:
+            # Some sites emit HTML-escaped or trailing-comma JSON; skip quietly.
+            continue
+    return blocks
+
+
+def _type_names(node: Any) -> set:
+    value = node.get("@type") if isinstance(node, dict) else None
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return set()
+    return {str(v).replace(" ", "").lower() for v in value}
+
+
+def _looks_like_business(node: Any) -> bool:
+    if not isinstance(node, dict):
+        return False
+    if _type_names(node) & _BUSINESS_TYPES:
+        return True
+    # Untyped or unknown-typed entries still count when they carry the shape.
+    has_name = bool(_get(node, "name", "legalName"))
+    has_contact = bool(_get(node, "telephone", "address", "url"))
+    return has_name and has_contact
+
+
+def iter_jsonld_businesses(node: Any) -> Iterator[dict]:
+    """Walk a JSON-LD document yielding business nodes, unwrapping ItemLists."""
+    if isinstance(node, list):
+        for item in node:
+            yield from iter_jsonld_businesses(item)
+        return
+    if not isinstance(node, dict):
+        return
+
+    if "itemListElement" in node:
+        for element in node.get("itemListElement") or []:
+            target = element.get("item") if isinstance(element, dict) else None
+            yield from iter_jsonld_businesses(target if target is not None else element)
+        return
+
+    if _looks_like_business(node):
+        yield node
+
+    for key, value in node.items():
+        if key in ("@context", "@type", "address", "aggregateRating"):
+            continue
+        if isinstance(value, (dict, list)):
+            yield from iter_jsonld_businesses(value)
+
+
+def listing_from_jsonld(node: dict, default_category: str = "") -> Listing:
+    """Build a Listing from one schema.org business node."""
+    address = _get(node, "address") or {}
+    if isinstance(address, list):
+        address = address[0] if address else {}
+    if not isinstance(address, dict):
+        address = {}
+
+    rating = _get(node, "aggregateRating") or {}
+    if not isinstance(rating, dict):
+        rating = {}
+
+    url_value = _get(node, "url", "@id", "mainEntityOfPage")
+    if isinstance(url_value, dict):
+        url_value = _get(url_value, "@id", "url")
+
+    website, social = "", ""
+    profile = ""
+    if _is_bbb_url(url_value):
+        profile = _absolutize(url_value if isinstance(url_value, str) else "")
+    else:
+        website, social = classify_website(url_value)
+
+    # sameAs is where schema.org puts social profiles, and sometimes the site.
+    same_as = _get(node, "sameAs")
+    if isinstance(same_as, str):
+        same_as = [same_as]
+    for link in same_as or []:
+        candidate_domain, candidate_social = classify_website(link)
+        if candidate_domain and not website:
+            website = candidate_domain
+        elif candidate_social and not social:
+            social = candidate_social
+
+    category = _get(node, "additionalType", "knowsAbout") or default_category
+    if isinstance(category, list):
+        category = category[0] if category else default_category
+
+    return Listing(
+        company_name=_clean_text(_get(node, "name", "legalName", "alternateName")),
+        website=website,
+        phone=normalize_phone(_get(node, "telephone", "contactPoint.telephone")),
+        street=_clean_text(_get(address, "streetAddress")),
+        city=_clean_text(_get(address, "addressLocality")),
+        state=normalize_state(_get(address, "addressRegion")),
+        zip=normalize_zip(_get(address, "postalCode")),
+        category=_clean_text(category) or default_category,
+        years_in_business=parse_years_in_business(_get(node, "foundingDate", "yearsInBusiness")),
+        accredited=parse_bool(_get(node, "isAccredited")),
+        bbb_rating=normalize_rating(_get(node, "bbbRating", "award")),
+        profile_url=profile,
+        social_url=social,
+        bbb_reviews=parse_count(_get(rating, "reviewCount", "ratingCount")),
+    )
+
+
+def listings_from_html(html: str, default_category: str = "") -> tuple:
+    """(listings, skipped) from a server-rendered page's JSON-LD.
+
+    BBB has no JSON search API -- results are rendered into the page, with
+    schema.org metadata alongside them. That metadata is cleaner than the
+    markup, so it is tried first; DOM parsing stays as the fallback.
+    """
+    listings, skipped = [], 0
+    for block in find_jsonld_blocks(html):
+        for node in iter_jsonld_businesses(block):
+            listing = listing_from_jsonld(node, default_category=default_category)
+            if listing.company_name:
+                listings.append(listing)
+            else:
+                skipped += 1
+    return listings, skipped
+
+
 def listings_from_payload(payload: Any, default_category: str = "") -> tuple:
     """(listings, skipped). Skipped records looked like businesses but had no name.
 

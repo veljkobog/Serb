@@ -290,7 +290,7 @@ class InventoryTest(unittest.TestCase):
         output = buf.getvalue()
         self.assertIn("bbb.org responses", output)
         self.assertIn("profile links", output)
-        self.assertIn("rendered into the HTML", output)
+        self.assertIn("BBB serves results in the HTML", output)
 
     def test_bodyless_export_is_called_out(self):
         write_har(self.har, [
