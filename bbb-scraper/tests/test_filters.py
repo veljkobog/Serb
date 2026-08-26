@@ -30,7 +30,7 @@ class FilterUnitTest(unittest.TestCase):
         base = dict(
             min_years=0, min_employees=0, min_bbb_reviews=0, max_bbb_complaints=None,
             min_google_reviews=0, min_google_rating=0.0, allow_low_match=False,
-            drop_unknown=False,
+            drop_unknown=False, require_website=False,
         )
         base.update(over)
         return type("A", (), base)()

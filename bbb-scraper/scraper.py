@@ -88,6 +88,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Google star rating (requires --google-key)")
     flt.add_argument("--allow-low-match", action="store_true",
                      help="trust low-confidence Google matches when filtering (default: treat as unknown)")
+    flt.add_argument("--require-website", action="store_true",
+                     help="drop listings with no company domain. NOTE: BBB publishes the website "
+                          "only on profile pages, so this needs a working detail pass -- with "
+                          "--no-detail (or profile pages blocked) it drops everything")
     flt.add_argument("--exclude-name", default=None,
                      help="drop listings whose name contains any of these (comma-separated, "
                           "case-insensitive) -- national chains, franchisors, supply houses")
@@ -269,6 +273,11 @@ def build_filters(args):
     if args.min_employees > 0:
         filters.append(Filter("min-employees", lambda l: l.employees,
                               lambda v: v >= args.min_employees, "employees"))
+    if args.require_website:
+        # Returns "" (not None) when absent: a blank website is a KNOWN absence,
+        # not an unknown, so it must fail rather than pass as "we can't tell".
+        # A social page is not a company domain and does not satisfy this either.
+        filters.append(Filter("require-website", lambda l: l.website, lambda v: bool(v)))
     if args.min_bbb_reviews > 0:
         filters.append(Filter("min-bbb-reviews", lambda l: l.bbb_reviews,
                               lambda v: v >= args.min_bbb_reviews, "bbb_reviews"))
@@ -989,6 +998,7 @@ def filter_settings(args) -> dict:
     return {
         "min_years": args.min_years,
         "min_employees": args.min_employees,
+        "require_website": args.require_website,
         "min_bbb_reviews": args.min_bbb_reviews,
         "max_bbb_complaints": args.max_bbb_complaints,
         "min_google_reviews": args.min_google_reviews,
@@ -1002,6 +1012,10 @@ def filter_settings(args) -> dict:
 
 
 def warn_blind_filters(args, filters) -> None:
+    if args.require_website and args.no_detail:
+        print("[run] warning: --require-website with --no-detail drops every row -- BBB "
+              "publishes the website only on profile pages, which the detail pass fetches",
+              file=sys.stderr)
     if not args.no_detail:
         return
     blind = {f.detail_field for f in filters if f.detail_field} & parse.DETAIL_FIELDS

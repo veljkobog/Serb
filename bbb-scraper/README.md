@@ -309,6 +309,17 @@ For home-services SMBs the Google review count is usually the best available pro
 volume — BBB review counts are much sparser, and BBB headcount is self-reported and often
 missing entirely. Expect to lean on Google if size is the thing you actually care about.
 
+### Requiring a website
+
+`--require-website` drops listings with no company domain. A blank website is treated as a
+**known absence**, not an unknown, so those rows fail rather than passing through the
+unknown-passes rule. A social page doesn't satisfy it either — `facebook.com/acme` isn't a
+domain you can enrich.
+
+One caveat with teeth: **BBB publishes the website only on profile pages**, so this needs a
+working detail pass. Combined with `--no-detail`, or when profile pages are blocked, it
+drops every row — the run warns rather than handing you an empty file.
+
 ### Excluding chains and franchises
 
 A category search also returns national chains, franchisors and supply houses. Nothing is

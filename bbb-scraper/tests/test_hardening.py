@@ -136,7 +136,7 @@ class ResumeSettingsTest(unittest.TestCase):
         values = dict(min_years=0, min_employees=0, min_bbb_reviews=0, max_bbb_complaints=None,
                       min_google_reviews=0, min_google_rating=0.0, allow_low_match=False,
                       drop_unknown=False, exclude_name=None, exclude_domain=None,
-                      exclude_file=None)
+                      exclude_file=None, require_website=False)
         values.update(over)
         return type("A", (), values)()
 

@@ -233,5 +233,39 @@ class OutputShapeTest(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "run-electrician.json")))
 
 
+
+class RequireWebsiteTest(unittest.TestCase):
+    """--require-website, and why a social page does not satisfy it."""
+
+    def args(self, **over):
+        values = dict(min_years=0, min_employees=0, min_bbb_reviews=0, max_bbb_complaints=None,
+                      min_google_reviews=0, min_google_rating=0.0, allow_low_match=False,
+                      drop_unknown=False, require_website=True)
+        values.update(over)
+        return type("A", (), values)()
+
+    def test_domain_passes_social_and_blank_do_not(self):
+        filters = scraper.build_filters(self.args())
+        kept, rejected = scraper.apply_filters([
+            Listing(company_name="has domain", website="acme.com"),
+            Listing(company_name="facebook only", social_url="https://facebook.com/acme"),
+            Listing(company_name="nothing"),
+        ], filters, drop_unknown=False)
+        self.assertEqual([l.company_name for l in kept], ["has domain"])
+        self.assertEqual(len(rejected), 2)
+
+    def test_off_by_default(self):
+        self.assertEqual(scraper.build_filters(self.args(require_website=False)), [])
+
+    def test_warns_when_it_would_empty_the_run(self):
+        """BBB serves the website only on profile pages."""
+        args = self.args()
+        args.no_detail = True
+        err = io.StringIO()
+        import contextlib
+        with contextlib.redirect_stderr(err):
+            scraper.warn_blind_filters(args, scraper.build_filters(args))
+        self.assertIn("drops every row", err.getvalue())
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

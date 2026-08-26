@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "The standing output format for enriched lead pulls. Use with --column-map so",
+    "every scrape produces the same columns in the same order:",
+    "",
+    "  python scraper.py --category plumber --location wichita-ks \\",
+    "      --min-years 10 --column-map lead-format.json --output leads.csv",
+    "",
+    "Columns the scraper cannot fill from BBB alone (owner name, email, CRM status)",
+    "are added by the Apollo/HubSpot enrichment pass afterwards -- they are listed",
+    "in enrichment-columns below so the two halves stay in one documented shape."
+  ],
+  "columns": {
+    "company_name": "company_name",
+    "website": "website",
+    "phone": "phone",
+    "street": "street",
+    "city": "city",
+    "state": "state",
+    "zip": "zip",
+    "category": "category",
+    "years_in_business": "years_in_business",
+    "accredited": "accredited",
+    "bbb_rating": "bbb_rating",
+    "bbb_reviews": "bbb_reviews",
+    "bbb_complaints": "bbb_complaints",
+    "employees": "employees",
+    "social_url": "social_url",
+    "profile_url": "profile_url"
+  },
+  "enrichment_columns": [
+    "owner_first_name", "owner_last_name", "title", "email", "email_status",
+    "crm_status", "linkedin_url", "verified_address", "match_confidence", "notes"
+  ]
+}
