@@ -53,12 +53,13 @@ no server, no dependencies, works offline.
 
 Verticals are ordered by how many partners cover them and split into three groups:
 
-- **Covered (3+ partners)** — Private Equity Group (20), HVAC (16), Roofing (16),
-  Plumbing (10), Electrical (8), IT (8), Landscaping (7), Exterior Services (6),
-  Commercial MEP (4), Commercial Facilities (3), Fire Protection (3).
-- **Thin coverage (under 3)** — Restoration Services, Windows, Asphalt, Cybersecurity,
-  Janitorial, Tree Care Services, Water. One buyer means no competitive tension; treat
-  a lead in these as a relationship call, not a process.
+- **Covered (3+ partners)** — HVAC (19), Private Equity Group (19), Roofing (16),
+  Plumbing (13), Electrical (9), Landscaping (8), IT (7), Commercial MEP (6),
+  Exterior Services (6), Commercial Facilities (5), Fire Protection (4),
+  Restoration Services (3).
+- **Thin coverage (under 3)** — Janitorial, Windows, Asphalt, Cybersecurity, Tree Care
+  Services. One buyer means no competitive tension; treat a lead in these as a
+  relationship call, not a process.
 - **Not yet classified** — partners still awaiting research.
 
 The threshold is the `COVERAGE_THRESHOLD` constant at the top of the script.
@@ -148,6 +149,7 @@ the drawer explains each so nobody re-derives the old answer:
 | **Clarion** | Private equity group | Operating HVAC/plumbing/electrical platform, Lake Forest IL |
 | **Pine Services Group** | Field services holdco | Evergreen's ERP and software vertical (NetSuite, Sage) |
 | **Comfort Connect** | HVAC acquirer | A financing and leasing platform, and the CRM places it in Markham, Ontario |
+| **SILA Services** | HVAC/plumbing/electrical + water treatment | Plumbing — no water-treatment line. Corrected by the deal team; the `water` vertical is deleted. |
 
 Two earlier flags also resolved: **Zeus** is Zeus Fire & Security (Paoli PA), and
 **Nexcore** is Trinity Hunt's commercial HVAC platform, not NexCore Group the

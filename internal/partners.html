@@ -363,7 +363,6 @@ const VERTICALS = {
   janitorial: {label:"Janitorial", color:"#5b8fa8"},
   asphalt:    {label:"Asphalt", color:"#8a8a8a"},
   restoration:{label:"Restoration Services", color:"#b5893a"},
-  water:      {label:"Water", color:"#3a86b5"},
   capital:    {label:"Private Equity Group", color:"#5b6b7d"},
   other:      {label:"Unclassified &mdash; needs research", color:"#7d5a5a"}
 };
@@ -397,12 +396,12 @@ const PARTNERS = [
  confidence:"verified"},
 
 {id:"sila", name:"SILA Services", kind:"platform", el:{d:"2026-07-01",deal:59149506171}, hsId:51288325999, url:"https://silaservices.com", hsLinkedin:"https://linkedin.com/company/silaservices", hsVertical:"Capital Partners", hsName:"Sila Services", hsLoc:"King of Prussia, Pennsylvania", sponsor:"Goldman Sachs Alternatives (majority, from Morgan Stanley Capital Partners, Nov 2024)",
- verticals:["hvac","plumbing","electrical","water"], hq:"King of Prussia, PA",
+ verticals:["hvac","plumbing","electrical"], hq:"King of Prussia, PA",
  footprint:"30+ brands across the Northeast, Mid-Atlantic and Midwest",
  states:["PA","NJ","NY","MD","VA","DE","CT","MA","OH","IN","DC"],
  brands:["My Plumber Plus","TriState Home Services","Triangle Heating, Cooling, Plumbing & Electrical"],
- buyBox:"Residential + light commercial HVAC, plumbing, electrical, water treatment, indoor air quality, home performance.",
- sourcingNotes:"The default call for anything in the I-95 corridor from Richmond to Boston, plus Ohio Valley. Water treatment and IAQ bolt-ons are in scope, which widens the target set beyond core trades.",
+ buyBox:"Residential and light commercial HVAC, plumbing and electrical.",
+ sourcingNotes:"The default call for anything in the I-95 corridor from Richmond to Boston, plus the Ohio Valley. 30+ brands and Goldman capital behind them since Nov 2024, so size is not the constraint \u2014 bring them established operators inside that footprint rather than small tuck-ins.",
  deals:[{when:"Nov 2024",what:"Goldman Sachs Alternatives majority investment",note:"Bought from Morgan Stanley Capital Partners, which backed Sila from 2021"},
         {when:"Nov 2023",what:"Triangle Heating, Cooling, Plumbing & Electrical",note:"Entry into Central Pennsylvania"},
         {when:"2022–24",what:"My Plumber Plus / TriState Home Services",note:"DMV and Frederick County, MD"}],
@@ -1040,7 +1039,7 @@ const HS_VERT_MAP = {"HVAC":"hvac","Plumbing":"plumbing","Electrical":"electrica
   "Windows":"windows","Landscaping":"landscaping","Tree Care Services":"tree",
   "Fire Protection":"fire","IT":"it","Cybersecurity":"cyber","Commercial MEP":"mep",
   "Commercial Facilities":"facilities","Janitorial":"janitorial","Asphalt":"asphalt",
-  "Restoration Services":"restoration","Water":"water"};
+  "Restoration Services":"restoration"};
 // True when the CRM's vertical tag contradicts every vertical we have this partner under.
 const verticalConflict = p => {
   const mapped = HS_VERT_MAP[p.hsVertical];
