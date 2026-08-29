@@ -184,6 +184,47 @@ The endpoint is resolved once and one session serves the whole batch — categor
 sequence, not concurrently, which keeps the request rate where the anti-bot section says
 it is.
 
+## Checking leads against the CRM before you send
+
+`crm_check.py` answers the question that actually matters before outreach — *should we
+contact this company* — which is four questions, not one:
+
+```bash
+export HUBSPOT_TOKEN=pat-na1-...
+python crm_check.py leads.csv --output leads-checked.csv
+```
+
+```
+crm check
+---------
+  send            : 12
+  review          : 2
+  skip-existing   : 5
+  skip-suppressed : 1
+  (!) 1 suppressed -- do not mail these
+```
+
+Each row gains `crm_verdict`, `crm_reason`, `crm_matched_on`, `crm_record_id`,
+`crm_owner_id`, `crm_last_contacted` and `crm_open_deals`; the original columns are kept.
+
+**Suppression outranks everything.** Unsubscribed, quarantined or previously-bouncing
+addresses come back `skip-suppressed` with the reason, never as a mere duplicate. Mailing
+them is a compliance problem and it burns the sending domain for every other campaign.
+
+**Matching runs strongest key first** — email, then phone, then company domain, then
+company name:
+
+- **Phone catches what email misses.** A CRM record with a blank or different domain is
+  invisible to a domain check, and for local trades businesses that's most of them.
+- **Toll-free numbers are never matched on**, for the same reason the scraper won't dedupe
+  on them: franchisees share them, so a match merges strangers.
+- **A name-only match is `review`, never `skip`.** "Brown's Plumbing" is not a unique
+  string, and silently dropping a real lead is worse than a second look.
+
+**An empty portal cannot produce an all-clear.** Zero matches from the wrong token looks
+exactly like a clean list, so the run counts the portal first and refuses rather than
+reporting good news it can't back up.
+
 ## Handing off to the pipeline
 
 **`--column-map map.json`** reshapes the CSV into whatever ingests it next — only the
@@ -447,6 +488,7 @@ results are exhausted, so a completed run doesn't cause the next one to skip pag
 bbb-scraper/
   scraper.py         # entry, CLI, orchestration, CSV output
   metros.py          # state -> metro expansion for full-state pulls
+  crm_check.py       # pre-send HubSpot check: suppression, prior contact, duplicates
   replay.py          # offline HAR replay, for testing against real payloads
   data/metros.json   # bundled metro list, editable
   api_client.py      # Approach A: endpoint discovery (HAR/probe), pagination, backoff
