@@ -10,6 +10,9 @@ email discovery happens downstream.
 python scraper.py --category plumber --location wilmington-nc --max-results 100
 ```
 
+**New here?** [`SETUP.md`](SETUP.md) covers where to put this on a Windows machine, where
+the output files land, and the three-step run.
+
 ## Install
 
 ```bash
