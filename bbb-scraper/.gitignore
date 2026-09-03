@@ -8,6 +8,7 @@ endpoints.json
 .progress-*.json
 .google-places-cache.json
 .apollo-cache.json
+.apollo-people-cache.json
 *.csv
 __pycache__/
 *.pyc

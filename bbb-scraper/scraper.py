@@ -1079,6 +1079,25 @@ def probe_apollo(args) -> int:
         else:
             print(f"  {row['status']:<6} {row['url']}")
 
+    import apollo_people
+    print("")
+    print("people endpoints (queries match nothing, so nothing is billed)")
+    print("-------------------------------------------------------------")
+    people_ok = {}
+    for row in apollo_people.probe_paths(key):
+        base = row["url"].rsplit("/", 2)[0]
+        if row["error"]:
+            print(f"  error  {row['url']}  ({row['error']})")
+        else:
+            print(f"  {'OK ' if row['ok'] else '   '}{row['status']:<5} {row['url']}")
+            people_ok.setdefault(base, []).append(row["ok"])
+    usable = [b for b, oks in people_ok.items() if all(oks)]
+    if usable:
+        print(f"\n  all three answer under: {usable[0]}")
+    else:
+        print("\n  no base prefix served all three -- owner/email enrichment "
+              "will not run until this resolves")
+
     if not live:
         print("\nNo endpoint answered. Check the key with:")
         print("  curl -H \"x-api-key: $APOLLO_API_KEY\" https://api.apollo.io/v1/auth/health")
