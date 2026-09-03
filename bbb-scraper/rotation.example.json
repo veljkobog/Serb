@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "The 9am schedule. Copy to rotation.json and edit -- rotation.json is",
+    "gitignored so your targeting isn't committed.",
+    "",
+    "Verticals are weighted by how many EL'd partners actually buy them:",
+    "roofing/exteriors (11 partners), HVAC+plumbing+electrical (9),",
+    "landscaping (6), then fire & life safety and security integration.",
+    "",
+    "MSP/IT is deliberately absent despite 5 partners wanting it. Managed",
+    "service providers rarely register with BBB -- it is a consumer-trust",
+    "directory and MSPs sell B2B -- so those lists would be mostly noise.",
+    "That vertical needs an Apollo-native search, not a BBB scrape.",
+    "",
+    "`metros` is the cycle. Each run takes the next slug and remembers where",
+    "it stopped in .rotation-state.json, so Thursday never re-serves Monday's",
+    "companies. Replace these with the metros you actually sell into --",
+    "`python scraper.py --list-metros --metros <state>` prints valid slugs."
+  ],
+  "target_rows": 15,
+  "max_results": 60,
+  "min_years": 0,
+  "daily_credit_cap": 40,
+  "min_employees": 5,
+  "metros": [
+    "wichita-ks", "kansas-city-mo", "oklahoma-city-ok", "tulsa-ok",
+    "omaha-ne", "des-moines-ia", "springfield-mo", "topeka-ks",
+    "lincoln-ne", "columbia-mo", "overland-park-ks", "norman-ok"
+  ],
+  "schedule": {
+    "monday":    ["roofing-contractors", "plumber"],
+    "tuesday":   ["heating-and-air-conditioning", "landscape-contractors"],
+    "wednesday": ["roofing-contractors", "electrician"],
+    "thursday":  ["heating-and-air-conditioning", "fire-protection-systems"],
+    "friday":    ["roofing-contractors", "security-systems"],
+    "saturday":  [],
+    "sunday":    []
+  }
+}

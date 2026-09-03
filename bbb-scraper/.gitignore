@@ -9,6 +9,9 @@ endpoints.json
 .google-places-cache.json
 .apollo-cache.json
 .apollo-people-cache.json
+.rotation-state.json
+rotation.json
+logs/
 *.csv
 __pycache__/
 *.pyc

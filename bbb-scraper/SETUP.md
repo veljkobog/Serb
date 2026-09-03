@@ -81,6 +81,74 @@ sheet. Keep `-Max` well above `-Target` or filtering leaves you short:
 .\run-leads.ps1 -Category roofing-contractors -Location wichita-ks -Target 15 -Max 60
 ```
 
+## Running it automatically at 9am
+
+One-time setup, in order. Each step checks the one before it, so if something
+is missing you find out now rather than at 9am on a morning nobody is watching.
+
+**1. Keys.** Both, then close and reopen PowerShell:
+
+```powershell
+setx APOLLO_API_KEY "<your key>"
+setx HUBSPOT_TOKEN "<your private-app token>"
+```
+
+**2. Pick your territory.** Copy the example config and edit the `metros`
+list to the cities you actually sell into:
+
+```powershell
+copy rotation.example.json rotation.json
+notepad rotation.json
+```
+
+`python scraper.py --list-metros --metros <state>` prints valid slugs. The
+rotation cycles through that list and remembers where it stopped, so the same
+companies do not come back on Thursday.
+
+**3. See what tomorrow would do, without fetching anything:**
+
+```powershell
+.\daily-leads.ps1 -DryRun
+```
+
+**4. Do one real run by hand before trusting the schedule:**
+
+```powershell
+.\daily-leads.ps1
+```
+
+**5. Schedule it:**
+
+```powershell
+.\install-schedule.ps1
+```
+
+That registers a weekday 9am task that wakes the machine if it is asleep. It
+**cannot** run while the machine is off; a missed run fires at your next login.
+
+Remove it any time with `.\install-schedule.ps1 -Remove`.
+
+### How you find out something broke
+
+An unattended job that dies quietly looks exactly like one with nothing to
+report, so this one is deliberately loud:
+
+  * every run writes `_daily-status.json` to the exports folder
+  * a failed run also drops `ATTENTION-<date>.txt` there -- the folder you
+    open every morning anyway
+  * a failed run raises a desktop notification. Only a failed one: a toast
+    every morning trains you to dismiss it unread
+  * `logs\run-<date>.log` has the full output
+
+A clean run deletes the day's ATTENTION file, so a stale banner never reads as
+today's failure.
+
+### Where it stops
+
+At the sheet. Nothing is pushed to Smartlead automatically. A wrong match that
+costs a deleted row is a nuisance; a wrong match that sends mail is a stranger
+getting a cold email from you.
+
 ## The three steps
 
 **1. Scrape** — from `C:\Serb\bbb-scraper`:
