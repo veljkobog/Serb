@@ -7,8 +7,9 @@
   .\run-leads.ps1 -Category plumber,roofing-contractors -Location nc -MinYears 10 -Max 500
 
 .NOTES
-  Default destination is C:\ClaudeAssistant\exports. Override per run with
-  -ExportFolder, or permanently with:  setx LEAD_EXPORT_DIR "D:\some\path"
+  Default destination is <your user folder>\ClaudeAssistant\exports, i.e.
+  C:\Users\<you>\ClaudeAssistant\exports. Override per run with -ExportFolder,
+  or permanently with:  setx LEAD_EXPORT_DIR "D:\some\path"
 
   The folder must already exist. If it doesn't, the run stops rather than
   creating one -- a lead file written to a folder nothing reads is worse than
@@ -30,7 +31,11 @@ $ErrorActionPreference = "Stop"
 
 # Destination: -ExportFolder, else $env:LEAD_EXPORT_DIR, else the standing folder.
 if (-not $ExportFolder) {
-    $ExportFolder = if ($env:LEAD_EXPORT_DIR) { $env:LEAD_EXPORT_DIR } else { "C:\ClaudeAssistant\exports" }
+    $ExportFolder = if ($env:LEAD_EXPORT_DIR) {
+        $env:LEAD_EXPORT_DIR
+    } else {
+        Join-Path $env:USERPROFILE "ClaudeAssistant\exports"
+    }
 }
 
 if (-not (Test-Path -LiteralPath $ExportFolder)) {
@@ -44,9 +49,10 @@ if (-not (Test-Path -LiteralPath $ExportFolder)) {
         Write-Host "look successful while writing where nothing reads. Check the real path:" -ForegroundColor Yellow
         Write-Host ""
         $guesses = @(
-            "C:\ClaudeAssistant\exports",
-            "$env:USERPROFILE\ClaudeAssistant\exports",
-            "$env:USERPROFILE\OneDrive\ClaudeAssistant\exports"
+            (Join-Path $env:USERPROFILE "ClaudeAssistant\exports"),
+            (Join-Path $env:USERPROFILE "ClaudeAssistant"),
+            (Join-Path $env:USERPROFILE "OneDrive\ClaudeAssistant\exports"),
+            "C:\ClaudeAssistant\exports"
         ) | Where-Object { Test-Path -LiteralPath $_ }
         if ($guesses) {
             Write-Host "  These exist - did you mean one of them?" -ForegroundColor Cyan

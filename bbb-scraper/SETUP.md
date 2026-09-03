@@ -24,7 +24,7 @@ You end up with:
 
 ```
 C:\Serb\bbb-scraper\        <- the code. You run commands from here.
-C:\ClaudeAssistant\exports\  <- where every lead sheet lands (BOB's source folder)
+C:\Users\<you>\ClaudeAssistant\exports\   <- every lead sheet lands here (BOB's source folder)
 ```
 
 The code and the output live in different places on purpose: updating the code never
@@ -38,7 +38,7 @@ touches your exports, and BOB keeps reading one folder.
 .\run-leads.ps1 -Category plumber -Location wichita-ks -Max 100 -MinYears 10
 ```
 
-Writes `C:\ClaudeAssistant\exports\plumber-wichita-ks-2026-08-26-1432.csv`, plus a
+Writes `C:\Users\<you>\ClaudeAssistant\exports\plumber-wichita-ks-2026-08-26-1432.csv`, plus a
 `.json` run report, and opens the folder when it finishes. Filenames carry the date and
 time, so repeat pulls never overwrite each other and BOB sees each batch separately.
 
@@ -67,7 +67,7 @@ email status and a match-confidence column.
 
 ```powershell
 $env:HUBSPOT_TOKEN = "pat-na1-..."
-python crm_check.py "C:\ClaudeAssistant\exports\plumber-wichita-ks-2026-08-26-1432.csv"
+python crm_check.py "$env:USERPROFILE\ClaudeAssistant\exports\plumber-wichita-ks-2026-08-26-1432.csv"
 ```
 
 Writes `...-checked.csv` next to it in the same exports folder, with a `crm_verdict` column: `send`, `review`,
