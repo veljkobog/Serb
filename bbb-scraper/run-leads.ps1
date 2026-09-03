@@ -4,12 +4,21 @@
 
 .EXAMPLE
   .\run-leads.ps1 -Category plumber -Location wichita-ks
-  .\run-leads.ps1 -Category plumber,roofing-contractors -Location nc -MinYears 10 -Max 500
+  .\run-leads.ps1 -Category roofing-contractors -Location wichita-ks -Target 15
+  .\run-leads.ps1 -Category plumber -Location nc -MinYears 10 -Max 500 -KeepSiteless
 
 .NOTES
   Default destination is <your user folder>\ClaudeAssistant\exports, i.e.
   C:\Users\<you>\ClaudeAssistant\exports. Override per run with -ExportFolder,
   or permanently with:  setx LEAD_EXPORT_DIR "D:\some\path"
+
+  -Target is the number of rows you want on the finished sheet (default 15).
+  -Max is how many raw BBB listings to pull before filtering; keep it well
+  above -Target or filtering will leave you short.
+
+  Companies with no website are dropped by default, using Apollo's free
+  lookup to find the website BBB withholds. Pass -KeepSiteless to keep them,
+  or -NoApollo to skip the lookup entirely.
 
   The folder must already exist. If it doesn't, the run stops rather than
   creating one -- a lead file written to a folder nothing reads is worse than
@@ -20,7 +29,10 @@ param(
     [Parameter(Mandatory = $true)][string[]]$Category,
     [Parameter(Mandatory = $true)][string]$Location,
     [int]$Max = 100,
+    [int]$Target = 15,
     [int]$MinYears = 0,
+    [switch]$NoApollo,
+    [switch]$KeepSiteless,
     [string]$ExportFolder,
     [switch]$CreateFolder,
     [switch]$NoOpen,
@@ -83,7 +95,22 @@ $scraperArgs = @(
     "-v"
 )
 if ($MinYears -gt 0) { $scraperArgs += @("--min-years", $MinYears) }
+if ($Target -gt 0)   { $scraperArgs += @("--target-rows", $Target) }
 if ($Browser)        { $scraperArgs += "--browser" }
+
+# BBB's profile pages 403, so `website` arrives blank and the website filter
+# would drop everything. Apollo's free lookup fills it back in first -- which
+# is why -KeepSiteless is refused without it rather than quietly passing.
+if (-not $NoApollo) {
+    if ($env:APOLLO_API_KEY) {
+        $scraperArgs += "--apollo"
+        if (-not $KeepSiteless) { $scraperArgs += "--require-website" }
+    } else {
+        Write-Host "APOLLO_API_KEY is not set - skipping the website lookup." -ForegroundColor Yellow
+        Write-Host "  Websites will be blank, so no website filter is applied." -ForegroundColor DarkGray
+        Write-Host '  Fix with:  setx APOLLO_API_KEY "<your key>"  (then reopen PowerShell)' -ForegroundColor DarkGray
+    }
+}
 
 Write-Host "Pulling $catLabel in $Location (cap $Max)" -ForegroundColor Cyan
 Write-Host "Export to: $out`n" -ForegroundColor DarkGray

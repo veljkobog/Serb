@@ -42,6 +42,10 @@ FIELD_ORDER = [
     "google_reviews",
     "google_place_id",
     "google_match",
+    # Apollo lookup: recovers the website BBB's 403'd profile page withholds,
+    # and carries the org id forward so the people-match can scope to it.
+    "apollo_org_id",
+    "apollo_match",
 ]
 
 # Fields that a search card rarely carries -- filtering on any of these means
@@ -79,6 +83,8 @@ class Listing:
     google_reviews: Optional[int] = None
     google_place_id: str = ""
     google_match: str = ""
+    apollo_org_id: str = ""
+    apollo_match: str = ""
 
     def dedupe_key(self) -> Optional[str]:
         """Normalized website, falling back to phone. None if neither is known.

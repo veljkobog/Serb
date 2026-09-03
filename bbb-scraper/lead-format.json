@@ -4,11 +4,19 @@
     "every scrape produces the same columns in the same order:",
     "",
     "  python scraper.py --category plumber --location wichita-ks \\",
-    "      --min-years 10 --column-map lead-format.json --output leads.csv",
+    "      --apollo --require-website --target-rows 15 \\",
+    "      --column-map lead-format.json --output leads.csv",
     "",
-    "Columns the scraper cannot fill from BBB alone (owner name, email, CRM status)",
-    "are added by the Apollo/HubSpot enrichment pass afterwards -- they are listed",
-    "in enrichment-columns below so the two halves stay in one documented shape."
+    "website is filled by Apollo's free lookup when BBB's profile page 403s.",
+    "apollo_org_id carries forward so the people-match can scope to the right",
+    "company instead of matching on a name string.",
+    "",
+    "Columns the scrape cannot fill at all (owner name, email, CRM status) are",
+    "added by the Apollo people-match and HubSpot passes afterwards -- they are",
+    "listed in enrichment_columns so the two halves stay in one documented shape.",
+    "employees is among them: Apollo only filters headcount at its own bucket",
+    "edges (1-10, 11-50, ...) and silently ignores any other range, so the >=5",
+    "rule is applied from the headcount returned by the paid people-match."
   ],
   "columns": {
     "company_name": "company_name",
@@ -26,10 +34,21 @@
     "bbb_complaints": "bbb_complaints",
     "employees": "employees",
     "social_url": "social_url",
-    "profile_url": "profile_url"
+    "profile_url": "profile_url",
+    "apollo_org_id": "apollo_org_id",
+    "apollo_match": "apollo_match"
   },
   "enrichment_columns": [
-    "owner_first_name", "owner_last_name", "title", "email", "email_status",
-    "crm_status", "linkedin_url", "verified_address", "match_confidence", "notes"
+    "owner_first_name",
+    "owner_last_name",
+    "title",
+    "email",
+    "email_status",
+    "crm_status",
+    "linkedin_url",
+    "verified_address",
+    "match_confidence",
+    "apollo_employees",
+    "notes"
   ]
 }

@@ -20,19 +20,18 @@ Match confidence:
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import tempfile
 import time
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional
+from typing import Iterable, Optional
 
 try:
     import httpx
 except ImportError:  # pragma: no cover
     httpx = None
 
+from diskcache import MISS, JsonCache
 from parse import Listing, normalize_domain, normalize_phone, parse_count, parse_rating_value
 
 PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
@@ -64,57 +63,13 @@ class GoogleUnavailable(RuntimeError):
 # cache
 # --------------------------------------------------------------------------
 
-MISS = object()   # distinct from a cached "Google found nothing"
+class PlacesCache(JsonCache):
+    """Places results on disk, so a re-run or a resumed run doesn't re-bill.
 
-
-class PlacesCache:
-    """Disk cache keyed by the BBB record, so re-runs don't re-bill."""
-
-    def __init__(self, path: Optional[str], ttl_days: int = DEFAULT_TTL_DAYS, now: Optional[float] = None):
-        self.path = path
-        self.ttl = ttl_days * 86400
-        self._now = now if now is not None else time.time()
-        self.entries: Dict[str, dict] = {}
-        self.hits = 0
-        self.dirty = False
-        if path and os.path.exists(path):
-            try:
-                with open(path, encoding="utf-8") as fh:
-                    self.entries = json.load(fh).get("entries", {})
-            except (OSError, ValueError):
-                self.entries = {}
-
-    def get(self, key: str):
-        """Cached result (possibly None for 'Google found nothing'), or MISS."""
-        entry = self.entries.get(key)
-        if not entry:
-            return MISS
-        if self.ttl and self._now - entry.get("fetched_at", 0) > self.ttl:
-            # Stale content expires -- drop it so the next call refetches.
-            del self.entries[key]
-            self.dirty = True
-            return MISS
-        self.hits += 1
-        return entry.get("result")
-
-    def put(self, key: str, result: Optional[dict]) -> None:
-        self.entries[key] = {"fetched_at": self._now, "result": result}
-        self.dirty = True
-
-    def save(self) -> None:
-        if not self.path or not self.dirty:
-            return
-        directory = os.path.dirname(os.path.abspath(self.path)) or "."
-        os.makedirs(directory, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=directory, prefix=".places-", suffix=".json")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump({"entries": self.entries}, fh)
-            os.replace(tmp, self.path)
-        except BaseException:
-            if os.path.exists(tmp):
-                os.unlink(tmp)
-            raise
+    Google's terms allow caching place IDs indefinitely but not other place
+    content long-term, so ratings expire on the TTL.
+    """
+    prefix = ".places-"
 
 
 def cache_key(listing: Listing) -> str:

@@ -30,6 +30,57 @@ C:\Users\<you>\ClaudeAssistant\exports\   <- every lead sheet lands here (BOB's 
 The code and the output live in different places on purpose: updating the code never
 touches your exports, and BOB keeps reading one folder.
 
+## Apollo (fills the website BBB won't give up)
+
+BBB's profile pages return 403 to the scraper, and the website lives on the
+profile, not the search card. So a raw pull has `website` blank for every row
+-- which means a website filter would drop *everything*. Apollo's lookup
+endpoint fills it back in, for free.
+
+Set the key once:
+
+```powershell
+setx APOLLO_API_KEY "<your key>"
+```
+
+Close PowerShell and reopen it (setx only affects new windows), then check:
+
+```powershell
+echo $env:APOLLO_API_KEY
+```
+
+`run-leads.ps1` picks it up automatically and drops websiteless companies. If
+the key isn't set it says so and skips the filter rather than silently
+returning an unfiltered sheet.
+
+If Apollo ever moves the endpoint (it has moved between `/v1` and `/api/v1`),
+discover the new one instead of guessing -- this costs nothing, because it
+queries for a company that does not exist:
+
+```powershell
+python scraper.py --apollo-probe
+```
+
+### What Apollo can and cannot filter for free
+
+Website presence: **free and reliable.**
+
+Headcount: **not at any threshold you choose.** Apollo honours only its own
+buckets -- 1-10, 11-50, 51-200, 201-500, ... -- and *silently ignores* any
+other range. A probe with `5,1000000` returned results byte-identical to no
+filter at all. There is no bucket edge at 5, so the ">= 5 employees" rule is
+applied later, from the headcount that comes back with the paid people-match,
+where it costs nothing extra.
+
+## Sheet size
+
+`-Max` caps the **raw** pull, before filtering. `-Target` caps the **finished**
+sheet. Keep `-Max` well above `-Target` or filtering leaves you short:
+
+```powershell
+.\run-leads.ps1 -Category roofing-contractors -Location wichita-ks -Target 15 -Max 60
+```
+
 ## The three steps
 
 **1. Scrape** — from `C:\Serb\bbb-scraper`:

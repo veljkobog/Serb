@@ -103,6 +103,11 @@ def build_parser() -> argparse.ArgumentParser:
                           "domains, everything else as a name fragment")
     flt.add_argument("--drop-unknown", action="store_true",
                      help="drop listings whose value for an active filter is unknown")
+    flt.add_argument("--target-rows", type=int, default=None,
+                     help="trim the finished sheet to this many rows. Unlike "
+                          "--max-results (which caps the RAW pull, before "
+                          "filtering) this counts rows that actually survived, "
+                          "so every sheet comes out the same size")
     flt.add_argument("--rejects", default=None,
                      help="write filtered-out listings here instead of discarding them")
 
@@ -124,6 +129,26 @@ def build_parser() -> argparse.ArgumentParser:
                      help="override the Places endpoint (enterprise proxy, or a test double)")
     goo.add_argument("--google-delay", type=float, default=0.0,
                      help="seconds between Google lookups (default: 0)")
+
+    apo = p.add_argument_group(
+        "apollo lookup (free -- recovers the website BBB's profile page withholds)")
+    apo.add_argument("--apollo", action="store_true",
+                     help="look each company up in Apollo to fill a missing website")
+    apo.add_argument("--apollo-key", default=None,
+                     help="Apollo API key (default: $APOLLO_API_KEY)")
+    apo.add_argument("--apollo-endpoint", default=None,
+                     help="pin the lookup URL instead of using the discovered default")
+    apo.add_argument("--apollo-probe", action="store_true",
+                     help="report which Apollo lookup URLs answer, then exit "
+                          "(uses a query that matches nothing, so it is free)")
+    apo.add_argument("--apollo-cache", default=".apollo-cache.json",
+                     help="lookup cache path (default: .apollo-cache.json)")
+    apo.add_argument("--apollo-cache-ttl", type=int, default=30,
+                     help="days before a cached lookup is refetched (default: 30)")
+    apo.add_argument("--max-apollo-lookups", type=int, default=500,
+                     help="cap lookups per run (default: 500)")
+    apo.add_argument("--apollo-delay", type=float, default=0.0,
+                     help="seconds between Apollo calls")
 
     src = p.add_argument_group("endpoint source")
     src.add_argument("--endpoints", help="JSON config of candidate API endpoints")
@@ -884,6 +909,9 @@ def collect_from_har(args, category: str) -> RunResult:
 def run(args) -> int:
     if args.dump_sample:
         return dump_sample(args.dump_sample)
+    if args.apollo_probe:
+        return probe_apollo(args)
+
     if args.inspect_har:
         return inspect_har(args.inspect_har)
 
@@ -1025,6 +1053,75 @@ def warn_blind_filters(args, filters) -> None:
               file=sys.stderr)
 
 
+def uses_apollo(args) -> bool:
+    return bool(args.apollo or args.apollo_key)
+
+
+def probe_apollo(args) -> int:
+    """Report which Apollo lookup URLs answer. Free -- matches nothing."""
+    import enrich_apollo
+
+    key = enrich_apollo.resolve_api_key(args.apollo_key)
+    if not key:
+        print("[apollo] no API key -- pass --apollo-key or set APOLLO_API_KEY",
+              file=sys.stderr)
+        return 2
+
+    print("probing Apollo lookup endpoints (query matches nothing, so nothing is billed)")
+    print("-------------------------------------------------------------------------")
+    live = []
+    for row in enrich_apollo.probe_endpoints(key):
+        if row["error"]:
+            print(f"  error  {row['url']}  ({row['error']})")
+        elif row["ok"]:
+            live.append(row["url"])
+            print(f"  OK {row['status']}  {row['url']}")
+        else:
+            print(f"  {row['status']:<6} {row['url']}")
+
+    if not live:
+        print("\nNo endpoint answered. Check the key with:")
+        print("  curl -H \"x-api-key: $APOLLO_API_KEY\" https://api.apollo.io/v1/auth/health")
+        return 1
+    print(f"\nUse: --apollo --apollo-endpoint {live[0]}")
+    if live[0] != enrich_apollo.DEFAULT_ENDPOINT:
+        print(f"(the built-in default {enrich_apollo.DEFAULT_ENDPOINT} did not answer)")
+    return 0
+
+
+def run_apollo_enrichment(args, listings):
+    """Fill missing websites from Apollo. Free, cached, capped.
+
+    Runs before the quality filters, not after: --require-website reads the
+    field this pass fills, so the order is the whole point.
+    """
+    import enrich_apollo
+
+    key = enrich_apollo.resolve_api_key(args.apollo_key)
+    if not key:
+        print("[run] Apollo lookup requested but no API key -- skipping "
+              "(pass --apollo-key or set APOLLO_API_KEY)", file=sys.stderr)
+        return None
+
+    cache = enrich_apollo.OrgCache(args.apollo_cache, ttl_days=args.apollo_cache_ttl)
+    try:
+        client = enrich_apollo.ApolloClient(
+            key, cache=cache, min_delay=args.apollo_delay, verbose=args.verbose,
+            endpoint=args.apollo_endpoint or enrich_apollo.DEFAULT_ENDPOINT,
+        )
+    except enrich_apollo.ApolloUnavailable as exc:
+        print(f"[run] Apollo lookup unavailable: {exc}", file=sys.stderr)
+        return None
+
+    print(f"[run] looking up {len(listings)} company/companies in Apollo "
+          f"(free; cap {args.max_apollo_lookups})")
+    try:
+        return enrich_apollo.enrich_listings(
+            listings, client, max_lookups=args.max_apollo_lookups)
+    finally:
+        client.close()
+
+
 def report_google_preflight(args, listings) -> None:
     """Print what enrichment would cost, without spending anything."""
     import enrich_google
@@ -1081,6 +1178,12 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
             (excluded_rows if excluded(listing, names, domains) else keep).append(listing)
         unique = keep
 
+    # Apollo first: it fills `website`, and --require-website is a local
+    # filter that reads it. Reversed, every row would still look "unknown".
+    apollo_stats = None
+    if uses_apollo(args) and unique:
+        apollo_stats = run_apollo_enrichment(args, unique)
+
     local = [f for f in filters if not f.needs_google]
     google = [f for f in filters if f.needs_google]
 
@@ -1096,6 +1199,11 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         google_stats = run_google_enrichment(args, kept)
         kept, rejected_google = apply_filters(kept, google, args.drop_unknown)
         rejected.extend(rejected_google)
+
+    trimmed = 0
+    if args.target_rows and len(kept) > args.target_rows:
+        trimmed = len(kept) - args.target_rows
+        kept = kept[:args.target_rows]
 
     column_map = None
     if args.column_map:
@@ -1149,6 +1257,20 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         print(f"  already in file : {already_written}")
     if excluded_rows:
         print(f"  excluded        : {len(excluded_rows)} (name/domain exclusions)")
+    if trimmed:
+        print(f"  trimmed         : {trimmed} row(s) over --target-rows "
+              f"{args.target_rows} (they passed; there was just no room)")
+
+    if apollo_stats:
+        print(f"  apollo lookups  : {apollo_stats.looked_up} free, "
+              f"{apollo_stats.cached} cached, {apollo_stats.matched} matched "
+              f"({apollo_stats.low_match} low-confidence)")
+        print(f"                    {apollo_stats.websites_filled} website(s) "
+              f"recovered that BBB withheld")
+        if apollo_stats.no_result or apollo_stats.errors or apollo_stats.capped:
+            print(f"                    {apollo_stats.no_result} not in Apollo, "
+                  f"{apollo_stats.errors} errors, {apollo_stats.capped} skipped at cap")
+
     if google_stats:
         print(f"  google lookups  : {google_stats.looked_up} billed, "
               f"{google_stats.cached} cached, {google_stats.matched} matched "
