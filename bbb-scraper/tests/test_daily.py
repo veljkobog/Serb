@@ -253,5 +253,70 @@ class ExcludeListTest(unittest.TestCase):
             self.assertFalse(self.excluded(name), name)
 
 
+class DryRunOutputTest(unittest.TestCase):
+    """A dry run exists to show the plan. One that prints only 'nothing was
+    fetched' confirms nothing and is worse than useless -- it looks like a
+    successful check."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.config = os.path.join(self.tmp.name, "rotation.json")
+        with open(self.config, "w", encoding="utf-8") as fh:
+            json.dump(CONFIG, fh)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def dry_run(self, date="2026-09-07"):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = daily.main(["--config", self.config,
+                               "--export-dir", self.tmp.name,
+                               "--state", os.path.join(self.tmp.name, "s.json"),
+                               "--date", date, "--dry-run"])
+        return code, buf.getvalue()
+
+    def test_it_names_every_list_it_would_pull(self):
+        _code, out = self.dry_run()
+        self.assertIn("roofing-contractors", out)
+        self.assertIn("plumber", out)
+        self.assertIn("wichita-ks", out)
+
+    def test_it_shows_the_screen_being_applied(self):
+        _code, out = self.dry_run()
+        self.assertIn("min employees", out)
+        self.assertIn("20", out)
+
+    def test_it_names_the_destination(self):
+        _code, out = self.dry_run()
+        self.assertIn(self.tmp.name, out)
+
+    def test_a_quiet_day_says_so_rather_than_printing_nothing(self):
+        _code, out = self.dry_run(date="2026-09-05")
+        self.assertIn("nothing scheduled", out)
+
+    def test_a_dry_run_never_overwrites_a_real_runs_status_file(self):
+        """Otherwise checking the plan erases the morning's report."""
+        status_path = os.path.join(self.tmp.name, "_daily-status.json")
+        daily.write_status(self.tmp.name, {"date": "2026-09-07",
+                                           "sheets": [{"file": "real.csv", "rows": 12}],
+                                           "problems": []})
+        self.dry_run()
+        with open(status_path, encoding="utf-8") as fh:
+            kept = json.load(fh)
+        self.assertEqual(kept["sheets"][0]["file"], "real.csv")
+
+    def test_missing_credentials_are_called_out_before_the_real_run(self):
+        saved = os.environ.pop("HUBSPOT_TOKEN", None)
+        try:
+            _code, out = self.dry_run()
+        finally:
+            if saved is not None:
+                os.environ["HUBSPOT_TOKEN"] = saved
+        self.assertIn("HUBSPOT_TOKEN", out)
+
+
 if __name__ == "__main__":
     unittest.main()

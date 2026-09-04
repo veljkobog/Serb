@@ -352,6 +352,40 @@ def run(config: dict, export_dir: str, when: dt.date,
     return status
 
 
+def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> None:
+    """What this run does, and under what screen.
+
+    A dry run that prints only "nothing was fetched" confirms nothing -- the
+    reason to run one is to see the plan before spending the time.
+    """
+    plan = status.get("planned") or []
+    print("")
+    print(f"{when.strftime('%A %d %B %Y')} -- {len(plan)} list(s)")
+    print("-" * 46)
+    if not plan:
+        print("  nothing scheduled (weekends are empty by default)")
+    for item in plan:
+        print(f"  {item['category']:<32} {item['metro']}")
+
+    print("")
+    print("screen")
+    print("-" * 46)
+    print(f"  min employees   : {config.get('min_employees') or 'none'}"
+          f"   (>= $500K EBITDA proxy)")
+    print(f"  min years       : {config.get('min_years') or 'none'}")
+    print(f"  rows per sheet  : {config.get('target_rows')}"
+          f" (from up to {config.get('max_results')} raw)")
+    print(f"  apollo cap      : {config.get('daily_credit_cap')} credits/day")
+    excludes = config.get("exclude_file")
+    print(f"  excluding       : {excludes or 'nothing'}")
+    print(f"  writing to      : {export_dir}")
+
+    if not os.environ.get("APOLLO_API_KEY"):
+        print("\n  (!) APOLLO_API_KEY not set -- no owner names or emails")
+    if not os.environ.get("HUBSPOT_TOKEN"):
+        print("  (!) HUBSPOT_TOKEN not set -- rows will NOT be CRM-checked")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -385,7 +419,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     state_path = args.state or os.path.join(HERE, STATE_FILE)
 
     status = run(config, export_dir, when, state_path, dry_run=args.dry_run)
-    write_status(export_dir, status)
+    if not args.dry_run:
+        # A dry run must not touch the status file: overwriting a real run's
+        # record with "nothing was fetched" would erase the morning's report.
+        write_status(export_dir, status)
+
+    print_plan(config, status, when, export_dir)
 
     for sheet in status.get("sheets", []):
         print(f"[daily] {sheet['file']}: {sheet['rows']} rows")

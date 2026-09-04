@@ -65,6 +65,11 @@ if ($code -ne 0) {
     Write-Host "`nRun finished with problems. See:" -ForegroundColor Yellow
     Write-Host "  $log" -ForegroundColor Yellow
     Write-Host "  $ExportFolder\ATTENTION-$(Get-Date -Format 'yyyy-MM-dd').txt" -ForegroundColor Yellow
+} elseif ($DryRun) {
+    # Claiming sheets exist when none were written is how a dry run gets
+    # mistaken for a real one.
+    Write-Host "`nDry run only - no sheets were written." -ForegroundColor Cyan
+    Write-Host "Run without -DryRun to pull these lists for real." -ForegroundColor DarkGray
 } else {
     Write-Host "`nDone. Sheets are in $ExportFolder" -ForegroundColor Green
 }
