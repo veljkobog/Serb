@@ -64,6 +64,12 @@ PROBE_NAME = "zzzqx-nonexistent-company-999"
 
 DEFAULT_TTL_DAYS = 30
 
+#: Apollo looked and has no such company. Distinct from "" (never looked).
+#: A BBB listing with real headcount and no Apollo record is a company the
+#: Apollo-first tools cannot see at all -- the reason to scrape BBB in the
+#: first place -- so it is labelled rather than dropped.
+NOT_IN_APOLLO = "not-in-apollo"
+
 _STOPWORDS = {
     "the", "and", "inc", "llc", "co", "company", "corp", "corporation", "ltd",
     "services", "service", "of", "&", "plumbing", "roofing", "heating",
@@ -236,6 +242,11 @@ class ApolloClient:
 
         org, confidence = best_match(listing, orgs)
         if not org:
+            # Recorded, not left blank. "" means the lookup never ran;
+            # NOT_IN_APOLLO means it ran and Apollo has no such company --
+            # which for a sizeable BBB listing is the interesting case, not a
+            # reason to discard the row.
+            listing.apollo_match = NOT_IN_APOLLO
             self.stats.no_result += 1
             return
 

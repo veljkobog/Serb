@@ -54,6 +54,26 @@ USER_AGENTS = [
 BLOCK_STATUSES = {403, 429, 503}
 
 
+def document_headers(referer: Optional[str] = None) -> Dict[str, str]:
+    """What a browser sends when a person clicks through to a page.
+
+    Kept in one place so the search and detail paths cannot drift apart: it
+    was the drift -- a JSON Accept on an HTML request -- that got profile
+    pages blocked.
+    """
+    return {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                  "image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Referer": referer or (BBB_BASE + "/"),
+    }
+
+
 class BlockedError(RuntimeError):
     """Raised after N consecutive blocks -- caller saves partial results."""
 
@@ -461,16 +481,23 @@ class ApiClient:
         raise BlockedError(f"page {page} failed after {self.max_consecutive_blocks} attempts")
 
     # ------------------------------------------------------------------
-    def fetch_detail_html(self, url: str) -> Optional[str]:
+    def fetch_detail_html(self, url: str, referer: Optional[str] = None) -> Optional[str]:
         """Fetch a business profile page as HTML, paced like any other request.
 
         Approach A needs this too: filters on headcount or review counts read
         fields the search card doesn't carry, and without it the run would
         filter on values it never fetched.
+
+        Sent as a document navigation, not an API call. The client default
+        Accept is "application/json" for the search endpoints, and asking an
+        HTML page for JSON with no Sec-Fetch headers is a plain bot signature
+        -- profile pages answered 403 to exactly that request shape. The
+        Referer is the search page the link came from, because that is where a
+        real click would have come from.
         """
         self.limiter.wait()
         try:
-            response = self.client.get(url, headers={"Referer": BBB_BASE + "/"})
+            response = self.client.get(url, headers=document_headers(referer))
         except Exception as exc:
             self._log(f"detail request failed for {url}: {exc}")
             return None

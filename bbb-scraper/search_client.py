@@ -20,7 +20,8 @@ from typing import Iterator, Optional, Tuple
 
 import metros
 import parse
-from api_client import BLOCK_STATUSES, BlockedError, RateLimiter, ApiClient
+from api_client import (BLOCK_STATUSES, ApiClient, BlockedError, RateLimiter,
+                        document_headers)
 
 BBB_BASE = "https://www.bbb.org"
 SEARCH_PATH = "/search"
@@ -85,6 +86,8 @@ class SearchClient:
         self._api.client.headers["Accept"] = (
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         )
+        #: The search page a profile link was found on, sent as its referer.
+        self.last_search_url = base_url.rstrip("/") + "/"
 
     # ------------------------------------------------------------------
     @property
@@ -111,7 +114,9 @@ class SearchClient:
         self._log(f"GET {url}")
         self._api.limiter.wait()
 
-        response = self._api.client.get(url, headers={"Referer": self.base_url + "/"})
+        response = self._api.client.get(
+            url, headers=document_headers(self.last_search_url))
+        self.last_search_url = url
         if response.status_code in BLOCK_STATUSES:
             self._api.consecutive_blocks += 1
             raise BlockedError(
@@ -192,6 +197,11 @@ class SearchClient:
         return url
 
     def fetch_detail(self, profile_url: str):
-        """Profile page as a Listing, using the same paced session."""
-        html = self._api.fetch_detail_html(self.absolute(profile_url))
+        """Profile page as a Listing, using the same paced session.
+
+        The referer is the search page this link was found on, which is where
+        a real click would have come from.
+        """
+        html = self._api.fetch_detail_html(self.absolute(profile_url),
+                                           referer=self.last_search_url)
         return parse.listing_from_profile_html(html) if html else None

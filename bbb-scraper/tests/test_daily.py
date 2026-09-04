@@ -175,5 +175,83 @@ class ExitCodeTest(unittest.TestCase):
         self.assertEqual(self.run_daily("--date", "2026-09-05"), 0)
 
 
+class ConfigSlugTest(unittest.TestCase):
+    def test_every_metro_in_the_shipped_config_is_a_real_slug(self):
+        """A typo here means a silent empty list every time it comes up."""
+        import json
+
+        import metros
+        path = os.path.join(os.path.dirname(HERE), "rotation.example.json")
+        config = daily.load_config(path)
+        known = set()
+        for code in json.load(
+                open(os.path.join(os.path.dirname(HERE), "data", "metros.json"),
+                     encoding="utf-8"))["metros"]:
+            known.update(metros.metros_for_state(code))
+        bad = [m for m in config["metros"] if m not in known]
+        self.assertEqual(bad, [], f"unknown metro slugs: {bad}")
+
+    def test_the_screen_targets_acquirable_companies(self):
+        """>= $500K EBITDA is roughly 20+ employees at home-services margins.
+        A bar of 5 would fill the sheet with companies that cannot qualify."""
+        path = os.path.join(os.path.dirname(HERE), "rotation.example.json")
+        config = daily.load_config(path)
+        self.assertGreaterEqual(config["min_employees"], 20)
+
+    def test_partner_exclusions_are_wired_in(self):
+        path = os.path.join(os.path.dirname(HERE), "rotation.example.json")
+        config = daily.load_config(path)
+        self.assertTrue(config.get("exclude_file"))
+        self.assertTrue(os.path.exists(
+            os.path.join(os.path.dirname(HERE), config["exclude_file"])))
+
+
+class HeadcountGuardTest(unittest.TestCase):
+    """A blocked profile page turns the size screen off without failing."""
+
+    def test_all_blank_headcount_is_a_full_gap(self):
+        rows = [{"employees": ""}, {"employees": ""}]
+        self.assertEqual(daily.unknown_headcount(rows), 1.0)
+
+    def test_all_populated_is_no_gap(self):
+        rows = [{"employees": "27"}, {"employees": "40"}]
+        self.assertEqual(daily.unknown_headcount(rows), 0.0)
+
+    def test_an_empty_sheet_is_unknown_not_zero(self):
+        self.assertIsNone(daily.unknown_headcount([]))
+
+    def test_whitespace_counts_as_missing(self):
+        self.assertEqual(daily.unknown_headcount([{"employees": "  "}]), 1.0)
+
+
+class ExcludeListTest(unittest.TestCase):
+    def setUp(self):
+        import argparse
+
+        import scraper
+        path = os.path.join(os.path.dirname(HERE), "partners.exclude.txt")
+        ns = argparse.Namespace(exclude_name="", exclude_domain="", exclude_file=path)
+        self.names, self.domains = scraper.load_exclusions(ns)
+        self.scraper = scraper
+
+    def excluded(self, name):
+        class L:
+            company_name = name
+            website = ""
+        return self.scraper.excluded(L(), self.names, self.domains)
+
+    def test_an_existing_partner_is_never_sourced_as_a_target(self):
+        """AVI Roofing came back from a live Apollo query while testing."""
+        self.assertTrue(self.excluded("AVI Roofing, Inc."))
+        self.assertTrue(self.excluded("Ridgeline Roofing"))
+
+    def test_generic_partner_names_do_not_drop_unrelated_companies(self):
+        """'Apex' and 'Orion' as fragments would delete real targets."""
+        for name in ("Apex Plumbing & Heating", "Orion Electric LLC",
+                     "Cornett Roofing Systems", "Rogers Roofing",
+                     "Zeus Mechanical"):
+            self.assertFalse(self.excluded(name), name)
+
+
 if __name__ == "__main__":
     unittest.main()

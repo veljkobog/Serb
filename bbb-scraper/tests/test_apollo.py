@@ -111,12 +111,18 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(l.apollo_org_id, "d" * 24)
         self.assertEqual(l.website, "savedroofing.com")
 
-    def test_unknown_company_is_recorded_as_no_result(self):
+    def test_a_company_apollo_lacks_is_labelled_not_left_blank(self):
+        """"" means the lookup never ran; not-in-apollo means it ran and found
+        nothing. A sizeable BBB listing Apollo has never heard of is the whole
+        reason to scrape BBB, so it must be distinguishable."""
         l = listing("Nobody Has Heard Of This")
         with self.client() as c:
             c.enrich(l)
-        self.assertEqual(l.apollo_match, "")
+        self.assertEqual(l.apollo_match, enrich_apollo.NOT_IN_APOLLO)
         self.assertEqual(c.stats.no_result, 1)
+
+    def test_a_listing_never_looked_up_keeps_an_empty_match(self):
+        self.assertEqual(listing("Untouched").apollo_match, "")
 
     def test_cache_stops_a_second_run_re_calling(self):
         path = os.path.join(self.tmp.name, "apollo.json")

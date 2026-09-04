@@ -30,7 +30,7 @@ C:\Users\<you>\ClaudeAssistant\exports\   <- every lead sheet lands here (BOB's 
 The code and the output live in different places on purpose: updating the code never
 touches your exports, and BOB keeps reading one folder.
 
-## Apollo (fills the website BBB won't give up)
+## Apollo (enrichment, not discovery)
 
 BBB's profile pages return 403 to the scraper, and the website lives on the
 profile, not the search card. So a raw pull has `website` blank for every row
@@ -61,16 +61,48 @@ queries for a company that does not exist:
 python scraper.py --apollo-probe
 ```
 
-### What Apollo can and cannot filter for free
+### What Apollo is and is not for here
 
-Website presence: **free and reliable.**
+Apollo is the **enrichment** layer, not the discovery layer. Discovery is BBB,
+deliberately: BBB carries operating companies Apollo has never indexed, and an
+Apollo-first search cannot find what Apollo does not have.
 
-Headcount: **not at any threshold you choose.** Apollo honours only its own
-buckets -- 1-10, 11-50, 51-200, 201-500, ... -- and *silently ignores* any
-other range. A probe with `5,1000000` returned results byte-identical to no
-filter at all. There is no bucket edge at 5, so the ">= 5 employees" rule is
-applied later, from the headcount that comes back with the paid people-match,
-where it costs nothing extra.
+So nothing is ever dropped for being absent from Apollo. A row comes back
+labelled instead:
+
+  * `apollo_match` = `high` / `medium` / `low` -- Apollo knows this company
+  * `apollo_match` = `not-in-apollo` -- Apollo looked and has no such company
+  * `apollo_match` = blank -- the lookup never ran
+
+A row marked **not-in-apollo with real headcount is a sleeper**: a company of
+size that the Apollo-first tools cannot see at all. Sort by that column first.
+
+### Sizing without EBITDA
+
+Nobody publishes EBITDA for private companies this size -- not BBB, not
+Apollo. Headcount is the proxy. At home-services margins of 10-15%, **$500K
+EBITDA implies roughly $3.5-5M of revenue, or about 20-30 employees**, so
+`min_employees` is 20.
+
+That count comes from **BBB's own profile page**, not Apollo, which is what
+lets a company Apollo has never heard of still qualify.
+
+**This is a screen, not a financial.** It gets you to a conversation.
+
+### If the size screen quietly stops working
+
+`employees` lives on the BBB profile page, and those pages have answered 403
+before. An unknown value *passes* a filter rather than failing it, so a
+blocked profile fetch turns a ">= 20 employees" screen into no screen at all
+-- silently, with a sheet that still looks full.
+
+The daily run checks for this: if more than half the rows come back with no
+headcount it says so in `ATTENTION-<date>.txt`. When that happens, re-run
+through a real browser, which is slower but gets the page:
+
+```powershell
+.\run-leads.ps1 -Category roofing-contractors -Location houston-tx -Browser
+```
 
 ## Sheet size
 

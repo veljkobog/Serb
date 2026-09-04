@@ -97,11 +97,22 @@ def scrape(config: dict, category: str, metro: str, out_path: str,
         "--column-map", os.path.join(HERE, "lead-format.json"),
         "--max-results", str(config.get("max_results", 60)),
         "--target-rows", str(config.get("target_rows", 15)),
-        "--apollo", "--require-website",
+        "--apollo",
         "--report", out_path.replace(".csv", ".json"),
     ]
+    # Deliberately NOT --require-website. Websites come from the profile page,
+    # Apollo backfills the rest, and a company Apollo has never indexed would
+    # therefore be dropped for having a blank website -- which is exactly the
+    # company this scrape exists to find. Headcount is the screen instead.
     if config.get("min_years"):
         argv += ["--min-years", str(config["min_years"])]
+    if config.get("min_employees"):
+        argv += ["--min-employees", str(config["min_employees"])]
+    if config.get("exclude_file"):
+        path = config["exclude_file"]
+        if not os.path.isabs(path):
+            path = os.path.join(HERE, path)
+        argv += ["--exclude-file", path]
     argv += extra or []
     return scraper.main(argv)
 
@@ -217,6 +228,14 @@ def crm_dedupe(csv_path: str) -> dict:
 # reporting
 # --------------------------------------------------------------------------
 
+def unknown_headcount(rows: List[dict]) -> Optional[float]:
+    """Fraction of rows with no employee count, or None for an empty sheet."""
+    if not rows:
+        return None
+    blank = sum(1 for row in rows if not str(row.get("employees", "")).strip())
+    return blank / len(rows)
+
+
 def write_status(export_dir: str, status: dict) -> None:
     path = os.path.join(export_dir, "_daily-status.json")
     try:
@@ -299,8 +318,24 @@ def run(config: dict, export_dir: str, when: dt.date,
                 status["problems"].append(f"{name}: CRM check failed: {crm['error']}")
 
             with open(out_path, encoding="utf-8") as fh:
-                rows = sum(1 for _ in csv.DictReader(fh))
-            status["sheets"].append({"file": name, "rows": rows})
+                sheet_rows = list(csv.DictReader(fh))
+            rows = len(sheet_rows)
+
+            # The size screen reads `employees` off BBB's profile page. Those
+            # pages have answered 403 before, and an unknown value PASSES the
+            # filter rather than failing it -- so a blocked detail fetch turns
+            # a >=20 employee screen into no screen at all, silently, and the
+            # sheet still looks full. Say so.
+            gap = unknown_headcount(sheet_rows)
+            if config.get("min_employees") and gap is not None and gap > 0.5:
+                status["problems"].append(
+                    f"{name}: headcount missing on {gap:.0%} of rows -- BBB "
+                    f"profile pages are not loading, so the >= "
+                    f"{config['min_employees']} employee screen did NOT run. "
+                    f"Re-run with --browser.")
+
+            status["sheets"].append({"file": name, "rows": rows,
+                                     "headcount_missing": gap})
             if rows == 0:
                 status["problems"].append(f"{name}: 0 rows survived filtering")
 
