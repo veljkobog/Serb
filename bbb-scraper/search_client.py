@@ -27,18 +27,6 @@ BBB_BASE = "https://www.bbb.org"
 SEARCH_PATH = "/search"
 PAGE_SIZE = 15
 
-# A Cloudflare interstitial is a 200 with no results, which is otherwise
-# indistinguishable from "this city has no plumbers".
-_CHALLENGE_MARKERS = (
-    "just a moment",
-    "enable javascript and cookies",
-    "cf-browser-verification",
-    "cf_chl_opt",
-    "challenge-platform",
-    "attention required!",
-)
-
-
 def build_search_url(category: str, location: str, page: int = 1,
                      base_url: str = BBB_BASE, entity: Optional[str] = None) -> str:
     """The search URL for a category + location, in the site's own parameter shape."""
@@ -56,9 +44,10 @@ def build_search_url(category: str, location: str, page: int = 1,
     return f"{base_url.rstrip('/')}{SEARCH_PATH}?" + urllib.parse.urlencode(params)
 
 
-def looks_challenged(html: str) -> bool:
-    head = (html or "")[:4000].lower()
-    return any(marker in head for marker in _CHALLENGE_MARKERS)
+# Re-exported so existing callers and tests keep working; the check itself
+# lives in parse.py, which the browser path can import without pulling in httpx.
+looks_challenged = parse.looks_challenged
+_CHALLENGE_MARKERS = parse.CHALLENGE_MARKERS
 
 
 class SearchClient:

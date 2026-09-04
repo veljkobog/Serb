@@ -35,6 +35,8 @@ try:
 except ImportError:  # pragma: no cover - dependency is in requirements.txt
     httpx = None
 
+import parse
+
 BBB_BASE = "https://www.bbb.org"
 SEARCH_PAGE = BBB_BASE + "/search"
 
@@ -74,8 +76,8 @@ def document_headers(referer: Optional[str] = None) -> Dict[str, str]:
     }
 
 
-class BlockedError(RuntimeError):
-    """Raised after N consecutive blocks -- caller saves partial results."""
+#: Re-exported; defined in parse so the browser path can raise it too.
+BlockedError = parse.BlockedError
 
 
 class EndpointUnavailable(RuntimeError):

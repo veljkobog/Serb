@@ -20,6 +20,33 @@ from datetime import date
 from typing import Any, Iterable, Iterator, Optional
 
 # CSV column order, per spec.
+# A Cloudflare interstitial is a 200 with a full page of markup, which is
+# otherwise indistinguishable from "this city has no plumbers" or "the field
+# names moved". Both the HTTP and the browser path must check for it, so the
+# check lives here rather than in either client.
+CHALLENGE_MARKERS = (
+    "just a moment",
+    "enable javascript and cookies",
+    "cf-browser-verification",
+    "cf_chl_opt",
+    "challenge-platform",
+    "attention required!",
+)
+
+
+class BlockedError(RuntimeError):
+    """The site served a block or a challenge instead of content.
+
+    Lives here rather than in the HTTP client so the browser path can raise it
+    without importing httpx.
+    """
+
+
+def looks_challenged(html: str) -> bool:
+    head = (html or "")[:4000].lower()
+    return any(marker in head for marker in CHALLENGE_MARKERS)
+
+
 FIELD_ORDER = [
     "company_name",
     "website",

@@ -15,6 +15,8 @@ import random
 import re
 import time
 import urllib.parse
+
+import parse
 from typing import Iterator, List, Optional
 
 from parse import (
@@ -95,6 +97,7 @@ class BrowserClient:
         self.executable_path = executable_path or os.environ.get("BBB_BROWSER_EXECUTABLE")
         self.extra_args = list(extra_args or [])
         self.base_url = base_url.rstrip("/")
+        self.challenged = 0
         self._pw = None
         self._context = None
         self._page = None
@@ -252,14 +255,31 @@ class BrowserClient:
 
     # ------------------------------------------------------------------
     def fetch_detail(self, profile_url: str) -> Listing:
-        """Render a business profile page and pull the fields cards omit."""
+        """Render a business profile page and pull the fields cards omit.
+
+        A Cloudflare interstitial is HTTP 200 with a full page of markup, so
+        handing it straight to the parser yields a Listing with every field
+        empty -- which reads as "the markup changed" and sent a whole
+        investigation the wrong way. The search path has always checked for
+        this; the detail path did not.
+        """
         if self._page is None:
             raise BrowserUnavailable("call start() first")
         self._pace()
         profile_url = self._absolute(profile_url)
         self._log(f"detail {profile_url}")
         self._page.goto(profile_url, wait_until="domcontentloaded")
-        return listing_from_detail_html(self._page.content())
+
+        html = self._page.content()
+        if parse.looks_challenged(html):
+            self.challenged += 1
+            self._log(f"CHALLENGED on {profile_url} -- Cloudflare interstitial, "
+                      f"not a profile page")
+            raise parse.BlockedError(
+                "Cloudflare served a challenge instead of the profile page. "
+                "Try --headed and solve it once: the clearance cookie is kept "
+                "in the browser profile and later runs reuse it.")
+        return listing_from_detail_html(html)
 
 
 # --------------------------------------------------------------------------
