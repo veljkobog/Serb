@@ -13,8 +13,13 @@ files with it.
 cd $HOME
 git clone -b claude/new-session-55i08m https://github.com/veljkobog/Serb.git
 cd $HOME\Serb\bbb-scraper
-pip install -r requirements.txt
+.\setup.ps1
 ```
+
+`setup.ps1` installs dependencies, creates `rotation.json`, and tells you what
+is still missing. Safe to re-run any time. Run it as its own command -- pasting
+several commands at once tends to join two of them into one line, which skips a
+step silently and fails several minutes later somewhere unrelated.
 
 No git? Download the ZIP, extract it, and move the `bbb-scraper` folder to `C:\Users\<you>\Serb\`
 by hand. You'll re-download to update instead of running `git pull`.
