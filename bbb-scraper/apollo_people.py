@@ -395,6 +395,9 @@ def enrich_listings(
                 continue
 
             last = match.get("last_name") or ""
+            # Say where the size came from. A blank headcount on a row Apollo
+            # does not know is not the same as a company that failed the bar,
+            # and the sheet must not let the two look alike.
             row = {
                 "owner_first_name": match.get("first_name") or "",
                 "owner_last_name": "" if is_masked(last) else last,

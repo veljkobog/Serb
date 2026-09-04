@@ -357,5 +357,56 @@ class PowerShellStructureTest(unittest.TestCase):
             self.assertEqual(check_powershell.check(good), [])
 
 
+
+class ScreenVerdictTest(unittest.TestCase):
+    """Three outcomes, not two.
+
+    BBB's headcount is behind a Cloudflare challenge, so a company Apollo has
+    never indexed cannot be sized at all. Calling that "passed" would put an
+    unscreened row at the top of the sheet looking exactly like a screened one
+    -- and those rows are the sleepers, the whole reason to scrape BBB.
+    """
+
+    def test_a_sized_company_over_the_bar_qualifies(self):
+        self.assertEqual(daily.screen_verdict({"apollo_employees": "40"}, 20),
+                         "QUALIFIED")
+
+    def test_a_sized_company_under_the_bar_is_marked_too_small(self):
+        self.assertEqual(daily.screen_verdict({"apollo_employees": "3"}, 20),
+                         "TOO-SMALL")
+
+    def test_an_unsized_company_is_never_reported_as_passing(self):
+        for row in ({"apollo_employees": ""}, {}, {"apollo_employees": "  "},
+                    {"apollo_employees": "n/a"}):
+            self.assertEqual(daily.screen_verdict(row, 20), "REVIEW-UNSIZED", row)
+
+    def test_no_bar_still_distinguishes_sized_from_unsized(self):
+        self.assertEqual(daily.screen_verdict({"apollo_employees": "2"}, 0),
+                         "QUALIFIED")
+        self.assertEqual(daily.screen_verdict({}, 0), "REVIEW-UNSIZED")
+
+    def test_a_float_headcount_is_read_not_discarded(self):
+        self.assertEqual(daily.screen_verdict({"apollo_employees": "40.0"}, 20),
+                         "QUALIFIED")
+
+
+class ShippedConfigTest(unittest.TestCase):
+    def config(self):
+        return daily.load_config(
+            os.path.join(os.path.dirname(HERE), "rotation.example.json"))
+
+    def test_the_detail_pass_is_off_because_it_is_blocked(self):
+        """Attempting it costs seconds per listing to re-prove a known block."""
+        self.assertFalse(self.config().get("detail"))
+
+    def test_the_size_bar_still_targets_acquirable_companies(self):
+        self.assertGreaterEqual(self.config()["min_employees"], 20)
+
+    def test_the_comment_tells_the_reader_what_screen_means(self):
+        comment = " ".join(self.config()["_comment"])
+        self.assertIn("REVIEW-UNSIZED", comment)
+        self.assertIn("NOT screened", comment)
+
+
 if __name__ == "__main__":
     unittest.main()

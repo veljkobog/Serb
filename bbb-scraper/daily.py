@@ -103,11 +103,20 @@ def scrape(config: dict, category: str, metro: str, out_path: str,
     # Deliberately NOT --require-website. Websites come from the profile page,
     # Apollo backfills the rest, and a company Apollo has never indexed would
     # therefore be dropped for having a blank website -- which is exactly the
-    # company this scrape exists to find. Headcount is the screen instead.
-    if config.get("min_years"):
+    # company this scrape exists to find.
+    #
+    # Profile pages sit behind a Cloudflare challenge that neither plain HTTP,
+    # headless Chromium, nor a real Chrome under automation gets through. So
+    # years_in_business and BBB's own headcount are simply not available, and
+    # attempting the detail pass costs seconds per listing to prove it again
+    # every morning. `detail: true` in the config re-enables it if BBB ever
+    # relents -- or once a clearance cookie is supplied.
+    if not config.get("detail"):
+        argv += ["--no-detail"]
+    elif config.get("min_years"):
+        # min-years reads a profile-page field; it can only screen when the
+        # detail pass actually runs.
         argv += ["--min-years", str(config["min_years"])]
-    if config.get("min_employees"):
-        argv += ["--min-employees", str(config["min_employees"])]
     if config.get("exclude_file"):
         path = config["exclude_file"]
         if not os.path.isabs(path):
@@ -156,8 +165,9 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
         found = apollo_people.enrich_listings(listings, client)
         stats = client.stats
 
-    extra_columns = ["owner_first_name", "owner_last_name", "title", "email",
-                     "email_status", "linkedin_url", "apollo_employees", "notes"]
+    extra_columns = ["screen", "owner_first_name", "owner_last_name", "title",
+                     "email", "email_status", "linkedin_url", "apollo_employees",
+                     "notes"]
     for column in extra_columns:
         if column not in fieldnames:
             fieldnames.append(column)
@@ -173,7 +183,13 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
             row.setdefault(column, "")
             if found_row.get(column) not in (None, ""):
                 row[column] = found_row[column]
+        row["screen"] = screen_verdict(row, config.get("min_employees") or 0)
         kept.append(row)
+
+    # Qualified first, then the sleepers to look at, then the rest. The point
+    # of the sheet is that the top of it is actionable without reading further.
+    order = {"QUALIFIED": 0, "REVIEW-UNSIZED": 1, "REVIEW": 2}
+    kept.sort(key=lambda r: order.get(r.get("screen", ""), 3))
 
     with open(csv_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
@@ -192,6 +208,26 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
         "credits_spent": governor.spent,
         "notes": stats.notes,
     }
+
+
+def screen_verdict(row: dict, min_employees: int) -> str:
+    """Whether this row passed the size screen, failed it, or was never sized.
+
+    Three outcomes, not two. A company Apollo has never indexed cannot be
+    sized at all -- BBB's own headcount sits behind a Cloudflare challenge --
+    and calling that "passed" would put an unscreened row at the top of the
+    sheet looking exactly like a screened one.
+    """
+    raw = str(row.get("apollo_employees", "")).strip()
+    if not raw:
+        return "REVIEW-UNSIZED"
+    try:
+        count = int(float(raw))
+    except ValueError:
+        return "REVIEW-UNSIZED"
+    if min_employees and count < min_employees:
+        return "TOO-SMALL"
+    return "QUALIFIED"
 
 
 def crm_dedupe(csv_path: str) -> dict:
@@ -326,13 +362,24 @@ def run(config: dict, export_dir: str, when: dt.date,
             # filter rather than failing it -- so a blocked detail fetch turns
             # a >=20 employee screen into no screen at all, silently, and the
             # sheet still looks full. Say so.
+            # With the detail pass off, BBB headcount is expected to be
+            # absent; the screen runs on Apollo's headcount instead, and only
+            # for companies Apollo knows. Rows it does not know are unsized by
+            # design and flagged for review rather than silently kept or cut.
             gap = unknown_headcount(sheet_rows)
-            if config.get("min_employees") and gap is not None and gap > 0.5:
+            if config.get("detail") and config.get("min_employees") \
+                    and gap is not None and gap > 0.5:
                 status["problems"].append(
                     f"{name}: headcount missing on {gap:.0%} of rows -- BBB "
-                    f"profile pages are not loading, so the >= "
-                    f"{config['min_employees']} employee screen did NOT run. "
-                    f"Re-run with --browser.")
+                    f"profile pages are challenged, so the >= "
+                    f"{config['min_employees']} employee screen did NOT run "
+                    f"from BBB data.")
+
+            unsized = sum(1 for row in sheet_rows
+                          if not str(row.get("apollo_employees", "")).strip())
+            if unsized:
+                status.setdefault("unsized", 0)
+                status["unsized"] += unsized
 
             status["sheets"].append({"file": name, "rows": rows,
                                      "headcount_missing": gap})
