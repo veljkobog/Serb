@@ -81,6 +81,7 @@ class BrowserClient:
         executable_path: Optional[str] = None,
         extra_args: Optional[List[str]] = None,
         base_url: str = BBB_BASE,
+        channel: Optional[str] = None,
     ):
         self.user_data_dir = user_data_dir
         self.headless = headless
@@ -95,6 +96,10 @@ class BrowserClient:
         # boxes) otherwise fail with "playwright install" even though a perfectly
         # good Chromium is sitting there.
         self.executable_path = executable_path or os.environ.get("BBB_BROWSER_EXECUTABLE")
+        # Playwright ships "Chrome for Testing", which Cloudflare fingerprints
+        # and holds on a challenge that never resolves. channel="chrome" drives
+        # the Chrome the user already has installed instead.
+        self.channel = channel or os.environ.get("BBB_BROWSER_CHANNEL")
         self.extra_args = list(extra_args or [])
         self.base_url = base_url.rstrip("/")
         self.challenged = 0
@@ -117,7 +122,11 @@ class BrowserClient:
         }
         if self.user_agent:
             launch_kwargs["user_agent"] = self.user_agent
-        if self.executable_path:
+        if self.channel:
+            # executable_path and channel are mutually exclusive in Playwright.
+            launch_kwargs["channel"] = self.channel
+            self._log(f"using installed browser channel {self.channel!r}")
+        elif self.executable_path:
             launch_kwargs["executable_path"] = self.executable_path
             self._log(f"using browser at {self.executable_path}")
         try:
@@ -128,7 +137,8 @@ class BrowserClient:
             raise BrowserUnavailable(
                 f"could not launch Chromium: {exc}\n"
                 f"Run 'playwright install chromium', or point --browser-executable "
-                f"(or $BBB_BROWSER_EXECUTABLE) at an existing browser binary."
+                f"(or $BBB_BROWSER_EXECUTABLE) at an existing browser binary, "
+                f"or pass --browser-channel chrome to use an installed Chrome."
             ) from exc
         self._context.set_default_timeout(self.timeout_ms)
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()

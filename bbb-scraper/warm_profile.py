@@ -28,6 +28,10 @@ def main(argv=None) -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--url", required=True, help="a BBB profile URL")
     p.add_argument("--profile-dir", default=".bbb-browser-profile")
+    p.add_argument("--channel", default="chrome",
+                   help="installed browser to drive (default: chrome). "
+                        "Playwright's own build is fingerprinted and hangs on "
+                        "the challenge; pass an empty string to use it anyway")
     p.add_argument("--save", default="detail-sample.html",
                    help="where to keep the cleared page, as a parser fixture")
     args = p.parse_args(argv)
@@ -39,6 +43,7 @@ def main(argv=None) -> int:
         headless=False,          # the entire point
         min_delay=0, max_delay=0,
         verbose=True,
+        channel=args.channel or None,
     )
     client.start()
     try:

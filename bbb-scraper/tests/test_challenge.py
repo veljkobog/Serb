@@ -116,5 +116,45 @@ class BrowserDetailTest(unittest.TestCase):
         self.assertEqual(client.challenged, 0)
 
 
+class ChannelTest(unittest.TestCase):
+    """Playwright's bundled Chrome for Testing is fingerprinted by Cloudflare
+    and hangs on a challenge that never resolves; an installed Chrome is the
+    way round it."""
+
+    def build(self, **kw):
+        return browser_client.BrowserClient(**kw)
+
+    def test_channel_defaults_to_unset(self):
+        self.assertIsNone(self.build().channel)
+
+    def test_channel_can_be_passed(self):
+        self.assertEqual(self.build(channel="chrome").channel, "chrome")
+
+    def test_channel_comes_from_the_environment_too(self):
+        os.environ["BBB_BROWSER_CHANNEL"] = "msedge"
+        try:
+            self.assertEqual(self.build().channel, "msedge")
+        finally:
+            del os.environ["BBB_BROWSER_CHANNEL"]
+
+    def test_an_explicit_channel_beats_the_environment(self):
+        os.environ["BBB_BROWSER_CHANNEL"] = "msedge"
+        try:
+            self.assertEqual(self.build(channel="chrome").channel, "chrome")
+        finally:
+            del os.environ["BBB_BROWSER_CHANNEL"]
+
+    def test_channel_and_executable_path_are_not_both_sent(self):
+        """Playwright rejects a launch carrying both."""
+        path = os.path.join(os.path.dirname(HERE), "browser_client.py")
+        with open(path, encoding="utf-8") as fh:
+            source = fh.read()
+        start = source.index("def start(self)")
+        body = source[start:source.index("def _apply_stealth")]
+        self.assertIn('elif self.executable_path:', body,
+                      "executable_path must be an elif after channel, not a "
+                      "second independent branch")
+
+
 if __name__ == "__main__":
     unittest.main()

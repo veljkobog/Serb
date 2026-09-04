@@ -186,6 +186,11 @@ def build_parser() -> argparse.ArgumentParser:
     beh.add_argument("--min-delay", type=float, default=2.0, help="min seconds between requests (default: 2)")
     beh.add_argument("--max-delay", type=float, default=4.0, help="max seconds between requests (default: 4)")
     beh.add_argument("--headed", action="store_true", help="run Playwright headed (helps with challenges)")
+    beh.add_argument("--browser-channel", default=None,
+                     help="drive an installed browser instead of Playwright's "
+                          "bundled one, e.g. 'chrome' or 'msedge'. Playwright's "
+                          "Chrome for Testing build is fingerprinted by "
+                          "Cloudflare and can hang on a challenge forever")
     beh.add_argument("--profile-dir", default=".bbb-browser-profile",
                      help="persistent browser profile dir (keeps cookies between runs)")
     beh.add_argument("--browser-executable", default=None,
@@ -561,6 +566,7 @@ def open_browser(args):
     browser = browser_client.BrowserClient(
         user_data_dir=args.profile_dir,
         headless=not args.headed,
+        channel=args.browser_channel,
         min_delay=args.min_delay,
         max_delay=args.max_delay,
         verbose=args.verbose,
