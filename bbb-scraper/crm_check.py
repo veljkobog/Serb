@@ -29,6 +29,7 @@ import argparse
 import csv
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -96,17 +97,66 @@ class Verdict:
         }
 
 
+#: HubSpot enforces a per-SECOND cap on the search API, separate from the
+#: daily one. Four lookups per lead across fifteen leads arrives as a burst and
+#: trips it immediately, so requests are paced rather than fired.
+MIN_INTERVAL = 0.12          # ~8/sec, comfortably inside the documented cap
+MAX_RETRIES = 5
+
+
 class HubSpotClient:
-    def __init__(self, token: str, base_url: str = HUBSPOT_BASE, timeout: float = 30.0):
+    def __init__(self, token: str, base_url: str = HUBSPOT_BASE, timeout: float = 30.0,
+                 min_interval: float = MIN_INTERVAL, max_retries: int = MAX_RETRIES):
         if httpx is None:
             raise HubSpotUnavailable("httpx is required (pip install httpx)")
         if not token:
             raise HubSpotUnavailable("no HubSpot token -- set HUBSPOT_TOKEN or pass --hubspot-token")
         self.base_url = base_url.rstrip("/")
+        self.min_interval = min_interval
+        self.max_retries = max_retries
+        self.rate_limited = 0
+        self._last_call = 0.0
         self.client = httpx.Client(
             timeout=timeout,
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         )
+
+    def _pace(self) -> None:
+        elapsed = time.monotonic() - self._last_call
+        if self._last_call and elapsed < self.min_interval:
+            time.sleep(self.min_interval - elapsed)
+        self._last_call = time.monotonic()
+
+    def _post(self, path: str, payload: dict, what: str) -> dict:
+        """POST with pacing and backoff on 429.
+
+        A rate limit is a "come back shortly", not a verdict. Treating it as a
+        failure would abandon the CRM check partway and leave rows unchecked
+        while the sheet still looked complete.
+        """
+        for attempt in range(self.max_retries):
+            self._pace()
+            response = self.client.post(f"{self.base_url}{path}", json=payload)
+            if response.status_code == 401:
+                raise HubSpotUnavailable("HubSpot rejected the token (401)")
+            if response.status_code == 429:
+                self.rate_limited += 1
+                # Honour Retry-After when HubSpot sends one; otherwise back off.
+                wait = response.headers.get("Retry-After")
+                delay = float(wait) if wait and wait.replace(".", "").isdigit() \
+                    else min(2 ** attempt, 10)
+                if attempt == self.max_retries - 1:
+                    raise HubSpotUnavailable(
+                        f"HubSpot rate limit persisted through {self.max_retries} "
+                        f"retries on {what} -- rows were NOT all checked")
+                time.sleep(delay)
+                continue
+            if response.status_code >= 400:
+                raise HubSpotUnavailable(
+                    f"HubSpot {what} failed: {response.status_code} "
+                    f"{response.text[:200]}")
+            return response.json()
+        raise HubSpotUnavailable(f"HubSpot {what}: retries exhausted")
 
     def close(self) -> None:
         self.client.close()
@@ -128,14 +178,8 @@ class HubSpotClient:
             "properties": properties,
             "limit": limit,
         }
-        response = self.client.post(
-            f"{self.base_url}/crm/v3/objects/{object_type}/search", json=payload)
-        if response.status_code == 401:
-            raise HubSpotUnavailable("HubSpot rejected the token (401)")
-        if response.status_code >= 400:
-            raise HubSpotUnavailable(
-                f"HubSpot {object_type} search failed: {response.status_code} {response.text[:200]}")
-        return response.json()
+        return self._post(f"/crm/v3/objects/{object_type}/search", payload,
+                          f"{object_type} search")
 
     def portal_total(self, object_type: str = "contacts") -> int:
         """How many records exist at all.
@@ -144,13 +188,11 @@ class HubSpotClient:
         wrong portal answers every lookup with zero, which is indistinguishable
         from a clean list and reads as an all-clear.
         """
-        response = self.client.post(
-            f"{self.base_url}/crm/v3/objects/{object_type}/search",
-            json={"filterGroups": [], "properties": ["hs_object_id"], "limit": 1})
-        if response.status_code >= 400:
-            raise HubSpotUnavailable(
-                f"HubSpot portal check failed: {response.status_code} {response.text[:200]}")
-        return int(response.json().get("total") or 0)
+        body = self._post(f"/crm/v3/objects/{object_type}/search",
+                          {"filterGroups": [], "properties": ["hs_object_id"],
+                           "limit": 1},
+                          "portal check")
+        return int(body.get("total") or 0)
 
 
 # --------------------------------------------------------------------------

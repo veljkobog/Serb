@@ -210,6 +210,21 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
     }
 
 
+def read_report(csv_path: str) -> dict:
+    """Apollo counters from the run report written beside the sheet."""
+    path = csv_path.replace(".csv", ".json")
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            report = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    apollo = report.get("apollo_stats") or report.get("apollo") or {}
+    return {"apollo_errors": apollo.get("errors"),
+            "apollo_matched": apollo.get("matched")}
+
+
 def screen_verdict(row: dict, min_employees: int) -> str:
     """Whether this row passed the size screen, failed it, or was never sized.
 
@@ -337,6 +352,19 @@ def run(config: dict, export_dir: str, when: dt.date,
             result["sheet"] = name
             status["enrichment"].append(result)
 
+            apollo = read_report(out_path)
+            failed = apollo.get("apollo_errors") or 0
+            matched = apollo.get("apollo_matched") or 0
+            if failed and not matched:
+                # Every single lookup failing is a broken endpoint or a dead
+                # key, not bad luck. Left in the run summary it reads as a
+                # detail; it means the whole enrichment did nothing.
+                status["problems"].append(
+                    f"{name}: ALL {failed} Apollo lookups failed -- no websites "
+                    f"recovered and no sleeper labels written. Run "
+                    f"`python scraper.py --apollo-probe` to find the right "
+                    f"endpoint.")
+
             if result.get("credit_cap_hit"):
                 status["problems"].append(
                     f"{name}: stopped at the {config.get('daily_credit_cap')} "
@@ -419,7 +447,11 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
     print("-" * 46)
     print(f"  min employees   : {config.get('min_employees') or 'none'}"
           f"   (>= $500K EBITDA proxy)")
-    print(f"  min years       : {config.get('min_years') or 'none'}")
+    if config.get("detail"):
+        print(f"  min years       : {config.get('min_years') or 'none'}")
+    else:
+        print("  min years       : NOT APPLIED -- BBB profile pages are "
+              "challenged (detail: false)")
     print(f"  rows per sheet  : {config.get('target_rows')}"
           f" (from up to {config.get('max_results')} raw)")
     print(f"  apollo cap      : {config.get('daily_credit_cap')} credits/day")

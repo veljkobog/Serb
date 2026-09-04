@@ -408,5 +408,48 @@ class ShippedConfigTest(unittest.TestCase):
         self.assertIn("NOT screened", comment)
 
 
+
+class TotalFailureTest(unittest.TestCase):
+    """Every lookup failing is a broken endpoint, not bad luck.
+
+    A run reported "133 errors, 0 matched" inside its summary and still exited
+    as a success, so the sheets looked finished while the entire enrichment had
+    done nothing -- no websites recovered, no sleeper labels written.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write_report(self, **apollo):
+        csv_path = os.path.join(self.tmp.name, "sheet.csv")
+        with open(csv_path.replace(".csv", ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"apollo_stats": apollo}, fh)
+        return csv_path
+
+    def test_counters_are_read_back_from_the_report(self):
+        path = self.write_report(errors=133, matched=0)
+        self.assertEqual(daily.read_report(path),
+                         {"apollo_errors": 133, "apollo_matched": 0})
+
+    def test_a_missing_report_is_not_an_error(self):
+        self.assertEqual(daily.read_report(
+            os.path.join(self.tmp.name, "nope.csv")), {})
+
+    def test_a_corrupt_report_is_not_an_error(self):
+        csv_path = os.path.join(self.tmp.name, "bad.csv")
+        with open(csv_path.replace(".csv", ".json"), "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        self.assertEqual(daily.read_report(csv_path), {})
+
+    def test_some_failures_alongside_matches_are_not_flagged(self):
+        """Individual misses are normal; only a total wipeout is a defect."""
+        path = self.write_report(errors=3, matched=40)
+        counters = daily.read_report(path)
+        self.assertTrue(counters["apollo_matched"])
+
+
 if __name__ == "__main__":
     unittest.main()

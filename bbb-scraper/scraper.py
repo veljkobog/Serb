@@ -1339,7 +1339,8 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         write_report(args, result, output, filters, locations, label,
                      pulled=pulled, dupes=len(dupes), excluded=len(excluded_rows),
                      rejected=len(rejected), main_rows=main_rows, low_rows=low_rows,
-                     coverage=coverage, google_stats=google_stats)
+                     coverage=coverage, google_stats=google_stats,
+                     apollo_stats=apollo_stats)
 
     if pulled and not main_rows:
         if already_written:
@@ -1361,6 +1362,7 @@ def write_report(args, result, output, filters, locations, label, **counts) -> N
 
     coverage = counts["coverage"]
     google = counts["google_stats"]
+    apollo = counts.get("apollo_stats")
     report = {
         "category": label or args.category,
         "location": args.location,
@@ -1377,6 +1379,18 @@ def write_report(args, result, output, filters, locations, label, **counts) -> N
             "low_confidence": len(counts["low_rows"]),
             "written": len(counts["main_rows"]),
         },
+        "apollo_stats": ({
+            "looked_up": apollo.looked_up,
+            "cached": apollo.cached,
+            "matched": apollo.matched,
+            "low_match": apollo.low_match,
+            "websites_filled": apollo.websites_filled,
+            "no_result": apollo.no_result,
+            # Surfaced so the caller can tell "Apollo has no such company"
+            # from "every request failed" -- they look identical in a sheet.
+            "errors": apollo.errors,
+            "capped": apollo.capped,
+        } if apollo else None),
         "filters": {f.name: {"dropped": f.dropped, "unknown_dropped": f.unknown_dropped}
                     for f in filters or []},
         "field_coverage": {

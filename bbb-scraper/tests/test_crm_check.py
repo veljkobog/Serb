@@ -200,3 +200,70 @@ class PortalGuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class RateLimitTest(unittest.TestCase):
+    """HubSpot enforces a per-second cap, and four lookups per lead across a
+    full sheet arrives as a burst that trips it immediately. A 429 is "come
+    back shortly", not a verdict -- treating it as a failure abandons the CRM
+    check partway and leaves rows unchecked while the sheet looks complete."""
+
+    def test_requests_are_paced(self):
+        self.assertLessEqual(1 / crm_check.MIN_INTERVAL, 10,
+                             "pacing must stay inside HubSpot's per-second cap")
+
+    def test_a_429_is_retried_rather_than_raised(self):
+        import itertools
+
+        class Response:
+            def __init__(self, status, body=None):
+                self.status_code = status
+                self._body = body or {"total": 1, "results": []}
+                self.headers = {}
+                self.text = ""
+
+            def json(self):
+                return self._body
+
+        client = crm_check.HubSpotClient.__new__(crm_check.HubSpotClient)
+        client.base_url = "http://x"
+        client.min_interval = 0
+        client.max_retries = 4
+        client.rate_limited = 0
+        client._last_call = 0.0
+        replies = itertools.chain([Response(429), Response(429)],
+                                  itertools.repeat(Response(200)))
+
+        class Fake:
+            def post(self, *a, **kw):
+                return next(replies)
+
+        client.client = Fake()
+        body = client._post("/x", {}, "test")
+        self.assertEqual(body["total"], 1)
+        self.assertEqual(client.rate_limited, 2)
+
+    def test_a_persistent_429_is_reported_not_swallowed(self):
+        class Response:
+            status_code = 429
+            headers = {}
+            text = ""
+
+            def json(self):
+                return {}
+
+        client = crm_check.HubSpotClient.__new__(crm_check.HubSpotClient)
+        client.base_url = "http://x"
+        client.min_interval = 0
+        client.max_retries = 2
+        client.rate_limited = 0
+        client._last_call = 0.0
+
+        class Fake:
+            def post(self, *a, **kw):
+                return Response()
+
+        client.client = Fake()
+        with self.assertRaises(crm_check.HubSpotUnavailable) as caught:
+            client._post("/x", {}, "contacts search")
+        self.assertIn("NOT all checked", str(caught.exception))
