@@ -2,6 +2,17 @@
   "_comment": [
     "Buy-side origination: home services companies with >= $500K EBITDA.",
     "",
+    "BBB's search returns adjacent trades. A roofing search in Charlotte came",
+    "back with a carport installer, a stamped-concrete company and a general",
+    "contractor -- 3 of 12 rows nobody is buying, and nothing downstream can",
+    "tell they are off-target. category_allow keeps only listings whose BBB",
+    "category contains one of the listed fragments. Siding, gutters and",
+    "windows stay under roofing because the exteriors partners buy them.",
+    "A listing with no category at all is unknown rather than off-target, so",
+    "it passes like every other unknown.",
+    "",
+    "",
+    "",
     "BBB PROFILE PAGES ARE NOT REACHABLE. They sit behind a Cloudflare",
     "challenge that plain HTTP, headless Chromium and a real Chrome under",
     "automation all fail -- the same pages load fine in an ordinary browser",
@@ -106,5 +117,51 @@
     "saturday": [],
     "sunday": []
   },
-  "detail": false
+  "detail": false,
+  "category_allow": {
+    "roofing-contractors": [
+      "roof",
+      "siding",
+      "gutter",
+      "window",
+      "exterior"
+    ],
+    "plumber": [
+      "plumb",
+      "drain",
+      "sewer",
+      "water-heater"
+    ],
+    "heating-and-air-conditioning": [
+      "heating",
+      "air-conditioning",
+      "hvac",
+      "furnace",
+      "duct",
+      "refrigeration"
+    ],
+    "electrician": [
+      "electric"
+    ],
+    "landscape-contractors": [
+      "landscap",
+      "lawn",
+      "tree",
+      "irrigation",
+      "grounds-maintenance"
+    ],
+    "fire-protection-systems": [
+      "fire",
+      "sprinkler",
+      "extinguisher",
+      "alarm"
+    ],
+    "security-systems": [
+      "security",
+      "alarm",
+      "surveillance",
+      "low-voltage",
+      "access-control"
+    ]
+  }
 }

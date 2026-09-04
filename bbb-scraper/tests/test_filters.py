@@ -27,13 +27,19 @@ def read_csv(path):
 
 class FilterUnitTest(unittest.TestCase):
     def args(self, **over):
-        base = dict(
-            min_years=0, min_employees=0, min_bbb_reviews=0, max_bbb_complaints=None,
-            min_google_reviews=0, min_google_rating=0.0, allow_low_match=False,
-            drop_unknown=False, require_website=False,
-        )
-        base.update(over)
-        return type("A", (), base)()
+        """Real parser defaults, overridden per test.
+
+        Hand-listing the fields meant every new filter flag broke six
+        unrelated tests with an AttributeError, which says nothing about the
+        thing under test. Taking the defaults from the parser itself keeps the
+        helper honest and makes a genuinely missing flag fail loudly.
+        """
+        args = scraper.build_parser().parse_args([])
+        for name, value in over.items():
+            if not hasattr(args, name):
+                raise AttributeError(f"no such scraper flag: {name}")
+            setattr(args, name, value)
+        return args
 
     def test_unknown_passes_by_default(self):
         filters = scraper.build_filters(self.args(min_bbb_reviews=50))

@@ -103,6 +103,12 @@ def build_parser() -> argparse.ArgumentParser:
                           "domains, everything else as a name fragment")
     flt.add_argument("--drop-unknown", action="store_true",
                      help="drop listings whose value for an active filter is unknown")
+    flt.add_argument("--category-allow", default=None,
+                     help="keep only listings whose BBB category contains one "
+                          "of these fragments (comma-separated). BBB search "
+                          "returns adjacent trades -- a roofing search also "
+                          "yields carport and stamped-concrete companies -- "
+                          "and nothing downstream can tell they are off-target")
     flt.add_argument("--target-rows", type=int, default=None,
                      help="trim the finished sheet to this many rows. Unlike "
                           "--max-results (which caps the RAW pull, before "
@@ -303,6 +309,15 @@ def build_filters(args):
     if args.min_employees > 0:
         filters.append(Filter("min-employees", lambda l: l.employees,
                               lambda v: v >= args.min_employees, "employees"))
+    if args.category_allow:
+        wanted = [c.strip().lower() for c in args.category_allow.split(",") if c.strip()]
+        # A blank category is unknown, not off-target, so it passes like every
+        # other unknown unless --drop-unknown says otherwise.
+        filters.append(Filter(
+            "category-allow",
+            lambda l: (l.category or "").lower() or None,
+            lambda v: any(w in v for w in wanted)))
+
     if args.require_website:
         # Returns "" (not None) when absent: a blank website is a KNOWN absence,
         # not an unknown, so it must fail rather than pass as "we can't tell".

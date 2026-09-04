@@ -117,6 +117,10 @@ def scrape(config: dict, category: str, metro: str, out_path: str,
         # min-years reads a profile-page field; it can only screen when the
         # detail pass actually runs.
         argv += ["--min-years", str(config["min_years"])]
+    allow = (config.get("category_allow") or {}).get(category)
+    if allow:
+        argv += ["--category-allow", ",".join(allow)]
+
     if config.get("exclude_file"):
         path = config["exclude_file"]
         if not os.path.isabs(path):

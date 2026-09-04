@@ -451,5 +451,43 @@ class TotalFailureTest(unittest.TestCase):
         self.assertTrue(counters["apollo_matched"])
 
 
+
+class CategoryAllowTest(unittest.TestCase):
+    """BBB's search returns adjacent trades.
+
+    A Charlotte roofing pull came back with a carport installer, a
+    stamped-concrete company and a general contractor -- 3 of 12 rows nobody
+    is buying. Nothing downstream can tell they are off-target, so the sheet
+    just looks 25% weaker for no visible reason.
+    """
+
+    def config(self):
+        return daily.load_config(
+            os.path.join(os.path.dirname(HERE), "rotation.example.json"))
+
+    def test_every_scheduled_vertical_has_an_allow_list(self):
+        config = self.config()
+        allow = config.get("category_allow") or {}
+        scheduled = {c for day in config["schedule"].values() for c in day}
+        self.assertEqual(scheduled - set(allow), set(),
+                         "a scheduled vertical with no allow-list keeps everything")
+
+    def test_roofing_keeps_the_exteriors_trades_partners_buy(self):
+        allow = self.config()["category_allow"]["roofing-contractors"]
+        for wanted in ("roof", "siding", "gutter", "window"):
+            self.assertIn(wanted, allow)
+
+    def test_roofing_rejects_the_trades_that_diluted_the_real_sheet(self):
+        allow = self.config()["category_allow"]["roofing-contractors"]
+        for category in ("carport", "stamped-concrete", "general-contractor"):
+            self.assertFalse(any(a in category for a in allow),
+                             f"{category} would still get through")
+
+    def test_the_flag_reaches_the_scraper(self):
+        import inspect
+        source = inspect.getsource(daily.scrape)
+        self.assertIn("--category-allow", source)
+
+
 if __name__ == "__main__":
     unittest.main()
