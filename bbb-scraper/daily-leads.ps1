@@ -42,8 +42,17 @@ if ($DryRun) { $dailyArgs += "--dry-run" }
 if ($Date)   { $dailyArgs += @("--date", $Date) }
 
 "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File -FilePath $log -Append -Encoding utf8
-python @dailyArgs 2>&1 | Tee-Object -FilePath $log -Append
+# $ErrorActionPreference = "Stop" plus a 2>&1 pipe turns every stderr line
+# from a native command into a TERMINATING error. The scraper writes progress
+# and warnings to stderr, so the first one killed the run before it wrote
+# anything -- the log showed a timestamp header and nothing else.
+# ToString() also renders each line plainly instead of as a formatted
+# ErrorRecord, which was double-spacing the log.
+$ErrorActionPreference = "Continue"
+& python @dailyArgs 2>&1 | ForEach-Object { $_.ToString() } |
+    Tee-Object -FilePath $log -Append
 $code = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
 
 # Toast on failure only. A notification every single morning trains you to
 # dismiss it without reading, which is worse than no notification at all.

@@ -318,5 +318,44 @@ class DryRunOutputTest(unittest.TestCase):
         self.assertIn("HUBSPOT_TOKEN", out)
 
 
+
+class PowerShellStructureTest(unittest.TestCase):
+    """PowerShell can't run here, so its known failure modes are asserted."""
+
+    def test_no_script_has_a_structural_defect(self):
+        import subprocess
+        root = os.path.dirname(HERE)
+        result = subprocess.run(
+            [sys.executable, os.path.join(root, "tools", "check_powershell.py")],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_checker_catches_a_terminating_stderr_pipe(self):
+        """The check must fail on the bug it exists for, or it proves nothing."""
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+        import check_powershell
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = os.path.join(tmp, "bad.ps1")
+            with open(bad, "w", encoding="utf-8") as fh:
+                fh.write('$ErrorActionPreference = "Stop"\n'
+                         'python thing.py 2>&1 | Tee-Object -FilePath $log\n')
+            self.assertTrue(any("terminating" in p
+                                for p in check_powershell.check(bad)))
+
+    def test_the_checker_accepts_a_guarded_pipe(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+        import check_powershell
+
+        with tempfile.TemporaryDirectory() as tmp:
+            good = os.path.join(tmp, "good.ps1")
+            with open(good, "w", encoding="utf-8") as fh:
+                fh.write('$ErrorActionPreference = "Stop"\n'
+                         '$ErrorActionPreference = "Continue"\n'
+                         'python thing.py 2>&1 | Tee-Object -FilePath $log\n'
+                         '$ErrorActionPreference = "Stop"\n')
+            self.assertEqual(check_powershell.check(good), [])
+
+
 if __name__ == "__main__":
     unittest.main()
