@@ -1421,7 +1421,10 @@ def write_report(args, result, output, filters, locations, label, **counts) -> N
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    diagnostic = args.inspect_har or args.dump_sample
+    # Modes that inspect or discover rather than scrape. They need no category
+    # or location, and requiring one turns a diagnostic into a guessing game
+    # at exactly the moment you are trying to find out what is wrong.
+    diagnostic = args.inspect_har or args.dump_sample or args.apollo_probe
     if not diagnostic and not (args.category or args.categories_file):
         print("--category (or --categories-file) is required", file=sys.stderr)
         return 2

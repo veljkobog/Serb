@@ -346,5 +346,44 @@ class CliGateTest(unittest.TestCase):
         self.assertNotIn("apollo_org_id'", out, "column map raised a KeyError")
 
 
+
+class DiagnosticArgsTest(unittest.TestCase):
+    """A diagnostic must not demand the arguments you run it to figure out.
+
+    --apollo-probe exists to discover a working endpoint; requiring --category
+    and --location first made it refuse to run at all.
+    """
+
+    def parse(self, argv):
+        import scraper
+        return scraper.build_parser().parse_args(argv)
+
+    def test_probe_is_treated_as_a_diagnostic(self):
+        import inspect
+
+        import scraper
+        source = inspect.getsource(scraper.main)
+        line = [l for l in source.splitlines() if "diagnostic = " in l][0]
+        self.assertIn("apollo_probe", line,
+                      "--apollo-probe must skip the category/location checks")
+
+    def test_probe_needs_no_category_or_location(self):
+        args = self.parse(["--apollo-probe"])
+        self.assertTrue(args.apollo_probe)
+        self.assertIsNone(args.category)
+        self.assertIsNone(args.location)
+
+    def test_a_normal_run_still_requires_them(self):
+        import io
+        from contextlib import redirect_stderr
+
+        import scraper
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            code = scraper.main([])
+        self.assertEqual(code, 2)
+        self.assertIn("--category", buf.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
