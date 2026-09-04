@@ -14,5 +14,6 @@ rotation.json
 logs/
 *.csv
 browser-test.csv
+detail-sample.html
 __pycache__/
 *.pyc
