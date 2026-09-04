@@ -13,5 +13,6 @@ endpoints.json
 rotation.json
 logs/
 *.csv
+browser-test.csv
 __pycache__/
 *.pyc
