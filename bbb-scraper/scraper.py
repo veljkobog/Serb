@@ -1207,10 +1207,18 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
             (excluded_rows if excluded(listing, names, domains) else keep).append(listing)
         unique = keep
 
-    # Apollo first: it fills `website`, and --require-website is a local
-    # filter that reads it. Reversed, every row would still look "unknown".
+    # Apollo bills per SUCCESSFUL search -- measured at 1 credit for 1 match
+    # out of 5 lookups -- so where this runs decides the bill. Looking up all
+    # ~150 raw listings to keep 15 pays to identify 135 companies that are
+    # then discarded.
+    #
+    # It therefore runs AFTER the filters and the trim, on the rows that
+    # actually reach the sheet. The exception is --require-website, which
+    # filters on the very field this pass fills: with that flag the lookup has
+    # to come first or every row reads "unknown" and nothing is filtered.
+    apollo_first = bool(args.require_website)
     apollo_stats = None
-    if uses_apollo(args) and unique:
+    if uses_apollo(args) and unique and apollo_first:
         apollo_stats = run_apollo_enrichment(args, unique)
 
     local = [f for f in filters if not f.needs_google]
@@ -1233,6 +1241,10 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     if args.target_rows and len(kept) > args.target_rows:
         trimmed = len(kept) - args.target_rows
         kept = kept[:args.target_rows]
+
+    # The cheap case: only the rows that made the sheet get looked up.
+    if uses_apollo(args) and kept and not apollo_first:
+        apollo_stats = run_apollo_enrichment(args, kept)
 
     column_map = None
     if args.column_map:

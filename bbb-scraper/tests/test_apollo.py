@@ -203,15 +203,28 @@ class WiringTest(unittest.TestCase):
         self.assertIn("apollo_org_id", parse.FIELD_ORDER)
         self.assertIn("apollo_match", parse.FIELD_ORDER)
 
-    def test_lookup_runs_before_the_website_filter(self):
-        """Order is the whole point: reversed, --require-website would see
-        every row as unknown and filter nothing."""
+    def test_lookup_still_precedes_the_website_filter_when_it_is_used(self):
+        """--require-website filters on the field this pass fills, so with
+        that flag the lookup must come first or every row reads unknown."""
         import inspect
 
         import scraper
         source = inspect.getsource(scraper.finish)
-        self.assertLess(source.index("run_apollo_enrichment"),
-                        source.index("apply_filters(unique, local"))
+        first_call = source.index("run_apollo_enrichment")
+        self.assertLess(first_call, source.index("apply_filters(unique, local"))
+        self.assertIn("apollo_first", source[:first_call])
+
+    def test_lookup_otherwise_runs_after_the_trim(self):
+        """It bills per successful search, so looking up 150 rows to keep 15
+        pays to identify 135 companies that are then discarded."""
+        import inspect
+
+        import scraper
+        source = inspect.getsource(scraper.finish)
+        trim = source.index("kept = kept[:args.target_rows]")
+        after = source.index("not apollo_first")
+        self.assertGreater(after, trim,
+                           "the cheap path must run after the sheet is trimmed")
 
     def test_key_comes_from_the_environment_when_not_passed(self):
         os.environ["APOLLO_API_KEY"] = "from-env"
@@ -420,6 +433,79 @@ class CostReportingTest(unittest.TestCase):
         self.assertNotIn("display_mode", body,
                          "display_mode belongs to the 404'd lookup path")
         self.assertEqual(body["organization_locations"], ["Houston, TX"])
+
+
+
+class LookupVolumeTest(unittest.TestCase):
+    """Only the rows that reach the sheet are looked up.
+
+    Apollo bills per successful search: a measured run spent 1 credit for 1
+    match across 5 lookups. Pulling 150 raw listings to keep 15 and looking up
+    all 150 pays to identify 135 companies that are then discarded.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from fixture_server import start_server
+        cls.server, cls.base_url = start_server()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def setUp(self):
+        self.apollo, self.apollo_url, self.handler = start_apollo()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = os.path.join(self.tmp.name, "out.csv")
+        self.endpoints = os.path.join(self.tmp.name, "endpoints.json")
+        import json
+        with open(self.endpoints, "w", encoding="utf-8") as fh:
+            json.dump({"endpoints": [{
+                "url": f"{self.base_url}/api/businesssearch",
+                "params": {"find_country": "USA"},
+                "page_param": "page",
+                "category_param": "find_text",
+                "location_param": "find_loc",
+            }]}, fh)
+
+    def tearDown(self):
+        self.apollo.shutdown()
+        self.apollo.server_close()
+        self.tmp.cleanup()
+
+    def run_cli(self, *extra):
+        import io
+        from contextlib import redirect_stdout
+
+        import scraper
+        argv = ["--category", "plumber", "--location", "wilmington-nc",
+                "--endpoints", self.endpoints, "--output", self.out,
+                "--checkpoint", os.path.join(self.tmp.name, "c.json"),
+                "--no-fallback", "--min-delay", "0", "--max-delay", "0",
+                "--no-detail", "--apollo", "--apollo-key", "test-key",
+                "--apollo-endpoint", self.apollo_url,
+                "--apollo-cache", os.path.join(self.tmp.name, "a.json"),
+                *extra]
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = scraper.main(argv)
+        return code, buf.getvalue()
+
+    def test_only_the_trimmed_rows_are_looked_up(self):
+        code, out = self.run_cli("--max-results", "20", "--target-rows", "3")
+        self.assertEqual(code, 0, out)
+        self.assertLessEqual(self.handler.calls, 3,
+                             f"looked up {self.handler.calls} companies for a "
+                             f"3-row sheet")
+
+    def test_require_website_still_looks_up_everything_first(self):
+        """It has to: the filter reads the field the lookup fills."""
+        code, out = self.run_cli("--max-results", "20", "--target-rows", "3",
+                                 "--require-website")
+        self.assertEqual(code, 0, out)
+        self.assertGreater(self.handler.calls, 3,
+                           "with --require-website the lookup must precede the filter")
 
 
 if __name__ == "__main__":
