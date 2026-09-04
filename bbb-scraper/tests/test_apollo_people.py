@@ -244,5 +244,84 @@ class ProbeTest(unittest.TestCase):
              apollo_people.PROBE_PERSON["last_name"]), names)
 
 
+
+class DeprecationTest(unittest.TestCase):
+    """Apollo answers a deprecated route with 422 and a message naming its
+    replacement. A 422 reads as "your payload is wrong", so without reading
+    the body the route looks alive and the caller looks at fault -- which is
+    how /mixed_people/search went a full run before anyone noticed."""
+
+    def setUp(self):
+        self.server, self.base, self.handler = start_people()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def test_the_live_path_is_the_replacement_apollo_named(self):
+        self.assertEqual(apollo_people.PEOPLE_SEARCH, "/mixed_people/api_search")
+
+    def test_a_deprecation_is_reported_as_one(self):
+        import json as _json
+
+        class Response:
+            status_code = 422
+            text = _json.dumps({
+                "error": "This endpoint is deprecated for API callers. Please "
+                         "use the new mixed_people/api_search endpoint."})
+
+            def json(self):
+                return {}
+
+        client = apollo_people.PeopleClient.__new__(apollo_people.PeopleClient)
+        client.base_url = "http://x"
+        client.api_key = "k"
+        client.min_delay = 0
+
+        class Fake:
+            def post(self, *a, **kw):
+                return Response()
+
+        client.client = Fake()
+        with self.assertRaises(RuntimeError) as caught:
+            client._post("/mixed_people/search", {})
+        message = str(caught.exception)
+        self.assertIn("deprecated", message.lower())
+        self.assertIn("api_search", message,
+                      "the replacement Apollo named must survive into the error")
+
+    def test_a_normal_error_is_not_mislabelled_a_deprecation(self):
+        class Response:
+            status_code = 500
+            text = "internal error"
+
+            def json(self):
+                return {}
+
+        client = apollo_people.PeopleClient.__new__(apollo_people.PeopleClient)
+        client.base_url = "http://x"
+        client.api_key = "k"
+        client.min_delay = 0
+
+        class Fake:
+            def post(self, *a, **kw):
+                return Response()
+
+        client.client = Fake()
+        with self.assertRaises(RuntimeError) as caught:
+            client._post("/x", {})
+        self.assertNotIn("deprecated", str(caught.exception).lower())
+
+    def test_a_real_search_still_works_end_to_end(self):
+        client = apollo_people.PeopleClient(
+            "test-key", base_url=self.base, min_employees=5,
+            governor=apollo_people.CreditGovernor(cap=1000),
+            cache=apollo_people.PeopleCache(None))
+        rows = apollo_people.enrich_listings(
+            [listing("Ace Plumbing", "a" * 24)], client)
+        client.close()
+        self.assertEqual(list(rows.values())[0]["email"], "dana@aceplumbing.com")
+
+
 if __name__ == "__main__":
     unittest.main()

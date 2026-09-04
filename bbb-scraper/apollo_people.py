@@ -48,7 +48,10 @@ from parse import Listing
 # these; --apollo-base pins the prefix once resolved.
 DEFAULT_BASE = "https://api.apollo.io/v1"
 
-PEOPLE_SEARCH = "/mixed_people/search"
+# /mixed_people/search is deprecated for API callers -- it answers 422 with a
+# message naming its replacement, which reads as a bad payload rather than a
+# dead route unless you read the body.
+PEOPLE_SEARCH = "/mixed_people/api_search"
 BULK_MATCH = "/people/bulk_match"
 PROFILE = "/users/api_profile"
 
@@ -240,8 +243,13 @@ class PeopleClient:
             json=body,
         )
         if response.status_code >= 400:
+            body = response.text[:400]
+            if "deprecated" in body.lower():
+                raise RuntimeError(
+                    f"Apollo has deprecated {path}. Its own message names the "
+                    f"replacement: {body[:300]}")
             raise RuntimeError(f"Apollo {response.status_code} on {path}: "
-                               f"{response.text[:200]}")
+                               f"{body[:200]}")
         return response.json() or {}
 
     # ------------------------------------------------------------------

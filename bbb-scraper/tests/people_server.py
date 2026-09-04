@@ -93,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
 
-        if self.path == "/v1/mixed_people/search":
+        if self.path == "/v1/mixed_people/api_search":
             self.__class__.searches += 1
             org_ids = body.get("organization_ids") or []
             people = []
