@@ -1,0 +1,167 @@
+{
+  "_comment": [
+    "Buy-side origination: home services companies with >= $500K EBITDA.",
+    "",
+    "BBB's search returns adjacent trades. A roofing search in Charlotte came",
+    "back with a carport installer, a stamped-concrete company and a general",
+    "contractor -- 3 of 12 rows nobody is buying, and nothing downstream can",
+    "tell they are off-target. category_allow keeps only listings whose BBB",
+    "category contains one of the listed fragments. Siding, gutters and",
+    "windows stay under roofing because the exteriors partners buy them.",
+    "A listing with no category at all is unknown rather than off-target, so",
+    "it passes like every other unknown.",
+    "",
+    "",
+    "",
+    "BBB PROFILE PAGES ARE NOT REACHABLE. They sit behind a Cloudflare",
+    "challenge that plain HTTP, headless Chromium and a real Chrome under",
+    "automation all fail -- the same pages load fine in an ordinary browser",
+    "window, so it is the automation being blocked, not the network. That",
+    "means BBB's own headcount, years in business and accreditation are",
+    "unavailable. `detail: false` skips the attempt rather than spending",
+    "seconds per listing proving it again every morning. Set it true if BBB",
+    "relents.",
+    "",
+    "So the size screen runs on APOLLO's headcount, which arrives with the",
+    "people-match you are already paying for. Nobody publishes EBITDA at this",
+    "scale; at home-services margins of 10-15%, $500K EBITDA implies roughly",
+    "$3.5-5M of revenue, about 20-30 employees. min_employees is 20.",
+    "",
+    "The `screen` column is the first thing to read:",
+    "  QUALIFIED      Apollo sized it and it clears the bar",
+    "  REVIEW-UNSIZED Apollo has never indexed this company, so nothing sized",
+    "                 it. These are the sleepers -- the reason to scrape BBB",
+    "                 rather than query Apollo -- and they need your eye, not",
+    "                 a filter. They are NOT screened.",
+    "  TOO-SMALL      sized, and under the bar",
+    "Rows are sorted in that order, so the top of the sheet is actionable.",
+    "",
+    "No revenue ceiling -- the PE platform partners buy at many sizes.",
+    "",
+    "MSP/IT is absent despite 5 partners wanting it: MSPs sell B2B and rarely",
+    "register with BBB, so those lists would be noise. That vertical needs an",
+    "Apollo-native search instead.",
+    "",
+    "metros: national, largest first, since deal flow follows population. The",
+    "cursor advances every run and is remembered in .rotation-state.json."
+  ],
+  "target_rows": 15,
+  "max_results": 150,
+  "min_employees": 20,
+  "min_years": 5,
+  "daily_credit_cap": 40,
+  "exclude_file": "partners.exclude.txt",
+  "metros": [
+    "houston-tx",
+    "atlanta-ga",
+    "chicago-il",
+    "dallas-tx",
+    "phoenix-az",
+    "philadelphia-pa",
+    "charlotte-nc",
+    "tampa-fl",
+    "denver-co",
+    "columbus-oh",
+    "nashville-tn",
+    "indianapolis-in",
+    "jacksonville-fl",
+    "san-antonio-tx",
+    "austin-tx",
+    "fort-worth-tx",
+    "detroit-mi",
+    "memphis-tn",
+    "baltimore-md",
+    "milwaukee-wi",
+    "kansas-city-mo",
+    "orlando-fl",
+    "las-vegas-nv",
+    "louisville-ky",
+    "raleigh-nc",
+    "st-louis-mo",
+    "pittsburgh-pa",
+    "cincinnati-oh",
+    "cleveland-oh",
+    "oklahoma-city-ok",
+    "minneapolis-mn",
+    "tucson-az",
+    "sacramento-ca",
+    "omaha-ne",
+    "richmond-va",
+    "birmingham-al",
+    "salt-lake-city-ut",
+    "greenville-sc",
+    "boise-id",
+    "des-moines-ia"
+  ],
+  "schedule": {
+    "monday": [
+      "roofing-contractors",
+      "plumber"
+    ],
+    "tuesday": [
+      "heating-and-air-conditioning",
+      "landscape-contractors"
+    ],
+    "wednesday": [
+      "roofing-contractors",
+      "electrician"
+    ],
+    "thursday": [
+      "heating-and-air-conditioning",
+      "fire-protection-systems"
+    ],
+    "friday": [
+      "roofing-contractors",
+      "security-systems"
+    ],
+    "saturday": [],
+    "sunday": []
+  },
+  "detail": false,
+  "category_allow": {
+    "roofing-contractors": [
+      "roof",
+      "siding",
+      "gutter",
+      "window",
+      "exterior"
+    ],
+    "plumber": [
+      "plumb",
+      "drain",
+      "sewer",
+      "water-heater"
+    ],
+    "heating-and-air-conditioning": [
+      "heating",
+      "air-conditioning",
+      "hvac",
+      "furnace",
+      "duct",
+      "refrigeration"
+    ],
+    "electrician": [
+      "electric"
+    ],
+    "landscape-contractors": [
+      "landscap",
+      "lawn",
+      "tree",
+      "irrigation",
+      "grounds-maintenance"
+    ],
+    "fire-protection-systems": [
+      "fire",
+      "sprinkler",
+      "extinguisher",
+      "alarm"
+    ],
+    "security-systems": [
+      "security",
+      "alarm",
+      "surveillance",
+      "low-voltage",
+      "access-control"
+    ]
+  }
+}
