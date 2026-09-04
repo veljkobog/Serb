@@ -10,20 +10,19 @@ an unpacked ZIP that gets replaced every time you download a new copy, taking yo
 files with it.
 
 ```powershell
-mkdir C:\Serb
-cd C:\Serb
-git clone -b claude/new-session-55i08m https://github.com/veljkobog/Serb.git .
-cd bbb-scraper
+cd $HOME
+git clone -b claude/new-session-55i08m https://github.com/veljkobog/Serb.git
+cd $HOME\Serb\bbb-scraper
 pip install -r requirements.txt
 ```
 
-No git? Download the ZIP, extract it, and move the `bbb-scraper` folder to `C:\Serb\`
+No git? Download the ZIP, extract it, and move the `bbb-scraper` folder to `C:\Users\<you>\Serb\`
 by hand. You'll re-download to update instead of running `git pull`.
 
 You end up with:
 
 ```
-C:\Serb\bbb-scraper\        <- the code. You run commands from here.
+C:\Users\<you>\Serb\bbb-scraper\        <- the code. You run commands from here.
 C:\Users\<you>\ClaudeAssistant\exports\   <- every lead sheet lands here (BOB's source folder)
 ```
 
@@ -183,7 +182,7 @@ getting a cold email from you.
 
 ## The three steps
 
-**1. Scrape** — from `C:\Serb\bbb-scraper`:
+**1. Scrape** — from `C:\Users\<you>\Serb\bbb-scraper`:
 
 ```powershell
 .\run-leads.ps1 -Category plumber -Location wichita-ks -Max 100 -MinYears 10
@@ -240,7 +239,7 @@ setx HUBSPOT_TOKEN "pat-na1-..."
 ## Updating to a newer version
 
 ```powershell
-cd C:\Serb
+cd $HOME\Serb
 git pull
 ```
 
