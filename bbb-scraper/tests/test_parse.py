@@ -220,5 +220,63 @@ class TestDedupeAndOutput(unittest.TestCase):
         self.assertEqual(rows[1][parse.FIELD_ORDER.index("accredited")], "true")
 
 
+
+class RowCoverageTest(unittest.TestCase):
+    """as_row() and FIELD_ORDER must agree, exactly.
+
+    Two fields were added to FIELD_ORDER and to the dataclass but not to
+    as_row(). csv.DictWriter fills a missing key with the restval, so every
+    row shipped with those columns blank and nothing failed -- the Apollo
+    match label, which is the entire sleeper signal, was never written. With a
+    column map the same gap is a hard KeyError instead, which is how it was
+    finally noticed.
+    """
+
+    def test_as_row_covers_every_declared_column(self):
+        row = parse.Listing(company_name="X").as_row()
+        self.assertEqual(set(row), set(parse.FIELD_ORDER),
+                         "as_row() and FIELD_ORDER have drifted")
+
+    def test_as_row_emits_the_columns_in_declared_order(self):
+        self.assertEqual(list(parse.Listing().as_row()), parse.FIELD_ORDER)
+
+    def test_every_dataclass_field_reaches_a_column(self):
+        from dataclasses import fields
+        declared = {f.name for f in fields(parse.Listing)}
+        self.assertEqual(declared, set(parse.FIELD_ORDER),
+                         "a Listing field exists that no column carries")
+
+    def test_a_value_actually_reaches_the_csv(self):
+        """Asserting the column exists is not enough -- it existed, and was
+        empty on every row."""
+        import csv
+        import tempfile
+        listing = parse.Listing(company_name="Sleeper Roofing",
+                                phone="+17135551000",
+                                apollo_org_id="a" * 24,
+                                apollo_match="not-in-apollo")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "out.csv")
+            parse.write_csv(path, [listing])
+            with open(path, encoding="utf-8") as fh:
+                written = list(csv.DictReader(fh))
+        self.assertEqual(written[0]["apollo_match"], "not-in-apollo")
+        self.assertEqual(written[0]["apollo_org_id"], "a" * 24)
+
+    def test_the_shipped_column_map_applies_without_a_keyerror(self):
+        """The lead format names apollo columns; a gap in as_row crashes here."""
+        import csv
+        import tempfile
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        column_map = parse.load_column_map(os.path.join(here, "lead-format.json"))
+        listing = parse.Listing(company_name="X", apollo_match="high")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "mapped.csv")
+            parse.write_csv(path, [listing], column_map=column_map)
+            with open(path, encoding="utf-8") as fh:
+                written = list(csv.DictReader(fh))
+        self.assertEqual(written[0]["apollo_match"], "high")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -318,6 +318,11 @@ class CliGateTest(unittest.TestCase):
         self.assertNotIn("trimmed", out)
 
     def test_apollo_columns_reach_the_csv(self):
+        """Not just that the columns exist -- that a value lands in them.
+
+        The original version of this test asserted only presence, and passed
+        for weeks while every row shipped with both columns empty.
+        """
         import csv
         self.run_cli("--apollo", "--apollo-key", "test-key",
                      "--apollo-endpoint", self.apollo_url)
@@ -327,6 +332,18 @@ class CliGateTest(unittest.TestCase):
         for row in rows:
             self.assertIn("apollo_org_id", row)
             self.assertIn("apollo_match", row)
+        self.assertTrue(any(row["apollo_match"] for row in rows),
+                        "every apollo_match came back blank")
+
+    def test_the_lead_format_column_map_survives_a_real_run(self):
+        """The daily run always passes this map; a gap in as_row kills it."""
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        code, out = self.run_cli(
+            "--apollo", "--apollo-key", "test-key",
+            "--apollo-endpoint", self.apollo_url,
+            "--column-map", os.path.join(here, "lead-format.json"))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("apollo_org_id'", out, "column map raised a KeyError")
 
 
 if __name__ == "__main__":

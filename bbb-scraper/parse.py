@@ -173,6 +173,11 @@ class Listing:
             "google_reviews": _blank_if_none(self.google_reviews),
             "google_place_id": self.google_place_id,
             "google_match": self.google_match,
+            # Added to FIELD_ORDER without being added here, which wrote
+            # them as blanks for every row and crashed the column-map
+            # path outright. as_row and FIELD_ORDER must agree.
+            "apollo_org_id": self.apollo_org_id,
+            "apollo_match": self.apollo_match,
         }
 
 
