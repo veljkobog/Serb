@@ -166,7 +166,7 @@ class LookupTest(unittest.TestCase):
         c = self.client()
         body = c.payload(listing("Ace Plumbing"))
         self.assertEqual(body["organization_locations"], ["Wilmington, NC"])
-        self.assertEqual(body["q_organization_fuzzy_name"], "Ace Plumbing")
+        self.assertEqual(body["q_organization_name"], "Ace Plumbing")
         c.close()
 
     def test_missing_key_refuses_to_build_a_client(self):
@@ -183,7 +183,7 @@ class ProbeTest(unittest.TestCase):
         self.server.server_close()
 
     def test_probe_separates_live_paths_from_dead_ones(self):
-        dead = self.url.replace("/organizations/lookup", "/nope/lookup")
+        dead = self.url.replace("/organizations/search", "/nope/search")
         rows = enrich_apollo.probe_endpoints("test-key", [self.url, dead])
         self.assertTrue(rows[0]["ok"])
         self.assertEqual(rows[0]["status"], 200)
@@ -383,6 +383,43 @@ class DiagnosticArgsTest(unittest.TestCase):
             code = scraper.main([])
         self.assertEqual(code, 2)
         self.assertIn("--category", buf.getvalue())
+
+
+
+class CostReportingTest(unittest.TestCase):
+    """What a pass costs is measured, not assumed.
+
+    Apollo's price for the company-search path is not documented anywhere this
+    code can read, and a list pulls ~150 lookups. Reporting the measured
+    balance delta is the only honest way to know before scheduling it daily.
+    """
+
+    def test_spend_is_the_balance_delta(self):
+        stats = enrich_apollo.ApolloStats(balance_before=4465, balance_after=4315)
+        self.assertEqual(stats.credits_spent, 150)
+
+    def test_an_unreadable_balance_reports_unknown_not_zero(self):
+        """Zero would read as "this was free", which is a claim, not a reading."""
+        self.assertIsNone(enrich_apollo.ApolloStats().credits_spent)
+        self.assertIsNone(
+            enrich_apollo.ApolloStats(balance_before=100).credits_spent)
+
+    def test_a_topped_up_balance_is_not_negative_spend(self):
+        stats = enrich_apollo.ApolloStats(balance_before=100, balance_after=500)
+        self.assertEqual(stats.credits_spent, 0)
+
+    def test_the_default_endpoint_is_the_one_that_answered(self):
+        self.assertTrue(enrich_apollo.DEFAULT_ENDPOINT.endswith(
+            "/organizations/search"))
+
+    def test_the_payload_matches_the_search_endpoint(self):
+        client = enrich_apollo.ApolloClient.__new__(enrich_apollo.ApolloClient)
+        body = client.payload(Listing(company_name="Ace Roofing",
+                                      city="Houston", state="TX"))
+        self.assertIn("q_organization_name", body)
+        self.assertNotIn("display_mode", body,
+                         "display_mode belongs to the 404'd lookup path")
+        self.assertEqual(body["organization_locations"], ["Houston, TX"])
 
 
 if __name__ == "__main__":

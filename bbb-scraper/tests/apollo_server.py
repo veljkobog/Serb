@@ -41,7 +41,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
-        if not self.path.endswith("/organizations/lookup"):
+        if not self.path.endswith("/organizations/search"):
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"{}")
@@ -60,7 +60,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
         self.__class__.calls += 1
-        name = (body.get("q_organization_fuzzy_name") or "").lower()
+        name = (body.get("q_organization_name")
+                or body.get("q_organization_fuzzy_name") or "").lower()
         payload = {"organizations": ORGS.get(name, []),
                    "accounts": ACCOUNTS.get(name, [])}
         raw = json.dumps(payload).encode()
@@ -77,4 +78,4 @@ def start_apollo():
     server = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     host, port = server.server_address
-    return server, f"http://{host}:{port}/v1/organizations/lookup", Handler
+    return server, f"http://{host}:{port}/v1/organizations/search", Handler

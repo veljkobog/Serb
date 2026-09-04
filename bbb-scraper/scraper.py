@@ -1095,8 +1095,12 @@ def probe_apollo(args) -> int:
         if row["error"]:
             print(f"  error  {row['url']}  ({row['error']})")
         else:
-            print(f"  {'OK ' if row['ok'] else '   '}{row['status']:<5} {row['url']}")
-            people_ok.setdefault(base, []).append(row["ok"])
+            # 422 means the path exists and the payload was rejected -- a
+            # different thing from 404, and not evidence the route is missing.
+            usable = row["ok"] or row["status"] == 422
+            mark = "OK " if row["ok"] else ("EXISTS" if usable else "   ")
+            print(f"  {mark:<7}{row['status']:<5} {row['url']}")
+            people_ok.setdefault(base, []).append(usable)
     usable = [b for b, oks in people_ok.items() if all(oks)]
     if usable:
         print(f"\n  all three answer under: {usable[0]}")
@@ -1292,6 +1296,12 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
               f"({apollo_stats.low_match} low-confidence)")
         print(f"                    {apollo_stats.websites_filled} website(s) "
               f"recovered that BBB withheld")
+        spent = apollo_stats.credits_spent
+        if spent is None:
+            print("                    credits spent: could not read the balance")
+        else:
+            print(f"                    credits spent: {spent} "
+                  f"(balance now {apollo_stats.balance_after})")
         if apollo_stats.no_result or apollo_stats.errors or apollo_stats.capped:
             print(f"                    {apollo_stats.no_result} not in Apollo, "
                   f"{apollo_stats.errors} errors, {apollo_stats.capped} skipped at cap")

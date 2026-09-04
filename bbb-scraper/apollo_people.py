@@ -442,9 +442,13 @@ def probe_paths(api_key: str, bases: Optional[List[str]] = None,
 
     headers = {"Content-Type": "application/json", "accept": "application/json",
                "x-api-key": api_key}
+    # A fabricated organization id is rejected as malformed (422), which reads
+    # as a dead path when the path is fine. Probe with a title nobody holds:
+    # valid shape, guaranteed empty, no credits.
     probes = [
         (PROFILE, "GET", None),
-        (PEOPLE_SEARCH, "POST", {"organization_ids": [PROBE_ORG_ID], "per_page": 1}),
+        (PEOPLE_SEARCH, "POST",
+         {"person_titles": [PROBE_PERSON["last_name"]], "per_page": 1}),
         (BULK_MATCH, "POST", {"details": [PROBE_PERSON]}),
     ]
 

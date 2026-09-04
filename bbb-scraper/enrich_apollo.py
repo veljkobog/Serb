@@ -48,13 +48,15 @@ from parse import Listing, normalize_domain
 # The REST path for the free lookup is discovered, not remembered: Apollo has
 # moved between /v1 and /api/v1, and guessing it produced a 404 once already.
 # `probe_endpoints` resolves it, and --apollo-endpoint pins it.
-DEFAULT_ENDPOINT = "https://api.apollo.io/v1/organizations/lookup"
+# Discovered by --apollo-probe, not remembered: /organizations/lookup was a
+# guess and 404s. /organizations/search is what this account actually serves.
+DEFAULT_ENDPOINT = "https://api.apollo.io/v1/organizations/search"
 
 CANDIDATE_ENDPOINTS = [
-    "https://api.apollo.io/v1/organizations/lookup",
-    "https://api.apollo.io/api/v1/organizations/lookup",
     "https://api.apollo.io/v1/organizations/search",
     "https://api.apollo.io/api/v1/organizations/search",
+    "https://api.apollo.io/v1/organizations/lookup",
+    "https://api.apollo.io/api/v1/organizations/lookup",
 ]
 
 # A query no real company matches. Apollo bills search-style endpoints only
@@ -142,6 +144,9 @@ def best_match(listing: Listing, orgs: List[dict]) -> tuple:
 # client
 # --------------------------------------------------------------------------
 
+PROFILE_PATH = "/users/api_profile"
+
+
 @dataclass
 class ApolloStats:
     looked_up: int = 0
@@ -152,6 +157,17 @@ class ApolloStats:
     no_result: int = 0
     errors: int = 0
     capped: int = 0
+    #: Balance before and after, so the run reports what it actually cost
+    #: rather than what the docs imply. 150 lookups per list is not a spend
+    #: to take on trust.
+    balance_before: Optional[int] = None
+    balance_after: Optional[int] = None
+
+    @property
+    def credits_spent(self) -> Optional[int]:
+        if self.balance_before is None or self.balance_after is None:
+            return None
+        return max(0, self.balance_before - self.balance_after)
 
 
 class ApolloClient:
@@ -181,6 +197,21 @@ class ApolloClient:
         self.client.close()
         self.cache.save()
 
+    def read_balance(self) -> Optional[int]:
+        """Live credit balance, or None when it cannot be read."""
+        base = self.endpoint.split("/organizations/")[0]
+        try:
+            response = self.client.get(
+                base + PROFILE_PATH,
+                headers={"accept": "application/json", "x-api-key": self.api_key},
+                params={"include_credit_usage": "true"})
+            if response.status_code >= 400:
+                return None
+            value = (response.json() or {}).get("num_credits_remaining")
+            return int(value) if value is not None else None
+        except Exception:
+            return None
+
     def __enter__(self) -> "ApolloClient":
         return self
 
@@ -200,9 +231,11 @@ class ApolloClient:
     def payload(self, listing: Listing) -> dict:
         """Fuzzy name, narrowed by city/state so a national chain's HQ in
         another state doesn't outrank the local shop we actually scraped."""
+        # /organizations/search takes q_organization_name; the fuzzy_name +
+        # display_mode pair belonged to the lookup path, which 404s on this
+        # account. Sending the wrong one back is a 422, not a match.
         body = {
-            "q_organization_fuzzy_name": listing.company_name,
-            "display_mode": "fuzzy_select_mode",
+            "q_organization_name": listing.company_name,
             "per_page": 5,
         }
         where = ", ".join(p for p in (listing.city, listing.state) if p)
@@ -272,11 +305,13 @@ class ApolloClient:
 
 def enrich_listings(listings: Iterable[Listing], client: ApolloClient,
                     max_lookups: Optional[int] = None) -> ApolloStats:
+    client.stats.balance_before = client.read_balance()
     for listing in listings:
         if max_lookups is not None and client.stats.looked_up >= max_lookups:
             client.stats.capped += 1
             continue
         client.enrich(listing)
+    client.stats.balance_after = client.read_balance()
     return client.stats
 
 
