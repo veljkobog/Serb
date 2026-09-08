@@ -120,6 +120,10 @@ def scrape(config: dict, category: str, metro: str, out_path: str,
     allow = (config.get("category_allow") or {}).get(category)
     if allow:
         argv += ["--category-allow", ",".join(allow)]
+    if config.get("category_deny"):
+        argv += ["--category-deny", ",".join(config["category_deny"])]
+    if config.get("exclude_names"):
+        argv += ["--exclude-name", ",".join(config["exclude_names"])]
 
     if config.get("exclude_file"):
         path = config["exclude_file"]

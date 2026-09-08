@@ -276,3 +276,72 @@ class RequireWebsiteTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class SearchHighlightTest(unittest.TestCase):
+    """BBB wraps matched words in <em>, and the markup came through into the
+    company name: "Phoenix Roofers by Allstate <em>Roofing</em>
+    <em>Contractors</em>". Apollo and HubSpot both match on the name string,
+    so this quietly broke enrichment as well as looking broken in the sheet.
+    """
+
+    def test_highlight_markup_is_removed(self):
+        self.assertEqual(
+            parse._clean_text("Phoenix Roofers by Allstate "
+                              "<em>Roofing</em> <em>Contractors</em>"),
+            "Phoenix Roofers by Allstate Roofing Contractors")
+
+    def test_entities_are_decoded(self):
+        self.assertEqual(
+            parse._clean_text("Belk Builders Siding, Windows &amp; Roofing, LLC"),
+            "Belk Builders Siding, Windows & Roofing, LLC")
+
+    def test_an_escaped_angle_bracket_survives_as_text(self):
+        """Decoding happens after tag-stripping, so a legitimately escaped
+        bracket is not mistaken for markup and eaten."""
+        self.assertEqual(parse._clean_text("A &lt;not a tag&gt; B"),
+                         "A <not a tag> B")
+
+    def test_ordinary_names_are_untouched(self):
+        for name in ("Horizon Roofing", "Merritt Roofing, LLC",
+                     "J & P Exteriors 1, Inc."):
+            self.assertEqual(parse._clean_text(name), name)
+
+
+class CategoryDenyTest(unittest.TestCase):
+    """An allow-list alone is not enough: 'roof' also matches roof-inspection,
+    and an inspector, consultant or insurance adjuster serves the trade rather
+    than being an acquisition target in it."""
+
+    def filters(self):
+        args = scraper.build_parser().parse_args([
+            "--category-allow", "roofing,siding,gutter,window,exterior",
+            "--category-deny", "inspection,consultant,adjuster"])
+        return scraper.build_filters(args)
+
+    def keeps(self, category):
+        listing = Listing(company_name="x", category=category)
+        return all(f.keep(listing, False) for f in self.filters())
+
+    def test_real_contractors_are_kept(self):
+        for category in ("roofing-contractors", "commercial-roofing",
+                         "siding-contractors", "replacement-windows"):
+            self.assertTrue(self.keeps(category), category)
+
+    def test_service_providers_to_the_trade_are_dropped(self):
+        """Both appeared on real sheets: Southwest Roofing Consultants
+        (roof-inspection) and Great Lakes Adjusters (public-adjuster)."""
+        for category in ("roof-inspection", "public-adjuster"):
+            self.assertFalse(self.keeps(category), category)
+
+    def test_deny_beats_allow(self):
+        """roof-inspection matches the allow fragment 'roofing'? No -- but
+        a deny entry must win wherever both would match."""
+        args = scraper.build_parser().parse_args([
+            "--category-allow", "roof", "--category-deny", "inspection"])
+        listing = Listing(company_name="x", category="roof-inspection")
+        self.assertFalse(all(f.keep(listing, False)
+                             for f in scraper.build_filters(args)))
+
+    def test_an_unknown_category_still_passes(self):
+        self.assertTrue(self.keeps(""))

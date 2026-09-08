@@ -472,21 +472,78 @@ class CategoryAllowTest(unittest.TestCase):
         self.assertEqual(scheduled - set(allow), set(),
                          "a scheduled vertical with no allow-list keeps everything")
 
+    def keeps(self, category, vertical="roofing-contractors"):
+        """Assert on behaviour, not on the fragments that produce it.
+
+        The literal fragment changed once already -- "roof" was tightened to
+        "roofing" so it would stop matching roof-inspection -- and a test
+        pinned to the string failed while the behaviour was correct.
+        """
+        config = self.config()
+        allow = config["category_allow"][vertical]
+        deny = config.get("category_deny") or []
+        low = category.lower()
+        return any(a in low for a in allow) and not any(d in low for d in deny)
+
     def test_roofing_keeps_the_exteriors_trades_partners_buy(self):
-        allow = self.config()["category_allow"]["roofing-contractors"]
-        for wanted in ("roof", "siding", "gutter", "window"):
-            self.assertIn(wanted, allow)
+        for category in ("roofing-contractors", "commercial-roofing",
+                         "residential-roofing", "siding-contractors",
+                         "replacement-windows", "gutter-services"):
+            self.assertTrue(self.keeps(category), category)
 
     def test_roofing_rejects_the_trades_that_diluted_the_real_sheet(self):
-        allow = self.config()["category_allow"]["roofing-contractors"]
-        for category in ("carport", "stamped-concrete", "general-contractor"):
-            self.assertFalse(any(a in category for a in allow),
-                             f"{category} would still get through")
+        for category in ("carport", "stamped-concrete", "general-contractor",
+                         "construction-services", "commercial-renovation",
+                         "building-restoration", "home-improvement"):
+            self.assertFalse(self.keeps(category), category)
+
+    def test_roofing_rejects_service_providers_to_the_trade(self):
+        for category in ("roof-inspection", "public-adjuster"):
+            self.assertFalse(self.keeps(category), category)
 
     def test_the_flag_reaches_the_scraper(self):
         import inspect
         source = inspect.getsource(daily.scrape)
         self.assertIn("--category-allow", source)
+
+
+
+class NationalChainTest(unittest.TestCase):
+    """National platforms and franchises are competitors to the EL'd partners,
+    not founder-owned tuck-in targets. DaBella and Bumble Roofing both landed
+    on real sheets."""
+
+    def config(self):
+        return daily.load_config(
+            os.path.join(os.path.dirname(HERE), "rotation.example.json"))
+
+    def excluded(self, name):
+        import argparse
+
+        import scraper
+        ns = argparse.Namespace(
+            exclude_name=",".join(self.config()["exclude_names"]),
+            exclude_domain="", exclude_file=None)
+        names, domains = scraper.load_exclusions(ns)
+
+        class L:
+            company_name = name
+            website = ""
+        return scraper.excluded(L(), names, domains)
+
+    def test_the_chains_seen_on_real_sheets_are_excluded(self):
+        self.assertTrue(self.excluded("DaBella"))
+        self.assertTrue(self.excluded("Bumble Roofing of Charlotte"))
+
+    def test_independent_operators_are_untouched(self):
+        for name in ("Horizon Roofing", "Merritt Roofing, LLC",
+                     "Tribe Built Roofing, LLC", "Four Peaks Roofing",
+                     "Rob's Roofing LLC"):
+            self.assertFalse(self.excluded(name), name)
+
+    def test_the_exclusions_reach_the_scraper(self):
+        import inspect
+        self.assertIn("--exclude-name", inspect.getsource(daily.scrape))
 
 
 if __name__ == "__main__":

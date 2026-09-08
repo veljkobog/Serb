@@ -12,6 +12,7 @@ assuming one shape.
 from __future__ import annotations
 
 import csv
+import html
 import json
 import os
 import re
@@ -42,8 +43,10 @@ class BlockedError(RuntimeError):
     """
 
 
-def looks_challenged(html: str) -> bool:
-    head = (html or "")[:4000].lower()
+def looks_challenged(page: str) -> bool:
+    # Parameter is not named `html`: that shadows the stdlib module this file
+    # now imports for entity decoding.
+    head = (page or "")[:4000].lower()
     return any(marker in head for marker in CHALLENGE_MARKERS)
 
 
@@ -594,10 +597,19 @@ def listing_from_record(record: dict, default_category: str = "") -> Listing:
 
 
 def _clean_text(value: Any) -> str:
+    """Collapse whitespace, drop markup, decode entities.
+
+    BBB's search results wrap the matched words in <em>, and that markup came
+    through into the company name: "Phoenix Roofers by Allstate <em>Roofing</em>
+    <em>Contractors</em>". It breaks Apollo and CRM matching, which compare
+    name strings, and it is visible in a sheet a person reads.
+    """
     if value in (None, ""):
         return ""
     if not isinstance(value, str):
         value = str(value)
+    value = re.sub(r"<[^>]{0,200}>", " ", value)
+    value = html.unescape(value)
     return re.sub(r"\s+", " ", value).strip()
 
 

@@ -109,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
                           "returns adjacent trades -- a roofing search also "
                           "yields carport and stamped-concrete companies -- "
                           "and nothing downstream can tell they are off-target")
+    flt.add_argument("--category-deny", default=None,
+                     help="drop listings whose category contains one of these "
+                          "fragments, even when --category-allow matched. "
+                          "'roof' also matches roof-inspection, and an "
+                          "inspector or adjuster is not an acquisition target")
     flt.add_argument("--target-rows", type=int, default=None,
                      help="trim the finished sheet to this many rows. Unlike "
                           "--max-results (which caps the RAW pull, before "
@@ -309,6 +314,13 @@ def build_filters(args):
     if args.min_employees > 0:
         filters.append(Filter("min-employees", lambda l: l.employees,
                               lambda v: v >= args.min_employees, "employees"))
+    if args.category_deny:
+        unwanted = [c.strip().lower() for c in args.category_deny.split(",") if c.strip()]
+        filters.append(Filter(
+            "category-deny",
+            lambda l: (l.category or "").lower() or None,
+            lambda v: not any(w in v for w in unwanted)))
+
     if args.category_allow:
         wanted = [c.strip().lower() for c in args.category_allow.split(",") if c.strip()]
         # A blank category is unknown, not off-target, so it passes like every

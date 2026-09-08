@@ -120,7 +120,7 @@
   "detail": false,
   "category_allow": {
     "roofing-contractors": [
-      "roof",
+      "roofing",
       "siding",
       "gutter",
       "window",
@@ -163,5 +163,33 @@
       "low-voltage",
       "access-control"
     ]
-  }
+  },
+  "category_deny": [
+    "inspection",
+    "consultant",
+    "adjuster",
+    "attorney",
+    "insurance",
+    "supply",
+    "manufacturer",
+    "wholesale",
+    "association"
+  ],
+  "exclude_names": [
+    "DaBella",
+    "Bumble Roofing",
+    "Erie Home",
+    "Power Home Remodeling",
+    "Leaf Filter",
+    "LeafFilter",
+    "Renewal by Andersen",
+    "Champion Windows",
+    "Roto-Rooter",
+    "Mr. Rooter",
+    "Benjamin Franklin Plumbing",
+    "One Hour Heating",
+    "Aire Serv",
+    "Servpro",
+    "Restoration 1"
+  ]
 }
