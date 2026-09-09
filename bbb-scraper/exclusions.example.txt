@@ -1,0 +1,17 @@
+# One exclusion per line. A line containing a dot (and no spaces) is treated
+# as a domain; everything else is a case-insensitive name fragment.
+#
+#   python scraper.py ... --exclude-file exclusions.txt
+#
+# Nothing here is excluded by default -- a bundled blocklist would quietly
+# drop real leads. These are examples of what tends to be noise in a
+# home-services pull: national chains, franchisors and supply houses.
+
+# name fragments
+home depot
+lowe's
+roto-rooter
+
+# domains (also matches subdomains)
+homedepot.com
+lowes.com

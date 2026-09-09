@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Reshape the output CSV for whatever ingests it next. Only the columns",
+    "listed here are written, in this order, under these names.",
+    "",
+    "  python scraper.py ... --column-map column-map.json",
+    "",
+    "Left side = a column the scraper produces (see README). Right side = the",
+    "header the destination expects. Run with no --column-map to get the full",
+    "native schema instead.",
+    "",
+    "Available: company_name, website, phone, street, city, state, zip,",
+    "category, years_in_business, accredited, bbb_rating, profile_url,",
+    "social_url, bbb_reviews, bbb_complaints, employees, google_rating,",
+    "google_reviews, google_place_id, google_match"
+  ],
+  "columns": {
+    "company_name": "Company",
+    "website": "Website",
+    "social_url": "Social Page",
+    "phone": "Phone",
+    "city": "City",
+    "state": "State",
+    "years_in_business": "Years In Business",
+    "employees": "Employees",
+    "google_reviews": "Google Reviews",
+    "google_rating": "Google Rating",
+    "profile_url": "Source URL"
+  }
+}
