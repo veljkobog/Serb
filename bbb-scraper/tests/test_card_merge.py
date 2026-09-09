@@ -47,11 +47,10 @@ PAGE = """<!DOCTYPE html><html><body>
 
 
 def have_bs4():
-    try:
-        import bs4  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    # find_spec rather than a guarded import: pyflakes does not honour
+    # `# noqa` (that is a flake8 directive), so an unused import fails lint.
+    import importlib.util
+    return importlib.util.find_spec("bs4") is not None
 
 
 @unittest.skipUnless(have_bs4(), "bs4 is not installed")

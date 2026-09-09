@@ -30,7 +30,7 @@ jobs:
         run: pip install httpx beautifulsoup4 pyflakes
 
       - name: Lint
-        run: python -m pyflakes *.py tests/*.py
+        run: python -m pyflakes *.py tests/*.py tools/*.py
 
       - name: Tests
         run: python -m unittest discover -s tests -t . -v
