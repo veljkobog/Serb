@@ -50,6 +50,80 @@ looks_challenged = parse.looks_challenged
 _CHALLENGE_MARKERS = parse.CHALLENGE_MARKERS
 
 
+
+#: What the result card may contribute. Deliberately narrow: schema.org models
+#: name, address, phone and url properly, so the card is only consulted for
+#: what it does not express. BBB's rating is the field this exists for.
+CARD_ONLY_FIELDS = ("bbb_rating", "accredited")
+
+
+def merge_card_fields(html: str, listings, category: str = "") -> int:
+    """Fill from the result-card markup what the JSON-LD leaves out.
+
+    JSON-LD is the cleaner source and stays authoritative, but it carries no
+    BBB rating -- which is why a browser run reported 100% rating coverage and
+    the HTTP run reported 0% on the same pages. Cards are matched by profile
+    URL, falling back to name: position is not safe, because the JSON-LD
+    skips entries the DOM still renders.
+
+    Only the fields JSON-LD structurally does not model are taken. The card
+    parser finds an address by scanning the card's text, so merging it
+    wholesale INVENTED a street for service-area businesses -- companies with
+    no storefront, whose blank street is a fact rather than a gap. A wrong
+    address on a lead sheet is worse than an empty one, and schema.org already
+    models the address properly.
+
+    Returns how many listings gained at least one field. Requires bs4; without
+    it this is a no-op rather than a failure, since the JSON-LD half still
+    works on its own.
+    """
+    if not listings:
+        return 0
+    try:
+        from browser_client import cards_from_search_html, listing_from_card_html
+    except Exception:
+        return 0
+
+    cards = cards_from_search_html(html)
+    if not cards:
+        return 0
+
+    by_url, by_name = {}, {}
+    for fragment in cards:
+        parsed = listing_from_card_html(fragment, default_category=category)
+        if parsed.profile_url:
+            by_url.setdefault(parsed.profile_url.rstrip("/").lower(), parsed)
+        if parsed.company_name:
+            by_name.setdefault(parsed.company_name.strip().lower(), parsed)
+
+    enriched = 0
+    for listing in listings:
+        match = None
+        if listing.profile_url:
+            key = listing.profile_url.rstrip("/").lower()
+            match = by_url.get(key)
+            if match is None:
+                # JSON-LD gives an absolute URL, the card a relative href.
+                for url, candidate in by_url.items():
+                    if url and (key.endswith(url) or url.endswith(key)):
+                        match = candidate
+                        break
+        if match is None and listing.company_name:
+            match = by_name.get(listing.company_name.strip().lower())
+        if match is None:
+            continue
+        gained = False
+        for field in CARD_ONLY_FIELDS:
+            current = getattr(listing, field)
+            incoming = getattr(match, field)
+            if current in (None, "") and incoming not in (None, ""):
+                setattr(listing, field, incoming)
+                gained = True
+        if gained:
+            enriched += 1
+    return enriched
+
+
 class SearchClient:
     """Paginating client over the rendered search pages."""
 
@@ -132,6 +206,7 @@ class SearchClient:
             self._log(f"probe blocked: {exc}")
             return 0
         listings, _skipped = parse.listings_from_html(html, default_category=category)
+        merge_card_fields(html, listings, category)
         self._log(f"probe found {len(listings)} listing(s)")
         return len(listings)
 
@@ -155,6 +230,9 @@ class SearchClient:
                 return
 
             listings, skipped = parse.listings_from_html(html, default_category=category)
+            merged = merge_card_fields(html, listings, category)
+            if merged:
+                self._log(f"card markup filled fields on {merged} listing(s)")
             if skipped:
                 self._log(f"page {page}: {skipped} record(s) had no readable name")
             if not listings:

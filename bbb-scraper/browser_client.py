@@ -372,6 +372,33 @@ def _find_rating(soup, text: str) -> str:
     return ""
 
 
+#: Same selectors the live browser uses, applied to static HTML.
+_CARD_SOUP_SELECTORS = [
+    ("div", {"class": re.compile(r"\bresult-card\b")}),
+    ("div", {"class": re.compile(r"result-card")}),
+    ("div", {"data-testid": "search-result-card"}),
+    ("li", {"class": re.compile(r"result")}),
+]
+
+
+def cards_from_search_html(html: str) -> List[str]:
+    """The result cards in a server-rendered search page, as HTML fragments.
+
+    The JSON-LD alongside these cards is cleaner but carries less: it has no
+    BBB rating, which the cards do. Reading both is why a browser run showed
+    100% rating coverage while the HTTP run showed 0%.
+    """
+    try:
+        soup = _soup(html)
+    except ImportError:
+        return []
+    for name, attrs in _CARD_SOUP_SELECTORS:
+        found = soup.find_all(name, attrs=attrs)
+        if found:
+            return [str(node) for node in found]
+    return []
+
+
 def listing_from_card_html(html: str, default_category: str = "") -> Listing:
     """Extract one Listing from a rendered search-result card."""
     soup = _soup(html)
