@@ -1,0 +1,3 @@
+# The scoring engine is stdlib-only. These are for the default free data feed.
+yfinance>=0.2.40
+pandas>=2.0
