@@ -3,11 +3,11 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from odte import session
-from odte.cli import resolve_symbols, run as _run, build_parser
+from odte.cli import _record_deadline, resolve_symbols, run as _run, build_parser
 from odte.providers import get_provider
 from odte.providers.snapshot import save_snapshots
 
@@ -88,9 +88,9 @@ class TestCli(unittest.TestCase):
         self.assertEqual(loaded.chain[0].strike, original.chain[0].strike)
 
     def test_universe_resolution_always_includes_the_benchmark(self):
-        args = build_parser().parse_args(["--symbols", "nvda,tsla"])
+        args = build_parser().parse_args(["scan", "--symbols", "nvda,tsla"])
         self.assertEqual(resolve_symbols(args), ["NVDA", "TSLA", "SPY"])
-        index = resolve_symbols(build_parser().parse_args(["--universe", "index"]))
+        index = resolve_symbols(build_parser().parse_args(["scan", "--universe", "index"]))
         self.assertIn("SPY", index)
         self.assertNotIn("NVDA", index)
 
@@ -101,6 +101,55 @@ class TestCli(unittest.TestCase):
                  "--only-tradeable", "--json", str(out)])
             for row in json.loads(out.read_text())["scans"]:
                 self.assertFalse(row["verdict"].startswith(("NO TRADE", "AVOID")))
+
+    def test_scan_is_the_default_subcommand(self):
+        self.assertEqual(
+            run(["--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY"]),
+            run(["scan", "--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY"]),
+        )
+
+    def test_sides_file_is_merged_into_the_scan(self):
+        from odte.providers import get_provider
+        from odte.sides import SideTape
+
+        now = session.to_et(datetime.fromisoformat(AS_OF))
+        snap = get_provider("synthetic", with_sides=False).snapshot("SPY", now)
+        tape = SideTape()
+        for q in snap.chain[:20]:
+            # Customers lifting the offer on everything sampled.
+            tape.record(q.occ, q.ask, 500, q.bid, q.ask, now)
+        with tempfile.TemporaryDirectory() as tmp:
+            sides_path = Path(tmp) / "sides.json"
+            tape.save(sides_path)
+            out = Path(tmp) / "scan.json"
+            code = run(["--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY",
+                        "--sides", str(sides_path), "--json", str(out)])
+            self.assertEqual(code, 0)
+            row = json.loads(out.read_text())["scans"][0]
+        self.assertEqual(row["flow_source"], "side")
+        self.assertGreater(row["sampled_volume"], 0)
+
+    def test_record_deadline_from_minutes_and_clock_time(self):
+        now = session.to_et(datetime.fromisoformat(AS_OF))
+        args = build_parser().parse_args(["record", "--out", "x.json", "--minutes", "45"])
+        self.assertEqual((_record_deadline(args, now) - now).total_seconds(), 45 * 60)
+        args = build_parser().parse_args(["record", "--out", "x.json", "--until", "11:15"])
+        self.assertEqual(_record_deadline(args, now).strftime("%H:%M"), "11:15")
+        # A time already past today rolls to the next session.
+        args = build_parser().parse_args(["record", "--out", "x.json", "--until", "09:45"])
+        self.assertEqual(_record_deadline(args, now).date(), now.date() + timedelta(days=1))
+
+    def test_missing_tradier_token_exits_cleanly(self):
+        import os
+
+        saved = os.environ.pop("TRADIER_TOKEN", None)
+        try:
+            self.assertEqual(
+                run(["--provider", "tradier", "--as-of", AS_OF, "--symbols", "SPY"]), 2
+            )
+        finally:
+            if saved is not None:
+                os.environ["TRADIER_TOKEN"] = saved
 
     def test_unknown_provider_rejected(self):
         with self.assertRaises(ValueError):

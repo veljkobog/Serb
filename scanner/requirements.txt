@@ -1,3 +1,7 @@
-# The scoring engine is stdlib-only. These are for the default free data feed.
+# The scanner is stdlib-only: the Tradier provider talks HTTP through urllib,
+# and nothing in the scoring engine needs a third-party package.
+#
+# Only the optional Yahoo fallback provider (--provider yahoo) needs these:
+#   pip install -r requirements.txt
 yfinance>=0.2.40
 pandas>=2.0

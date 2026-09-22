@@ -38,6 +38,31 @@ class OptionQuote:
     volume: float = 0.0
     open_interest: float = 0.0
     iv: Optional[float] = None  # provider IV, as a decimal (0.23 == 23%)
+    occ: Optional[str] = None   # OCC symbol, e.g. SPY260922C00590000
+    # Provider greeks, when the feed supplies them (Tradier does). Used in
+    # preference to re-deriving them from the mid.
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    # Signed volume from classified time & sales. Zeros mean "not sampled",
+    # which is different from "no trades" — check `sampled` before reading.
+    buy_volume: float = 0.0
+    sell_volume: float = 0.0
+    mid_volume: float = 0.0
+    buy_premium: float = 0.0
+    sell_premium: float = 0.0
+
+    @property
+    def sampled_volume(self) -> float:
+        return self.buy_volume + self.sell_volume + self.mid_volume
+
+    @property
+    def sampled(self) -> bool:
+        return self.sampled_volume > 0
+
+    @property
+    def net_volume(self) -> float:
+        """Buyer-initiated minus seller-initiated contracts."""
+        return self.buy_volume - self.sell_volume
 
     @property
     def mid(self) -> Optional[float]:
@@ -74,6 +99,8 @@ class SymbolSnapshot:
     avg_share_volume: Optional[float] = None
     is_benchmark: bool = False
     notes: List[str] = field(default_factory=list)
+    # Seconds of classified time & sales merged into `chain`, when any.
+    side_window_seconds: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)

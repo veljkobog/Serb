@@ -6,6 +6,10 @@ index ETFs and heavy-volume single names, then scores each symbol on a
 
 Designed to be run roughly one hour after the cash open (10:30 ET default),
 once the opening range is set and 0DTE volume is real.
+
+Data comes from Tradier: real-time quotes and chains over REST, plus streamed
+time & sales classified into buyer- and seller-initiated volume, which is what
+turns "flow" from a positioning proxy into actual directional pressure.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

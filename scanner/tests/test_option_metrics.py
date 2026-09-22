@@ -117,5 +117,96 @@ class TestOptionMetrics(unittest.TestCase):
         self.assertIsNone(compute_option_metrics(calls_only, SPOT, T))
 
 
+def sided(right_with_buys=None, buy=600.0, sell=200.0, sampled_strikes=3, **kw):
+    """Test chain where customers lift the offer on one side of the book.
+
+    `right_with_buys` gets net buying; the other right gets net selling.
+    """
+    quotes = chain(**kw)
+    strikes = sorted({q.strike for q in quotes}, key=lambda k: abs(k - SPOT))[:sampled_strikes]
+    for q in quotes:
+        if q.strike not in strikes:
+            continue
+        buys = buy if q.right == right_with_buys else sell
+        sells = sell if q.right == right_with_buys else buy
+        q.buy_volume, q.sell_volume = buys, sells
+        q.buy_premium = buys * (q.mid or 0) * 100
+        q.sell_premium = sells * (q.mid or 0) * 100
+    return quotes
+
+
+class TestSignedFlow(unittest.TestCase):
+    # Wide window so every strike in the small test chain is measured.
+    WINDOW = 10.0
+
+    def test_call_buying_reads_bullish(self):
+        m = compute_option_metrics(sided("C"), SPOT, T, em_window=self.WINDOW)
+        self.assertEqual(m.flow_source, "side")
+        self.assertGreater(m.flow_tilt, 0)
+        self.assertEqual(m.flow_tilt, m.signed_flow_tilt)
+        self.assertGreater(m.net_delta_dollars, 0)
+        self.assertGreater(m.net_premium_dollars, 0)
+
+    def test_put_buying_reads_bearish(self):
+        m = compute_option_metrics(sided("P"), SPOT, T, em_window=self.WINDOW)
+        self.assertEqual(m.flow_source, "side")
+        self.assertLess(m.flow_tilt, 0)
+        self.assertLess(m.net_delta_dollars, 0)
+        self.assertLess(m.net_premium_dollars, 0)
+
+    def test_side_data_can_contradict_the_unsigned_proxy(self):
+        # Heavy call volume, but the customer is the seller on every print.
+        quotes = sided("P", call_vol=5000, put_vol=500)
+        m = compute_option_metrics(quotes, SPOT, T, em_window=self.WINDOW)
+        self.assertGreater(m.proxy_flow_tilt, 0)   # proxy sees the call volume
+        self.assertLess(m.signed_flow_tilt, 0)     # side data sees who was buying
+        self.assertEqual(m.flow_tilt, m.signed_flow_tilt)
+
+    def test_thin_sampling_falls_back_to_the_proxy(self):
+        quotes = sided("C", buy=5.0, sell=1.0, sampled_strikes=1, call_vol=5000, put_vol=5000)
+        m = compute_option_metrics(quotes, SPOT, T, em_window=self.WINDOW)
+        self.assertLess(m.side_coverage, 0.05)
+        self.assertEqual(m.flow_source, "proxy")
+        self.assertEqual(m.flow_tilt, m.proxy_flow_tilt)
+
+    def test_no_side_data_is_proxy_with_empty_counters(self):
+        m = compute_option_metrics(chain(), SPOT, T, em_window=self.WINDOW)
+        self.assertEqual(m.flow_source, "proxy")
+        self.assertIsNone(m.signed_flow_tilt)
+        self.assertEqual(m.sampled_volume, 0.0)
+        self.assertEqual(m.net_delta_dollars, 0.0)
+
+    def test_coverage_is_the_sampled_share_of_traded_volume(self):
+        m = compute_option_metrics(
+            sided("C", buy=500, sell=500, sampled_strikes=17, call_vol=1000, put_vol=1000),
+            SPOT, T, em_window=self.WINDOW,
+        )
+        self.assertAlmostEqual(m.side_coverage, 1.0, places=6)
+        self.assertAlmostEqual(m.sampled_volume, m.window_volume, places=6)
+
+
+class TestProviderGreeks(unittest.TestCase):
+    def test_broker_deltas_are_used_when_supplied(self):
+        quotes = sided("C", buy=1000, sell=0, sampled_strikes=1)
+        atm = [q for q in quotes if q.strike == SPOT]
+        for q in atm:
+            q.delta = 0.60 if q.right == "C" else -0.40
+        m = compute_option_metrics(quotes, SPOT, T, em_window=10.0)
+        # Customers bought 1000 ATM calls and sold 1000 ATM puts. Both are
+        # bullish, and delta-signing adds them: +1000*0.60 and -1000*-0.40.
+        expected = 1000 * 0.60 + (-1000) * (-0.40)
+        self.assertAlmostEqual(m.net_delta_contracts, expected, places=6)
+        self.assertAlmostEqual(m.net_delta_dollars, expected * 100 * SPOT, places=4)
+
+    def test_nonsense_broker_greeks_fall_back_to_black_scholes(self):
+        quotes = chain()
+        for q in quotes:
+            q.delta = 42.0   # out of range
+            q.gamma = -1.0   # impossible
+        m = compute_option_metrics(quotes, SPOT, T)
+        self.assertIsNotNone(m.rr25)
+        self.assertGreater(m.gamma_wall, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

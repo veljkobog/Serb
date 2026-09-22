@@ -29,6 +29,25 @@ def _col(v: Optional[float], width: int, nd: int = 2, sign: bool = False) -> str
     return fmt.format(v)
 
 
+def _millions(v: Optional[float], width: int) -> str:
+    """Dollar figure in millions, signed. Dash when the number isn't available."""
+    if v is None or v != v:
+        return f"{'-':>{width}}"
+    return f"{v / 1e6:>+{width - 2}.1f}mm"
+
+
+def _money(v: Optional[float]) -> str:
+    """Signed dollars, auto-scaled: 1.2mm / 340k / 85."""
+    if v is None or v != v:
+        return "-"
+    a = abs(v)
+    if a >= 1e6:
+        return f"{v / 1e6:+,.1f}mm"
+    if a >= 1e3:
+        return f"{v / 1e3:+,.0f}k"
+    return f"{v:+,.0f}"
+
+
 def _pct(v: Optional[float], nd: int = 2) -> str:
     return "-" if v is None else f"{v:+.{nd}f}%"
 
@@ -49,7 +68,7 @@ def render_console(
     hdr = (
         f"{'SYM':<6}{'BIAS':>7}{'CONF':>6}  {'VERDICT':<16}{'LAST':>9}"
         f"{'%PC':>8}{'RS':>7}{'VWZ':>6}{'ORB':>6}{'ATMIV':>7}{'EM%':>7}"
-        f"{'RR25':>7}{'P/C':>6}{'V/OI':>6}  {'FLAGS'}"
+        f"{'RR25':>7}{'P/C':>6}{'V/OI':>6}{'NETD$':>9}  {'FLAGS'}"
     )
     lines.append(hdr)
     lines.append("-" * 118)
@@ -64,6 +83,7 @@ def render_console(
             + _col(o.rr25 if o else None, 7, 1, sign=True)
             + _col(o.pc_volume_ratio if o else None, 6, 2)
             + _col(o.vol_oi_ratio if o else None, 6, 2)
+            + _millions(o.net_delta_dollars if o and o.flow_source == "side" else None, 9)
             + f"  {','.join(s.flags)}"
         )
     lines.append("-" * 118)
@@ -102,10 +122,23 @@ def _detail_block(s: SymbolScore) -> List[str]:
             f"  EM +/-{_f(o.em_dollars)} ({_f(o.em_pct)}%)  vol {o.chain_volume:,.0f}"
             f"  OI {o.total_oi:,.0f}  spread {(_f(o.avg_atm_spread_pct * 100, 1) + '%') if o.avg_atm_spread_pct is not None else '-'}"
         )
+        if o.flow_source == "side":
+            out.append(
+                f"  flow:    classified  net delta {_money(o.net_delta_dollars)}"
+                f"  net premium {_money(o.net_premium_dollars)}"
+                f"  sampled {o.sampled_volume:,.0f} of {o.window_volume:,.0f}"
+                f" ({(o.side_coverage or 0) * 100:.0f}%)  tilt {_f(o.signed_flow_tilt)}"
+            )
+        else:
+            out.append(
+                f"  flow:    proxy only (no streamed side)  delta-$ calls "
+                f"{_money(o.call_delta_dollars)} vs puts {_money(o.put_delta_dollars)}"
+                f"  tilt {_f(o.proxy_flow_tilt)}"
+            )
         out.append(
             f"  struct:  max pain {_f(o.max_pain)}  gamma wall {_f(o.gamma_wall)}"
-            f"  flip {_f(o.gamma_flip)}  net GEX {o.net_gex/1e6:+.1f}mm/1%"
-            f"  flow tilt {_f(o.flow_tilt)}  OI tilt {_f(o.oi_tilt)}"
+            f"  flip {_f(o.gamma_flip)}  net GEX {_money(o.net_gex)}/1%"
+            f"  OI tilt {_f(o.oi_tilt)}  P/C OI {_f(o.pc_oi_ratio)}"
         )
     out.append(
         f"  plan:    {pl.direction}  ATM {_f(pl.atm_strike)} / 1EM OTM {_f(pl.otm_1em_strike)}"
@@ -157,6 +190,14 @@ def to_rows(scores: Sequence[SymbolScore]) -> List[Dict[str, Any]]:
                     "pc_oi_ratio": None if o.pc_oi_ratio is None else round(o.pc_oi_ratio, 3),
                     "vol_oi_ratio": None if o.vol_oi_ratio is None else round(o.vol_oi_ratio, 3),
                     "flow_tilt": None if o.flow_tilt is None else round(o.flow_tilt, 3),
+                    "flow_source": o.flow_source,
+                    "proxy_flow_tilt": None if o.proxy_flow_tilt is None else round(o.proxy_flow_tilt, 3),
+                    "signed_flow_tilt": None if o.signed_flow_tilt is None else round(o.signed_flow_tilt, 3),
+                    "net_delta_contracts": round(o.net_delta_contracts, 1),
+                    "net_delta_dollars": round(o.net_delta_dollars),
+                    "net_premium_dollars": round(o.net_premium_dollars),
+                    "sampled_volume": round(o.sampled_volume),
+                    "side_coverage": None if o.side_coverage is None else round(o.side_coverage, 3),
                     "oi_tilt": None if o.oi_tilt is None else round(o.oi_tilt, 3),
                     "call_delta_dollars": round(o.call_delta_dollars),
                     "put_delta_dollars": round(o.put_delta_dollars),
@@ -220,7 +261,8 @@ def write_html(
         ("verdict", "Verdict"), ("last", "Last"), ("ret_prev_close_pct", "%vsPC"),
         ("rs_resid_pct", "RS"), ("vwap_z", "VWAP z"), ("or_pos", "ORB"),
         ("atm_iv_pct", "ATM IV"), ("expected_move_pct", "EM%"),
-        ("rr25_vol_pts", "RR25"), ("pc_volume_ratio", "P/C vol"),
+        ("rr25_vol_pts", "RR25"), ("net_delta_dollars", "Net delta $"),
+        ("flow_source", "Flow"), ("pc_volume_ratio", "P/C vol"),
         ("vol_oi_ratio", "Vol/OI"), ("max_pain", "Max pain"),
         ("gamma_wall", "Gamma wall"), ("flags", "Flags"),
     ]

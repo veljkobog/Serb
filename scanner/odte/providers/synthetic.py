@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from .. import bs
 from ..models import Bar, OptionQuote, SymbolSnapshot
 from ..session import session_open, t_years_to_close, to_et
+from ..sides import occ_symbol
 from .base import Provider
 
 # symbol -> (reference price, session drift in %, annualized vol, skew in vol pts)
@@ -37,9 +38,16 @@ DEFAULT_SCENARIO: Dict[str, tuple] = {
 class SyntheticProvider(Provider):
     name = "synthetic"
 
-    def __init__(self, seed: int = 7, scenario: Optional[Dict[str, tuple]] = None):
+    def __init__(
+        self,
+        seed: int = 7,
+        scenario: Optional[Dict[str, tuple]] = None,
+        with_sides: bool = True,
+    ):
         self.seed = seed
         self.scenario = scenario or DEFAULT_SCENARIO
+        # Mimic a streamed side tape covering part of the session's volume.
+        self.with_sides = with_sides
 
     def _params(self, symbol: str) -> tuple:
         if symbol in self.scenario:
@@ -79,7 +87,10 @@ class SyntheticProvider(Provider):
             )
 
         spot = round(px, 2)
-        chain = self._chain(symbol, spot, t_years_to_close(now), vol, skew_pts, drift_pct, rng)
+        chain = self._chain(
+            symbol, spot, t_years_to_close(now), vol, skew_pts, drift_pct, rng,
+            expiry=now.date().isoformat(),
+        )
         return SymbolSnapshot(
             symbol=symbol,
             spot=spot,
@@ -90,6 +101,7 @@ class SyntheticProvider(Provider):
             adr_pct=round(vol / math.sqrt(252) * 100 * 1.6, 3),
             avg_share_volume=base_vol * 78,
             notes=["synthetic"],
+            side_window_seconds=1800.0 if self.with_sides else None,
         )
 
     def _chain(
@@ -101,6 +113,7 @@ class SyntheticProvider(Provider):
         skew_pts: float,
         drift_pct: float,
         rng: random.Random,
+        expiry: str,
     ) -> List[OptionQuote]:
         step = 1.0 if spot < 100 else (5.0 if spot > 300 else 2.5)
         atm = round(spot / step) * step
@@ -127,16 +140,36 @@ class SyntheticProvider(Provider):
                 )
                 vol_c = max(0.0, (3000.0 / (1 + dist ** 1.6)) * lean * rng.uniform(0.6, 1.4))
                 oi = max(0.0, (9000.0 / (1 + dist ** 1.2)) * rng.uniform(0.5, 1.5))
-                quotes.append(
-                    OptionQuote(
-                        strike=round(strike, 2),
-                        right=right,
-                        bid=round(max(0.0, mid - half), 2),
-                        ask=round(mid + half, 2),
-                        last=round(mid, 2),
-                        volume=round(vol_c),
-                        open_interest=round(oi),
-                        iv=round(iv, 4),
-                    )
+                q = OptionQuote(
+                    strike=round(strike, 2),
+                    right=right,
+                    bid=round(max(0.0, mid - half), 2),
+                    ask=round(mid + half, 2),
+                    last=round(mid, 2),
+                    volume=round(vol_c),
+                    open_interest=round(oi),
+                    iv=round(iv, 4),
+                    occ=occ_symbol(symbol, expiry, right, round(strike, 2)),
                 )
+                if self.with_sides:
+                    self._add_sides(q, drift_pct, right, rng)
+                quotes.append(q)
         return quotes
+
+    @staticmethod
+    def _add_sides(q: OptionQuote, drift_pct: float, right: str, rng: random.Random) -> None:
+        """Split part of a contract's volume into buyer- and seller-initiated.
+
+        Customers lean toward buying calls in an up-drift tape and buying puts
+        in a down-drift one, with the other side of the book getting sold.
+        """
+        sampled = q.volume * rng.uniform(0.45, 0.75)
+        bullish = drift_pct >= 0
+        buys_this_side = bullish == (right == "C")
+        buy_share = rng.uniform(0.58, 0.72) if buys_this_side else rng.uniform(0.28, 0.42)
+        q.buy_volume = round(sampled * buy_share)
+        q.sell_volume = round(sampled * (1 - buy_share) * 0.9)
+        q.mid_volume = round(sampled * (1 - buy_share) * 0.1)
+        price = q.mid or 0.0
+        q.buy_premium = q.buy_volume * price * 100.0
+        q.sell_premium = q.sell_volume * price * 100.0

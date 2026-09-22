@@ -1,12 +1,12 @@
-"""Free-data provider built on yfinance (Yahoo Finance).
+"""Fallback provider built on yfinance (Yahoo Finance). Needs no account.
 
-Good enough for a bias read: it carries 0DTE strikes, volume, open interest and
-an IV field. Caveats worth knowing before trusting a number:
+Tradier is the default; this exists for wiring, weekends and anyone without a
+brokerage token. What you give up:
   * quotes are delayed ~15 minutes on many symbols,
-  * open interest is the prior session's official figure (as everywhere),
-  * the IV field is occasionally stale or zero, so it is re-solved from the mid
-    when it looks wrong (see option_metrics._resolve_iv).
-Swap in a broker feed (Tradier, IBKR, Polygon) by writing another Provider.
+  * no trade side at all, so `flow` stays an unsigned positioning proxy,
+  * no broker greeks — everything is re-derived from the mid,
+  * the IV field is occasionally stale or zero (see option_metrics._resolve_iv).
+Open interest is the prior session's official figure here as everywhere.
 """
 
 from __future__ import annotations

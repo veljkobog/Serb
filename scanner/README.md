@@ -5,24 +5,42 @@ hour after the cash open, and scores each symbol on a **-100 (downside) to +100
 (upside)** bias scale with a separate **0-100 confidence** score.
 
 It combines the tape (relative strength, VWAP, opening range) with the 0DTE
-chain (implied vol, skew, volume, open interest, gamma structure) so the bias
-is not just "what moved" but "what moved, with option positioning behind it."
+chain (implied vol, skew, volume, open interest, gamma structure) and — via
+streamed, classified time & sales — **who was the aggressor on every print**,
+so the bias is not just "what moved" but "what moved, with real buying behind
+it."
+
+Data comes from **Tradier**: real-time REST quotes and chains with the broker's
+own greeks, plus an HTTP event stream for time & sales. Stdlib only — no
+`requests`, no websocket library.
 
 ```
 0DTE BIAS SCAN  |  2026-09-22 10:30:00 EDT  |  provider=synthetic  |  330 min to close
-SYM      BIAS  CONF  VERDICT              LAST     %PC     RS   VWZ   ORB  ATMIV    EM%   RR25   P/C  V/OI  FLAGS
-SPY     +43.3    71  LEAN LONG          589.88   +0.83  +0.00  +1.8  +1.8    9.8   0.20   +0.0  0.64  0.23
-IWM     -42.8    71  LEAN SHORT         220.31   -0.76  -0.76  -2.1  -1.8   15.0   0.32   +0.1  6.11  0.23
-NVDA    +45.6    58  AVOID (illiquid)   182.38   +2.46  +2.19  +0.9  +0.9   33.8   0.68   -0.1  0.29  0.26  wide-spreads
-QQQ     +44.5    49  LEAN LONG          510.30   +1.05  +0.98  +2.8  +3.4   12.8   0.26   +0.0  0.35  0.25  pin-risk
+======================================================================================================================
+SYM      BIAS  CONF  VERDICT              LAST     %PC     RS   VWZ   ORB  ATMIV    EM%   RR25   P/C  V/OI    NETD$  FLAGS
+----------------------------------------------------------------------------------------------------------------------
+IWM     -50.4    77  LEAN SHORT         220.31   -0.76  -0.76  -2.1  -1.8   15.0   0.32   +0.1  3.36  0.27   -8.1mm  synthetic
+SPY     +51.9    75  LEAN LONG          589.88   +0.83  +0.00  +1.8  +1.8    9.8   0.20   +0.0  0.33  0.26  +28.2mm  synthetic
+QQQ     +42.2    69  LEAN LONG          510.30   +1.05  +0.98  +2.8  +3.4   12.8   0.26   +0.0  0.36  0.26  +34.3mm  synthetic
+DIA      +8.5    71  NO TRADE           429.47   -0.12  -0.41  -1.4  -1.1    9.0   0.21   +0.1  0.70  0.26  +14.8mm  synthetic
 ```
 
 ## Install
 
+Nothing to install — the scanner runs on the Python 3.11 standard library.
+Point it at a Tradier token:
+
 ```bash
-cd scanner
-pip install -r requirements.txt   # yfinance + pandas, for the free data feed
+export TRADIER_TOKEN=...          # brokerage token, market data enabled
+export TRADIER_ENV=production     # or: sandbox (delayed, good for wiring)
 ```
+
+`production` with a funded brokerage account gives real-time quotes and the
+streaming endpoint. Sandbox tokens return delayed data and are flagged
+`sandbox-delayed` in the output, so you never mistake one for the other.
+
+(The optional Yahoo fallback — `--provider yahoo` — needs
+`pip install -r requirements.txt`.)
 
 ## Run
 
@@ -36,6 +54,9 @@ python -m odte --universe index --csv out/scan.csv --html out/scan.html
 # just the setups that clear the gates, strongest three
 python -m odte --only-tradeable --top 3
 
+# sample classified trade flow for 90 seconds, then score
+python -m odte --stream-seconds 90
+
 # save the raw pull, then re-score it later without touching the network
 python -m odte --save-snapshot out/2026-09-22.json
 python -m odte --provider snapshot --snapshot-path out/2026-09-22.json --as-of 2026-09-22T10:30:00
@@ -47,10 +68,30 @@ python -m odte --provider synthetic --as-of 2026-09-22T10:30:00
 The scan refuses to run outside **10:00-11:30 ET** unless you pass `--force`:
 before 10:00 the opening range isn't set and 0DTE volume is still noise.
 
-Cron it for 10:30 ET on weekdays:
+### Recording trade side from the open
+
+Exchange volume carries no buy/sell label, and it cannot be reconstructed after
+the fact — classification needs the bid and ask standing at each print, which
+only the live stream carries. So record from the open and scan against it:
+
+```bash
+# 09:30 — stream and classify 0DTE prints until 10:30
+python -m odte record --until 10:30 --out out/sides-$(date +%F).json
+
+# 10:30 — score the session with the full hour of classified flow
+python -m odte --sides out/sides-$(date +%F).json
+```
+
+The recorder saves every 30 seconds, so a dropped connection costs you the last
+half-minute, not the session. `--append` folds a new run into an existing tape.
+Without a tape, `flow` falls back to the unsigned proxy and every row is
+flagged `proxy-flow`.
+
+Cron both on weekdays:
 
 ```cron
-30 10 * * 1-5 cd /path/to/scanner && python -m odte --csv "out/$(date +%F).csv" --html "out/$(date +%F).html"
+30 9  * * 1-5 cd /path/to/scanner && python -m odte record --until 10:30 --out "out/sides-$(date +\%F).json"
+30 10 * * 1-5 cd /path/to/scanner && python -m odte --sides "out/sides-$(date +\%F).json" --csv "out/$(date +\%F).csv" --html "out/$(date +\%F).html"
 ```
 
 ## How the score is built
@@ -65,7 +106,7 @@ weighted sum scaled to -100..+100. Weights live in `odte/config.py:Weights`.
 | `orb` | 0.08 | Position vs the first 30 minutes' range (+1 = at the high) |
 | `persistence` | 0.06 | Share of bars closing on the right side of VWAP, plus close location in range |
 | `skew` | 0.13 | 25-delta risk reversal (call IV − put IV), standardized across the universe |
-| `flow` | 0.16 | Delta- and premium-weighted 0DTE volume, calls vs puts |
+| `flow` | 0.16 | Net delta the customer side lifted, from classified prints (falls back to a delta-weighted volume proxy) |
 | `pcr` | 0.07 | Put/call volume ratio, log-scaled around 1.0 |
 | `oi_tilt` | 0.05 | Call OI above spot vs put OI below spot |
 | `gamma_pull` | 0.11 | Distance from spot to max pain, in expected moves — discounted when dealers are short gamma |
@@ -81,15 +122,43 @@ Components with missing data are dropped and the remaining weights are
 renormalized, so a symbol with no chain still gets a tape-only read (flagged
 `partial-data`) on the same -100..100 scale.
 
+### Flow: classified vs proxy
+
+Each streamed print is labelled buyer- or seller-initiated against the quote
+standing at the time (Lee-Ready): lifting the offer is buyer-initiated, hitting
+the bid is seller-initiated, prints inside the spread go to the midpoint
+comparison and then a tick test.
+
+Signing each print by the contract's own delta collapses all four cases into
+one number, since put deltas are already negative:
+
+| Customer action | Delta sign | Reads |
+|---|---|---|
+| Buys calls | `+vol × +delta` | bullish |
+| Sells calls | `−vol × +delta` | bearish |
+| Buys puts | `+vol × −delta` | bearish |
+| Sells puts | `−vol × −delta` | bullish |
+
+`flow_tilt` is net delta over gross delta, in [-1, +1], and the board shows the
+dollar figure (`NETD$`). Classified flow only overrides the proxy once it
+covers ≥5% of the day's traded volume in the measured strikes; below that the
+sample is too small to outvote it. The detail block always says which one you
+are looking at, plus the sampled share.
+
+This is the one thing the free feeds cannot do. Yahoo can tell you 40,000 calls
+traded; only the stream tells you whether customers were buying or writing them.
+
 ### Confidence and gates
 
-Confidence is deliberately separate from bias: `35%` chain liquidity (traded
-0DTE volume vs the gate, penalized for wide ATM spreads), `30%` agreement
-between components, `20%` freshness (today's volume vs standing OI), `15%` data
-coverage — then discounted for `pin-risk` and `stale-oi`.
+Confidence is deliberately separate from bias: `32%` chain liquidity (traded
+0DTE volume vs the gate, penalized for wide ATM spreads), `27%` agreement
+between components, `18%` freshness (today's volume vs standing OI), `13%` data
+coverage, `10%` trade-side coverage — then discounted for `pin-risk` and
+`stale-oi`.
 
 Flags you'll see: `thin-chain`, `wide-spreads`, `thin-tape`, `stale-oi`,
-`pin-risk`, `partial-data`, `no-chain`, `no-0dte`.
+`pin-risk`, `partial-data`, `proxy-flow`, `no-chain`, `no-0dte`,
+`sandbox-delayed`.
 
 Verdicts: `LONG (calls)` / `LEAN LONG` / `NO TRADE` / `LEAN SHORT` /
 `SHORT (puts)` / `AVOID (illiquid)`. Thresholds are `--min-bias` (default 25)
@@ -108,25 +177,38 @@ and `--min-confidence` (default 45); anything illiquid is an automatic AVOID.
 * **Net GEX** — signed gamma exposure per 1% move, calls positive and puts
   negative. A proxy: real dealer positioning is not public. Read the sign and
   the levels, not the size.
+* **Flow line** — either `classified` (net delta, net premium, how many of the
+  day's contracts carried a side, and the resulting tilt) or `proxy only`, with
+  the delta-weighted call and put premium it fell back to.
 * **Plan** — ATM strike, the strike one expected move out, an EM-based target,
   and the invalidation level (VWAP, or the far side of the opening range).
 
 ## Data
 
-Default provider is Yahoo via `yfinance` — free, no key, carries 0DTE strikes,
-volume, OI and an IV field. Know the limits before trusting a number:
+**Tradier** (default). REST for 5-minute time & sales, quotes, daily history and
+the 0DTE chain with greeks (`delta`, `gamma`, `mid_iv`) — the broker's greeks
+are used as given, and only re-derived from the mid when a field is missing or
+nonsense. Streaming for classified time & sales. Rate limiting and 429/5xx
+backoff are built into the client.
 
-* quotes are delayed ~15 minutes on many symbols;
-* open interest is the prior session's official figure (true of every feed);
-* the IV field is sometimes zero or stale, so it is re-solved from the mid;
-* volume carries no trade side, so `flow` is a *positioning proxy*, not a
-  read on whether contracts were bought or sold;
-* ETFs stand in for the indices. For cash-settled SPX/NDX/RUT, point a broker
-  feed at it instead.
+Still true of every feed, Tradier included:
 
-To swap in Tradier, IBKR, Polygon or a broker feed, implement `Provider` in
-`odte/providers/base.py` (one method, `snapshot(symbol, now) -> SymbolSnapshot`)
-and register it in `odte/providers/__init__.py:get_provider`.
+* open interest is the prior session's official figure, so `oi_tilt`, max pain
+  and gamma levels describe positioning as of this morning, not this minute;
+* trade side exists only for the window you actually streamed — start the
+  recorder at 09:30 if you want the full hour;
+* ETFs stand in for the indices. Tradier quotes cash-settled SPX/NDX chains too;
+  add them to the universe in `odte/config.py` if you trade them.
+
+**Yahoo** (`--provider yahoo`, needs `requirements.txt`) stays as a no-account
+fallback: delayed ~15 minutes, no trade side, occasionally zero IV. Fine for
+wiring and weekend poking, not for sizing.
+
+Other feeds (IBKR, Polygon, dxFeed) plug in the same way: implement `Provider`
+in `odte/providers/base.py` — one method, `snapshot(symbol, now) ->
+SymbolSnapshot` — and register it in `odte/providers/__init__.py:get_provider`.
+Set `OptionQuote.occ`, `.delta` and `.gamma` if your feed has them, and fill
+`.buy_volume` / `.sell_volume` (or write a `SideTape`) if it carries trade side.
 
 ## Tuning
 
@@ -141,8 +223,9 @@ snapshots before trusting any weight you changed.
 cd scanner && python -m unittest discover -s tests -v
 ```
 
-No third-party dependency: the scoring engine and its tests are stdlib-only
-(`pandas`/`yfinance` are confined to the Yahoo provider).
+77 tests, stdlib-only, no network: the Tradier client is exercised through
+recorded response shapes and a fake client, and the scoring engine through
+deterministic synthetic data.
 
 ---
 

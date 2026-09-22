@@ -157,6 +157,15 @@ def _confidence(
     if p.share_volume < gates.min_share_volume:
         flags.append("thin-tape")
 
+    # Trade-side quality: how much of the day's volume in the measured window
+    # came with a buyer/seller label. Zero means `flow` is only a proxy.
+    side = 0.0
+    if o:
+        if o.flow_source == "side" and o.side_coverage:
+            side = _clamp(o.side_coverage / 0.5, 0.0, 1.0)
+        else:
+            flags.append("proxy-flow")
+
     # Freshness: today's volume relative to standing OI. Low = stale book.
     fresh = 0.5
     if o and o.vol_oi_ratio is not None:
@@ -183,7 +192,9 @@ def _confidence(
         if abs(o.spot - o.gamma_wall) < 0.25 * o.em_dollars:
             flags.append("pin-risk")
 
-    conf = 100.0 * (0.35 * liq + 0.30 * agree + 0.20 * fresh + 0.15 * coverage)
+    conf = 100.0 * (
+        0.32 * liq + 0.27 * agree + 0.18 * fresh + 0.13 * coverage + 0.10 * side
+    )
     if "pin-risk" in flags:
         conf *= 0.75
     if "stale-oi" in flags:

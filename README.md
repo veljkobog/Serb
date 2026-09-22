@@ -47,7 +47,8 @@ enables Pages automatically and publishes the site on each push.
 [`scanner/`](scanner/README.md) — a 0DTE options bias scanner (Python CLI).
 Scores index ETFs and heavy-volume names on a -100/+100 upside-downside scale
 an hour after the open, combining relative strength and VWAP/opening-range
-position with 0DTE implied vol, skew, volume, open interest and gamma
-structure. Unrelated to the calculator above; it ships nothing to the site.
+position with 0DTE implied vol, skew, open interest, gamma structure and
+classified buy/sell flow from Tradier's real-time feed. Unrelated to the
+calculator above; it ships nothing to the site.
 
 > Educational estimate only — not financial, tax, or legal advice.

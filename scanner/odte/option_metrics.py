@@ -11,6 +11,10 @@ from .models import OptionQuote
 
 CONTRACT_MULT = 100.0
 
+# Classified prints only override the unsigned proxy once they account for at
+# least this share of the day's traded volume in the measured strike window.
+MIN_SIDE_COVERAGE = 0.05
+
 
 @dataclass
 class StrikeGamma:
@@ -34,7 +38,15 @@ class OptionMetrics:
     pc_oi_ratio: Optional[float]
     vol_oi_ratio: Optional[float]     # freshness of today's positioning
     oi_tilt: Optional[float]          # call OI above spot vs put OI below, -1..1
-    flow_tilt: Optional[float]        # delta-$ premium, calls vs puts, -1..1
+    flow_tilt: Optional[float]        # directional flow, -1..1 (see flow_source)
+    flow_source: str                  # "side" (classified prints) or "proxy"
+    proxy_flow_tilt: Optional[float]  # delta-$ premium, calls vs puts, unsigned volume
+    signed_flow_tilt: Optional[float] # buyer- minus seller-initiated, delta-signed
+    net_delta_contracts: float        # net delta bought, in contract deltas
+    net_delta_dollars: float          # same, times spot * 100
+    net_premium_dollars: float        # bought minus sold premium, delta-signed
+    sampled_volume: float             # contracts with a classified side
+    side_coverage: Optional[float]    # sampled / traded volume in the window
     call_delta_dollars: float
     put_delta_dollars: float
     max_pain: Optional[float]
@@ -53,6 +65,27 @@ def _by_right(chain: Sequence[OptionQuote]) -> Tuple[List[OptionQuote], List[Opt
     calls = sorted((o for o in chain if o.right.upper().startswith("C")), key=lambda o: o.strike)
     puts = sorted((o for o in chain if o.right.upper().startswith("P")), key=lambda o: o.strike)
     return calls, puts
+
+
+def _delta_of(o: OptionQuote, spot: float, t: float, iv: Optional[float], r: float) -> Optional[float]:
+    """Signed delta: the broker's when the feed supplies it, else Black-Scholes.
+
+    Put deltas are negative, which is what makes delta-signing of classified
+    flow work: buying puts and selling calls both come out bearish.
+    """
+    if o.delta is not None and -1.0001 <= o.delta <= 1.0001:
+        return o.delta
+    if iv is None:
+        return None
+    return bs.delta(spot, o.strike, t, iv, o.right, r=r)
+
+
+def _gamma_of(o: OptionQuote, spot: float, t: float, iv: Optional[float], r: float) -> Optional[float]:
+    if o.gamma is not None and o.gamma >= 0:
+        return o.gamma
+    if iv is None:
+        return None
+    return bs.gamma(spot, o.strike, t, iv, r=r)
 
 
 def _resolve_iv(o: OptionQuote, spot: float, t: float, r: float) -> Optional[float]:
@@ -116,7 +149,9 @@ def _strike_gex(
         iv = ivs.get((strike, o.right.upper()[0])) or atm_iv
         if not iv:
             continue
-        g = bs.gamma(spot, strike, t, iv, r=r)
+        g = _gamma_of(o, spot, t, iv, r)
+        if g is None:
+            continue
         gex = g * o.open_interest * CONTRACT_MULT * spot * spot * 0.01
         net += gex if o.right.upper().startswith("C") else -gex
         total += gex
@@ -210,15 +245,17 @@ def compute_option_metrics(
 
     # --- 25-delta risk reversal ---------------------------------------------
     rr25 = skew_norm = None
+    def _delta_gap(o: OptionQuote, target: float) -> Optional[float]:
+        d = _delta_of(o, spot, t, ivs.get((o.strike, o.right.upper()[0])), risk_free)
+        return None if d is None else abs(d - target)
+
     call_cands = [
-        (abs(bs.delta(spot, c.strike, t, ivs[(c.strike, "C")], "C", r=risk_free) - 0.25), c)
-        for c in calls
-        if (c.strike, "C") in ivs
+        (gap, c) for c in calls
+        if (c.strike, "C") in ivs and (gap := _delta_gap(c, 0.25)) is not None
     ]
     put_cands = [
-        (abs(bs.delta(spot, p.strike, t, ivs[(p.strike, "P")], "P", r=risk_free) + 0.25), p)
-        for p in puts
-        if (p.strike, "P") in ivs
+        (gap, p) for p in puts
+        if (p.strike, "P") in ivs and (gap := _delta_gap(p, -0.25)) is not None
     ]
     if call_cands and put_cands:
         c25 = min(call_cands, key=lambda x: x[0])[1]
@@ -245,24 +282,51 @@ def compute_option_metrics(
     if oi_above + oi_below > 0:
         oi_tilt = (oi_above - oi_below) / (oi_above + oi_below)
 
-    # --- delta-weighted premium flow ----------------------------------------
-    # Volume carries no trade side in free data, so this is a *positioning
-    # proxy*: where today's contracts traded, delta- and premium-weighted.
+    # --- directional flow ----------------------------------------------------
+    # Preferred: classified time & sales. Each print is labelled buyer- or
+    # seller-initiated, and signing by the contract's own delta collapses all
+    # four cases (buy calls / sell calls / buy puts / sell puts) into one
+    # number: net delta the customer side lifted.
+    #
+    # Fallback when no side data was streamed: total traded premium, delta-
+    # weighted, calls vs puts. That is positioning, not pressure — it cannot
+    # tell a call buyer from a call seller.
     call_dd = put_dd = 0.0
+    net_delta = gross_delta = 0.0
+    net_premium = 0.0
+    sampled = 0.0
     for o in in_window:
         iv = ivs.get((o.strike, o.right.upper()[0]))
+        d = _delta_of(o, spot, t, iv, risk_free)
         mid = o.mid
-        if not iv or not mid or o.volume <= 0:
+        if d is None or not mid:
             continue
-        d = abs(bs.delta(spot, o.strike, t, iv, o.right, r=risk_free))
-        dollars = o.volume * mid * CONTRACT_MULT * d
-        if o.right.upper().startswith("C"):
-            call_dd += dollars
-        else:
-            put_dd += dollars
-    flow_tilt = None
+        if o.volume > 0:
+            dollars = o.volume * mid * CONTRACT_MULT * abs(d)
+            if o.right.upper().startswith("C"):
+                call_dd += dollars
+            else:
+                put_dd += dollars
+        if o.sampled:
+            sampled += o.sampled_volume
+            net_delta += o.net_volume * d
+            gross_delta += (o.buy_volume + o.sell_volume) * abs(d)
+            net_premium += (o.buy_premium - o.sell_premium) * math.copysign(1.0, d)
+
+    proxy_tilt = None
     if call_dd + put_dd > 0:
-        flow_tilt = (call_dd - put_dd) / (call_dd + put_dd)
+        proxy_tilt = (call_dd - put_dd) / (call_dd + put_dd)
+
+    signed_tilt = (net_delta / gross_delta) if gross_delta > 0 else None
+    window_vol = call_vol + put_vol
+    coverage = (sampled / window_vol) if window_vol > 0 else None
+
+    # Classified flow wins once it has seen a meaningful slice of the day's
+    # volume; below that the sample is too small to outvote the proxy.
+    if signed_tilt is not None and coverage is not None and coverage >= MIN_SIDE_COVERAGE:
+        flow_tilt, flow_source = signed_tilt, "side"
+    else:
+        flow_tilt, flow_source = proxy_tilt, "proxy"
 
     # --- gamma structure ----------------------------------------------------
     # Dealer convention: customers buy calls and puts, dealers are short both,
@@ -293,6 +357,14 @@ def compute_option_metrics(
         vol_oi_ratio=vol_oi,
         oi_tilt=oi_tilt,
         flow_tilt=flow_tilt,
+        flow_source=flow_source,
+        proxy_flow_tilt=proxy_tilt,
+        signed_flow_tilt=signed_tilt,
+        net_delta_contracts=net_delta,
+        net_delta_dollars=net_delta * CONTRACT_MULT * spot,
+        net_premium_dollars=net_premium,
+        sampled_volume=sampled,
+        side_coverage=coverage,
         call_delta_dollars=call_dd,
         put_delta_dollars=put_dd,
         max_pain=max_pain(calls, puts),
