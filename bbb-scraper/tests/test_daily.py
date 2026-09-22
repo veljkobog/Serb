@@ -580,8 +580,10 @@ class EnrichmentReportTest(unittest.TestCase):
         self.assertIn("n/a", self.render(status))
 
     def test_the_size_gate_is_visible(self):
+        """And says the rows were kept -- they used to be deleted."""
         out = self.render(self.status(dropped_too_small=3))
-        self.assertIn("3 dropped under the size bar", out)
+        self.assertIn("3 under the size bar", out)
+        self.assertIn("kept", out)
 
     def test_unsized_rows_are_named_as_such(self):
         out = self.render(self.status(size_unknown=9))
@@ -606,6 +608,50 @@ class EnrichmentReportTest(unittest.TestCase):
     def test_a_sheet_with_no_enrichment_record_still_reports_rows(self):
         status = {"sheets": [{"file": "s.csv", "rows": 7}], "enrichment": []}
         self.assertIn("7 rows", self.render(status))
+
+
+
+class SmallCompaniesStayTest(unittest.TestCase):
+    """A sized, small company is information; a deleted one is nothing.
+
+    Real Austin and Fort Worth sheets came back with zero emails while the run
+    reported matches, because the size gate removed each row that had a
+    contact before it reached the sheet. Apollo's coverage of trade
+    contractors skews small, so the rows it can size are the rows it can
+    contact.
+    """
+
+    def test_too_small_is_a_sort_position_not_a_deletion(self):
+        import inspect
+        source = inspect.getsource(daily.enrich_contacts)
+        self.assertNotIn('startswith("dropped:")', source,
+                         "rows under the bar are being deleted again")
+        self.assertIn("TOO-SMALL", inspect.getsource(daily.enrich_contacts))
+
+    def test_the_sheet_orders_qualified_first_and_small_last(self):
+        order = {"QUALIFIED": 0, "REVIEW-UNSIZED": 1, "REVIEW": 2, "TOO-SMALL": 3}
+        rows = [{"screen": s} for s in
+                ("TOO-SMALL", "REVIEW-UNSIZED", "QUALIFIED", "REVIEW")]
+        rows.sort(key=lambda r: order.get(r["screen"], 4))
+        self.assertEqual([r["screen"] for r in rows],
+                         ["QUALIFIED", "REVIEW-UNSIZED", "REVIEW", "TOO-SMALL"])
+
+    def test_contactable_rows_sort_above_uncontactable_ones(self):
+        rows = [{"screen": "REVIEW-UNSIZED", "email": ""},
+                {"screen": "REVIEW-UNSIZED", "email": "a@b.com"}]
+        rows.sort(key=lambda r: (0, 0 if r.get("email") else 1))
+        self.assertEqual(rows[0]["email"], "a@b.com")
+
+    def test_the_report_says_they_were_kept(self):
+        import io
+        from contextlib import redirect_stdout
+        status = {"sheets": [{"file": "s.csv", "rows": 12}],
+                  "enrichment": [{"sheet": "s.csv", "emails": 4,
+                                  "dropped_too_small": 3}]}
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            daily.print_enrichment(status)
+        self.assertIn("kept, sorted last", buf.getvalue())
 
 
 if __name__ == "__main__":

@@ -128,13 +128,24 @@ class EnrichTest(unittest.TestCase):
         self.assertIn("REVIEW", row["notes"])
         self.assertEqual(c.stats.wrong_place, 1)
 
-    def test_a_company_under_the_headcount_bar_is_dropped(self):
+    def test_a_company_under_the_bar_keeps_its_contact(self):
+        """It used to be withheld. On real sheets that deleted every row that
+        had an email: Apollo's coverage of trade contractors skews small, so
+        the companies it can size are the ones it holds an owner for. The
+        result was sheets with no emails while the screen looked healthy."""
         with self.client(min_employees=5) as c:
             rows = apollo_people.enrich_listings([listing("Tiny Shop", "c" * 24)], c)
         row = list(rows.values())[0]
-        self.assertNotIn("email", row)
-        self.assertIn("2 employees", row["notes"])
-        self.assertEqual(c.stats.too_small, 1)
+        self.assertEqual(row["email"], "lee@tiny.com")
+        self.assertEqual(row["apollo_employees"], 2)
+        self.assertIn("under the 5 employee bar", row["notes"])
+        self.assertEqual(c.stats.too_small, 1, "it is still counted as small")
+
+    def test_a_company_over_the_bar_carries_no_size_note(self):
+        with self.client(min_employees=5) as c:
+            rows = apollo_people.enrich_listings([listing("Ace Plumbing", "a" * 24)], c)
+        self.assertNotIn("bar", list(rows.values())[0]["notes"])
+        self.assertEqual(c.stats.too_small, 0)
 
     def test_unknown_headcount_is_kept_and_flagged_not_dropped(self):
         """Unknown is not absent -- dropping these loses real leads silently."""

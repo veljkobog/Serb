@@ -440,11 +440,17 @@ def enrich_listings(
             size = headcount(match)
             if size is None:
                 client.stats.size_unknown += 1
-            elif client.min_employees and size < client.min_employees:
+            too_small = bool(client.min_employees
+                             and size is not None
+                             and size < client.min_employees)
+            if too_small:
+                # Counted, not withheld. On real sheets these were the ONLY
+                # rows carrying a contact: Apollo's coverage of trade
+                # contractors skews small, so the companies it knows well
+                # enough to size are the same ones it holds an owner for.
+                # Dropping them produced sheets with no emails at all while
+                # the screen looked like it was working.
                 client.stats.too_small += 1
-                rows[key] = {"apollo_employees": size,
-                             "notes": f"dropped: {size} employees"}
-                continue
 
             last = match.get("last_name") or ""
             # Say where the size came from. A blank headcount on a row Apollo
@@ -465,6 +471,11 @@ def enrich_listings(
             if size is None:
                 row["notes"] = ("; ".join(n for n in [row["notes"],
                                 "headcount unknown -- size filter not applied"] if n))
+            elif too_small:
+                row["notes"] = ("; ".join(n for n in [
+                    row["notes"],
+                    f"under the {client.min_employees} employee bar "
+                    f"({size} employees)"] if n))
             if row["email"]:
                 client.stats.emails += 1
             rows[key] = row

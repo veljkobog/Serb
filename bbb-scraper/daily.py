@@ -183,10 +183,6 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
     kept = []
     for row, listing in zip(rows, listings):
         found_row = found.get(listing.dedupe_key() or listing.company_name) or {}
-        # A row the headcount gate rejected carries a "dropped:" note and no
-        # contact -- leave it out of the sheet rather than shipping a blank.
-        if str(found_row.get("notes", "")).startswith("dropped:"):
-            continue
         for column in extra_columns:
             row.setdefault(column, "")
             if found_row.get(column) not in (None, ""):
@@ -194,10 +190,18 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
         row["screen"] = screen_verdict(row, config.get("min_employees") or 0)
         kept.append(row)
 
-    # Qualified first, then the sleepers to look at, then the rest. The point
-    # of the sheet is that the top of it is actionable without reading further.
-    order = {"QUALIFIED": 0, "REVIEW-UNSIZED": 1, "REVIEW": 2}
-    kept.sort(key=lambda r: order.get(r.get("screen", ""), 3))
+    # Qualified first, then the sleepers to look at, then the ones that are
+    # sized and small. The point of the sheet is that the top of it is
+    # actionable without reading further -- not that the bottom is missing.
+    #
+    # TOO-SMALL rows stay. They used to be deleted, which on real sheets meant
+    # deleting every row that had a contact: Apollo's coverage of trade
+    # contractors skews small, so the rows it knows enough about to size are
+    # the same rows it holds an owner for. A sheet of unsized names with no
+    # emails is not a stricter screen, it is a worse one.
+    order = {"QUALIFIED": 0, "REVIEW-UNSIZED": 1, "REVIEW": 2, "TOO-SMALL": 3}
+    kept.sort(key=lambda r: (order.get(r.get("screen", ""), 4),
+                             0 if r.get("email") else 1))
 
     with open(csv_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
@@ -504,7 +508,8 @@ def print_enrichment(status: dict) -> None:
 
         notes = []
         if detail.get("dropped_too_small"):
-            notes.append(f"{detail['dropped_too_small']} dropped under the size bar")
+            notes.append(f"{detail['dropped_too_small']} under the size bar "
+                         f"(kept, sorted last)")
         if detail.get("size_unknown"):
             notes.append(f"{detail['size_unknown']} unsized (not in Apollo)")
         if detail.get("wrong_place"):
