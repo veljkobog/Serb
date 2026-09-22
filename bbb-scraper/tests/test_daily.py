@@ -865,5 +865,54 @@ class WeakGoogleMatchTest(unittest.TestCase):
         self.assertEqual(why, "no size signal available")
 
 
+
+class RotationShapeTest(unittest.TestCase):
+    """Landscaping was dropped after four lists across four metros returned
+    0-2 Apollo matches and at most one email between them -- and that one was
+    a single-employee company."""
+
+    def config(self):
+        return daily.load_config(
+            os.path.join(os.path.dirname(HERE), "rotation.example.json"))
+
+    def scheduled(self):
+        return [c for day in self.config()["schedule"].values() for c in day]
+
+    def test_landscaping_is_not_scheduled(self):
+        self.assertNotIn("landscape-contractors", self.scheduled())
+
+    def test_the_slots_went_to_trades_that_enrich(self):
+        """HVAC and roofing land 3-6 Apollo matches; landscaping landed 0-2."""
+        from collections import Counter
+        counts = Counter(self.scheduled())
+        self.assertGreaterEqual(counts["roofing-contractors"], 3)
+        self.assertGreaterEqual(counts["heating-and-air-conditioning"], 2)
+        self.assertGreaterEqual(counts["plumber"], 2)
+
+    def test_the_week_still_holds_ten_lists(self):
+        self.assertEqual(len(self.scheduled()), 10)
+
+    def test_landscaping_can_still_be_put_back(self):
+        """The allow-list keeps it, so re-adding it is a one-line change."""
+        self.assertIn("landscape-contractors", self.config()["category_allow"])
+
+    def test_the_review_bar_matches_what_real_sheets_carry(self):
+        """Memphis topped out at 341 with most under 40; 150 disqualified
+        companies that were not small."""
+        self.assertEqual(self.config()["min_google_reviews"], 30)
+        self.assertEqual(daily.CONFIG_DEFAULTS["min_google_reviews"], 30)
+
+    def test_a_thirty_review_company_now_qualifies(self):
+        verdict, why = daily.size_evidence(
+            {"google_reviews": "34", "google_match": "high"}, 20, 30)
+        self.assertEqual(verdict, "QUALIFIED")
+        self.assertIn("34 Google reviews", why)
+
+    def test_a_genuinely_tiny_shop_still_does_not(self):
+        verdict, _why = daily.size_evidence(
+            {"google_reviews": "2", "google_match": "high"}, 20, 30)
+        self.assertEqual(verdict, "TOO-SMALL")
+
+
 if __name__ == "__main__":
     unittest.main()

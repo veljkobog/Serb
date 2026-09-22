@@ -30,7 +30,9 @@
     "roofing company as eight people.",
     "",
     "So Google review volume is read as a second size signal: it tracks jobs",
-    "completed, which is closer to revenue. min_google_reviews is 150. EITHER",
+    "completed. min_google_reviews is 30. That is deliberately low: on real",
+    "sheets a Memphis landscaper topped out at 341 reviews and most sat under",
+    "40, so a high bar disqualified companies that were not small. EITHER",
     "signal clearing its bar qualifies a row -- a shop with 600 reviews is not",
     "small whatever Apollo says -- and the size_evidence column names which",
     "signal decided it. A company is only called TOO-SMALL when the evidence",
@@ -52,6 +54,12 @@
     "Rows are sorted in that order, so the top of the sheet is actionable.",
     "",
     "No revenue ceiling -- the PE platform partners buy at many sizes.",
+    "",
+    "Landscaping was dropped after four lists across four metros returned 0-2",
+    "Apollo matches and at most one email between them -- and that one was a",
+    "single-employee company. HVAC and roofing land 3-6 matches consistently,",
+    "so those slots went back to the trades that enrich. category_allow still",
+    "carries landscaping, so putting it back is a one-line change.",
     "",
     "MSP/IT is absent despite 5 partners wanting it: MSPs sell B2B and rarely",
     "register with BBB, so those lists would be noise. That vertical needs an",
@@ -115,7 +123,7 @@
     ],
     "tuesday": [
       "heating-and-air-conditioning",
-      "landscape-contractors"
+      "plumber"
     ],
     "wednesday": [
       "roofing-contractors",
@@ -207,7 +215,7 @@
     "Servpro",
     "Restoration 1"
   ],
-  "min_google_reviews": 150,
+  "min_google_reviews": 30,
   "max_google_lookups": 40,
   "google_key": ""
 }

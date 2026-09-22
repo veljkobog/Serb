@@ -40,7 +40,10 @@ STATE_FILE = ".rotation-state.json"
 #: the sheets showed 341 reviews sitting unused.
 CONFIG_DEFAULTS = {
     "min_employees": 20,
-    "min_google_reviews": 150,
+    # 30, not 150: on real sheets a Memphis landscaper topped out at 341
+    # reviews and most sat under 40, so a high bar disqualified companies
+    # that were not actually small.
+    "min_google_reviews": 30,
     "max_google_lookups": 40,
     "target_rows": 15,
     "max_results": 150,
