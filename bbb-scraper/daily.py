@@ -117,6 +117,15 @@ def scrape(config: dict, category: str, metro: str, out_path: str,
         # min-years reads a profile-page field; it can only screen when the
         # detail pass actually runs.
         argv += ["--min-years", str(config["min_years"])]
+    google_key = config.get("google_key") or os.environ.get("GOOGLE_MAPS_API_KEY")
+    if google_key:
+        # Deliberately NOT --min-google-reviews: that filters rows out of the
+        # scrape. Enrich everything and let the screen weigh it, so a company
+        # Google has no listing for is unsized rather than deleted.
+        argv += ["--google-key", google_key,
+                 "--google-cache", os.path.join(HERE, ".google-places-cache.json"),
+                 "--max-google-lookups", str(config.get("max_google_lookups", 40))]
+
     allow = (config.get("category_allow") or {}).get(category)
     if allow:
         argv += ["--category-allow", ",".join(allow)]
@@ -173,9 +182,9 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
         found = apollo_people.enrich_listings(listings, client)
         stats = client.stats
 
-    extra_columns = ["screen", "owner_first_name", "owner_last_name", "title",
-                     "email", "email_status", "linkedin_url", "apollo_employees",
-                     "notes"]
+    extra_columns = ["screen", "size_evidence", "owner_first_name",
+                     "owner_last_name", "title", "email", "email_status",
+                     "linkedin_url", "apollo_employees", "notes"]
     for column in extra_columns:
         if column not in fieldnames:
             fieldnames.append(column)
@@ -187,7 +196,10 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
             row.setdefault(column, "")
             if found_row.get(column) not in (None, ""):
                 row[column] = found_row[column]
-        row["screen"] = screen_verdict(row, config.get("min_employees") or 0)
+        verdict, why = size_evidence(row, config.get("min_employees") or 0,
+                                     config.get("min_google_reviews") or 0)
+        row["screen"] = verdict
+        row["size_evidence"] = why
         kept.append(row)
 
     # Qualified first, then the sleepers to look at, then the ones that are
@@ -237,24 +249,74 @@ def read_report(csv_path: str) -> dict:
             "apollo_matched": apollo.get("matched")}
 
 
-def screen_verdict(row: dict, min_employees: int) -> str:
-    """Whether this row passed the size screen, failed it, or was never sized.
-
-    Three outcomes, not two. A company Apollo has never indexed cannot be
-    sized at all -- BBB's own headcount sits behind a Cloudflare challenge --
-    and calling that "passed" would put an unscreened row at the top of the
-    sheet looking exactly like a screened one.
-    """
-    raw = str(row.get("apollo_employees", "")).strip()
-    if not raw:
-        return "REVIEW-UNSIZED"
+def _as_int(value) -> Optional[int]:
+    text = str(value if value is not None else "").strip()
+    if not text:
+        return None
     try:
-        count = int(float(raw))
+        return int(float(text))
     except ValueError:
-        return "REVIEW-UNSIZED"
-    if min_employees and count < min_employees:
-        return "TOO-SMALL"
-    return "QUALIFIED"
+        return None
+
+
+def size_evidence(row: dict, min_employees: int, min_reviews: int) -> tuple:
+    """(verdict, why) from whichever signals are actually present.
+
+    Headcount alone is a poor measure for a trade contractor: crews are not on
+    LinkedIn, so Apollo routinely reports a twenty-truck roofing company as
+    eight people. Google review volume tracks jobs completed, which is closer
+    to revenue, and a shop with six hundred reviews is not small whatever the
+    headcount says.
+
+    So EITHER signal clearing its bar qualifies the row, and a company is
+    called too small only when every signal that CAN judge says so. With no
+    signal able to judge it stays unsized rather than being guessed at.
+
+    A bar of 0 means "do not screen on this signal" -- not "everything
+    passes". Otherwise turning a criterion off would qualify every row that
+    happens to carry that field.
+    """
+    def judge(value, bar):
+        if value is None or not bar:
+            return None               # cannot judge
+        return value >= bar
+
+    employees = _as_int(row.get("apollo_employees"))
+    reviews = _as_int(row.get("google_reviews"))
+    # A weak Google match is somebody else's review count.
+    if (row.get("google_match") or "").lower() == "low":
+        reviews = None
+
+    by_headcount = judge(employees, min_employees)
+    by_reviews = judge(reviews, min_reviews)
+
+    if by_headcount and by_reviews:
+        return "QUALIFIED", f"{employees} employees, {reviews} Google reviews"
+    if by_headcount:
+        return "QUALIFIED", f"{employees} employees"
+    if by_reviews:
+        # The case this exists for: Apollo says small, the reviews say busy.
+        if employees is not None:
+            return "QUALIFIED", (f"{reviews} Google reviews "
+                                 f"(Apollo says {employees} employees)")
+        return "QUALIFIED", f"{reviews} Google reviews"
+
+    judged = [v for v in (by_headcount, by_reviews) if v is not None]
+    if judged:
+        parts = []
+        if by_headcount is not None:
+            parts.append(f"{employees} employees")
+        if by_reviews is not None:
+            parts.append(f"{reviews} Google reviews")
+        elif by_headcount is not None and reviews is None:
+            parts.append("no Google match")
+        return "TOO-SMALL", ", ".join(parts)
+
+    return "REVIEW-UNSIZED", "no size signal available"
+
+
+def screen_verdict(row: dict, min_employees: int, min_reviews: int = 0) -> str:
+    return size_evidence(row, min_employees, min_reviews)[0]
 
 
 def crm_dedupe(csv_path: str) -> dict:

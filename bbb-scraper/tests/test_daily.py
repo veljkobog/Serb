@@ -380,9 +380,11 @@ class ScreenVerdictTest(unittest.TestCase):
                     {"apollo_employees": "n/a"}):
             self.assertEqual(daily.screen_verdict(row, 20), "REVIEW-UNSIZED", row)
 
-    def test_no_bar_still_distinguishes_sized_from_unsized(self):
+    def test_a_zero_bar_means_do_not_screen_on_that_signal(self):
+        """Not "everything passes" -- otherwise switching a criterion off
+        would qualify every row that happens to carry the field."""
         self.assertEqual(daily.screen_verdict({"apollo_employees": "2"}, 0),
-                         "QUALIFIED")
+                         "REVIEW-UNSIZED")
         self.assertEqual(daily.screen_verdict({}, 0), "REVIEW-UNSIZED")
 
     def test_a_float_headcount_is_read_not_discarded(self):
@@ -652,6 +654,87 @@ class SmallCompaniesStayTest(unittest.TestCase):
         with redirect_stdout(buf):
             daily.print_enrichment(status)
         self.assertIn("kept, sorted last", buf.getvalue())
+
+
+
+class SizeEvidenceTest(unittest.TestCase):
+    """Headcount alone is a poor measure for a trade contractor.
+
+    Crews are not on LinkedIn, so Apollo reports a twenty-truck roofing
+    company as eight people. Google review volume tracks jobs completed, which
+    is closer to revenue, so either signal clearing its bar qualifies a row.
+    """
+
+    BAR_EMPLOYEES = 20
+    BAR_REVIEWS = 150
+
+    def verdict(self, **row):
+        return daily.size_evidence(row, self.BAR_EMPLOYEES, self.BAR_REVIEWS)
+
+    def test_reviews_qualify_a_company_apollo_undercounts(self):
+        """The case this exists for."""
+        verdict, why = self.verdict(apollo_employees="8", google_reviews="600")
+        self.assertEqual(verdict, "QUALIFIED")
+        self.assertIn("600 Google reviews", why)
+        self.assertIn("Apollo says 8", why, "the disagreement should be visible")
+
+    def test_headcount_alone_still_qualifies(self):
+        self.assertEqual(self.verdict(apollo_employees="40")[0], "QUALIFIED")
+
+    def test_reviews_alone_still_qualify(self):
+        self.assertEqual(self.verdict(google_reviews="600")[0], "QUALIFIED")
+
+    def test_small_on_both_signals_is_too_small(self):
+        verdict, why = self.verdict(apollo_employees="8", google_reviews="30")
+        self.assertEqual(verdict, "TOO-SMALL")
+        self.assertIn("8 employees", why)
+        self.assertIn("30 Google reviews", why)
+
+    def test_no_signal_at_all_is_unsized(self):
+        self.assertEqual(self.verdict()[0], "REVIEW-UNSIZED")
+
+    def test_a_weak_google_match_is_not_used_as_evidence(self):
+        """A low-confidence match is somebody else's review count."""
+        self.assertEqual(
+            self.verdict(google_reviews="600", google_match="low")[0],
+            "REVIEW-UNSIZED")
+        self.assertEqual(
+            self.verdict(google_reviews="600", google_match="high")[0],
+            "QUALIFIED")
+
+    def test_unparseable_values_are_unknown_not_zero(self):
+        """Zero would read as evidence of smallness."""
+        self.assertEqual(self.verdict(apollo_employees="n/a")[0], "REVIEW-UNSIZED")
+        self.assertEqual(self.verdict(google_reviews="")[0], "REVIEW-UNSIZED")
+
+    def test_the_evidence_is_always_stated(self):
+        for row in ({"apollo_employees": "40"}, {"google_reviews": "600"},
+                    {"apollo_employees": "8", "google_reviews": "30"}, {}):
+            _verdict, why = daily.size_evidence(row, 20, 150)
+            self.assertTrue(why, f"no evidence recorded for {row}")
+
+    def test_with_no_review_bar_it_falls_back_to_headcount(self):
+        self.assertEqual(
+            daily.size_evidence({"apollo_employees": "8", "google_reviews": "600"},
+                                20, 0)[0], "TOO-SMALL")
+
+    def test_the_shipped_config_sets_a_review_bar(self):
+        config = daily.load_config(
+            os.path.join(os.path.dirname(HERE), "rotation.example.json"))
+        self.assertGreater(config.get("min_google_reviews", 0), 0)
+        self.assertIn("max_google_lookups", config)
+
+    def test_google_enrichment_does_not_filter_rows_out(self):
+        """--min-google-reviews would delete rows during the scrape; the
+        screen has to weigh them instead, or a company with no Google listing
+        disappears rather than being marked unsized."""
+        import inspect
+        code = [line.split("#", 1)[0]
+                for line in inspect.getsource(daily.scrape).splitlines()]
+        code = "\n".join(code)
+        self.assertIn("--google-key", code)
+        self.assertNotIn("--min-google-reviews", code,
+                         "the scrape must not filter on reviews")
 
 
 if __name__ == "__main__":

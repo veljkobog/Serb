@@ -36,7 +36,10 @@
     "social_url": "social_url",
     "profile_url": "profile_url",
     "apollo_org_id": "apollo_org_id",
-    "apollo_match": "apollo_match"
+    "apollo_match": "apollo_match",
+    "google_rating": "google_rating",
+    "google_reviews": "google_reviews",
+    "google_match": "google_match"
   },
   "enrichment_columns": [
     "owner_first_name",

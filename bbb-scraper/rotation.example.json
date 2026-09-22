@@ -25,7 +25,22 @@
     "So the size screen runs on APOLLO's headcount, which arrives with the",
     "people-match you are already paying for. Nobody publishes EBITDA at this",
     "scale; at home-services margins of 10-15%, $500K EBITDA implies roughly",
-    "$3.5-5M of revenue, about 20-30 employees. min_employees is 20.",
+    "is 20 -- but headcount ALONE is a poor measure for a trade contractor.",
+    "Crews are not on LinkedIn, so Apollo routinely reports a twenty-truck",
+    "roofing company as eight people.",
+    "",
+    "So Google review volume is read as a second size signal: it tracks jobs",
+    "completed, which is closer to revenue. min_google_reviews is 150. EITHER",
+    "signal clearing its bar qualifies a row -- a shop with 600 reviews is not",
+    "small whatever Apollo says -- and the size_evidence column names which",
+    "signal decided it. A company is only called TOO-SMALL when the evidence",
+    "that exists says so and nothing contradicts it.",
+    "",
+    "Google enrichment needs a Places API key in google_key, or",
+    "GOOGLE_MAPS_API_KEY in the environment. It is billed per lookup by",
+    "Google -- check their current Places pricing, nothing here assumes it --",
+    "and max_google_lookups caps it per list. Without a key the run still",
+    "works; rows simply stay unsized more often.",
     "",
     "The `screen` column is the first thing to read:",
     "  QUALIFIED      Apollo sized it and it clears the bar",
@@ -191,5 +206,8 @@
     "Aire Serv",
     "Servpro",
     "Restoration 1"
-  ]
+  ],
+  "min_google_reviews": 150,
+  "max_google_lookups": 40,
+  "google_key": ""
 }
