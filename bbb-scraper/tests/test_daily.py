@@ -793,5 +793,77 @@ class CmdletNameTest(unittest.TestCase):
             self.assertEqual(check.check(path), [])
 
 
+
+class StaleConfigTest(unittest.TestCase):
+    """rotation.json is the user's own file and an update never overwrites it,
+    so a key added later is simply absent -- and a size bar read as 0 means
+    "do not screen on this signal". A real run therefore had the whole Google
+    signal switched off while its sheets carried 341 unused reviews."""
+
+    def config(self, **keys):
+        import json
+        import tempfile as tf
+        with tf.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "r.json")
+            body = {"metros": ["x"], "schedule": {"monday": ["plumber"]}}
+            body.update(keys)
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(body, fh)
+            return daily.load_config(path)
+
+    def test_a_missing_review_bar_falls_back_to_the_default(self):
+        self.assertEqual(self.config()["min_google_reviews"],
+                         daily.CONFIG_DEFAULTS["min_google_reviews"])
+
+    def test_an_explicit_value_is_never_overridden(self):
+        self.assertEqual(self.config(min_google_reviews=300)["min_google_reviews"],
+                         300)
+
+    def test_an_explicit_zero_is_respected(self):
+        """Setting a bar to 0 is a real choice: do not screen on it."""
+        self.assertEqual(self.config(min_google_reviews=0)["min_google_reviews"], 0)
+
+    def test_the_defaulted_keys_are_named(self):
+        defaulted = self.config(min_employees=20)["_defaulted"]
+        self.assertIn("min_google_reviews", defaulted)
+        self.assertNotIn("min_employees", defaulted)
+
+    def test_a_complete_config_reports_nothing_defaulted(self):
+        self.assertEqual(self.config(**daily.CONFIG_DEFAULTS)["_defaulted"], [])
+
+
+class WeakGoogleMatchTest(unittest.TestCase):
+    """A low-confidence match may be somebody else's review count, so it never
+    qualifies a row. Discarding it silently threw away real signal: a sheet
+    carried a company with 341 reviews reported as having no size signal."""
+
+    def verdict(self, **row):
+        return daily.size_evidence(row, 20, 150)
+
+    def test_a_weak_match_never_qualifies(self):
+        verdict, _why = self.verdict(google_reviews="341", google_match="low")
+        self.assertEqual(verdict, "REVIEW-UNSIZED")
+
+    def test_but_the_count_is_reported_for_verification(self):
+        _verdict, why = self.verdict(google_reviews="341", google_match="low")
+        self.assertIn("341", why)
+        self.assertIn("low-confidence", why)
+        self.assertIn("verify", why)
+
+    def test_a_weak_match_below_the_bar_is_still_named(self):
+        _verdict, why = self.verdict(google_reviews="25", google_match="low")
+        self.assertIn("25", why)
+        self.assertIn("low-confidence", why)
+
+    def test_a_strong_match_over_the_bar_qualifies_normally(self):
+        verdict, why = self.verdict(google_reviews="341", google_match="high")
+        self.assertEqual(verdict, "QUALIFIED")
+        self.assertNotIn("low-confidence", why)
+
+    def test_no_google_data_at_all_says_so(self):
+        _verdict, why = self.verdict()
+        self.assertEqual(why, "no size signal available")
+
+
 if __name__ == "__main__":
     unittest.main()

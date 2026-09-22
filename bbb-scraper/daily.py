@@ -33,6 +33,20 @@ sys.path.insert(0, HERE)
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 STATE_FILE = ".rotation-state.json"
 
+#: Defaults for keys a config may predate. rotation.json is the user's own
+#: file and is never overwritten by an update, so a key added later is simply
+#: absent -- and a size bar read as 0 means "do not screen on this signal",
+#: which silently switched the whole Google signal off on a real run while
+#: the sheets showed 341 reviews sitting unused.
+CONFIG_DEFAULTS = {
+    "min_employees": 20,
+    "min_google_reviews": 150,
+    "max_google_lookups": 40,
+    "target_rows": 15,
+    "max_results": 150,
+    "daily_credit_cap": 40,
+}
+
 
 # --------------------------------------------------------------------------
 # config + rotation state
@@ -45,6 +59,11 @@ def load_config(path: str) -> dict:
         raise ValueError(f"{path} has no metros to rotate through")
     if not config.get("schedule"):
         raise ValueError(f"{path} has no schedule")
+
+    missing = [k for k in CONFIG_DEFAULTS if k not in config]
+    for key in missing:
+        config[key] = CONFIG_DEFAULTS[key]
+    config["_defaulted"] = missing
     return config
 
 
@@ -283,9 +302,15 @@ def size_evidence(row: dict, min_employees: int, min_reviews: int) -> tuple:
 
     employees = _as_int(row.get("apollo_employees"))
     reviews = _as_int(row.get("google_reviews"))
-    # A weak Google match is somebody else's review count.
+
+    # A weak Google match may be somebody else's review count, so it never
+    # qualifies a row on its own. But discarding it silently threw away real
+    # signal: one sheet carried a company with 341 reviews and a low-confidence
+    # match, reported as having no size signal at all. Say what was seen and
+    # that it is unverified.
+    unverified = None
     if (row.get("google_match") or "").lower() == "low":
-        reviews = None
+        unverified, reviews = reviews, None
 
     by_headcount = judge(employees, min_employees)
     by_reviews = judge(reviews, min_reviews)
@@ -312,6 +337,12 @@ def size_evidence(row: dict, min_employees: int, min_reviews: int) -> tuple:
             parts.append("no Google match")
         return "TOO-SMALL", ", ".join(parts)
 
+    if unverified is not None and min_reviews and unverified >= min_reviews:
+        return "REVIEW-UNSIZED", (f"{unverified} Google reviews, but the "
+                                  f"match is low-confidence -- verify")
+    if unverified is not None:
+        return "REVIEW-UNSIZED", (f"only a low-confidence Google match "
+                                  f"({unverified} reviews)")
     return "REVIEW-UNSIZED", "no size signal available"
 
 
@@ -532,6 +563,13 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
     excludes = config.get("exclude_file")
     print(f"  excluding       : {excludes or 'nothing'}")
     print(f"  writing to      : {export_dir}")
+
+    defaulted = config.get("_defaulted") or []
+    if defaulted:
+        print("")
+        print(f"  (i) your rotation.json predates {len(defaulted)} setting(s); "
+              f"using defaults for: {', '.join(sorted(defaulted))}")
+        print("      copy rotation.example.json over it to see them written out")
 
     if not os.environ.get("APOLLO_API_KEY"):
         print("\n  (!) APOLLO_API_KEY not set -- no owner names or emails")
