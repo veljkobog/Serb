@@ -546,5 +546,67 @@ class NationalChainTest(unittest.TestCase):
         self.assertIn("--exclude-name", inspect.getsource(daily.scrape))
 
 
+
+class EnrichmentReportTest(unittest.TestCase):
+    """"12 rows" says nothing about whether those rows are contactable, which
+    is the only question worth asking of a lead sheet. It was previously only
+    answerable by opening the file, or by spotting the gap between rows
+    written and rows the CRM check saw."""
+
+    def render(self, status):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            daily.print_enrichment(status)
+        return buf.getvalue()
+
+    def status(self, **over):
+        detail = {"sheet": "s.csv", "emails": 5, "credits_spent": 6}
+        detail.update(over)
+        return {"sheets": [{"file": "s.csv", "rows": 12}], "enrichment": [detail]}
+
+    def test_it_reports_the_email_count_and_share(self):
+        out = self.render(self.status())
+        self.assertIn("12 rows, 5 with an email (42%)", out)
+
+    def test_zero_emails_is_stated_plainly(self):
+        out = self.render(self.status(emails=0))
+        self.assertIn("0 with an email (0%)", out)
+
+    def test_an_empty_sheet_does_not_divide_by_zero(self):
+        status = {"sheets": [{"file": "s.csv", "rows": 0}],
+                  "enrichment": [{"sheet": "s.csv", "emails": 0}]}
+        self.assertIn("n/a", self.render(status))
+
+    def test_the_size_gate_is_visible(self):
+        out = self.render(self.status(dropped_too_small=3))
+        self.assertIn("3 dropped under the size bar", out)
+
+    def test_unsized_rows_are_named_as_such(self):
+        out = self.render(self.status(size_unknown=9))
+        self.assertIn("9 unsized (not in Apollo)", out)
+
+    def test_a_withheld_contact_is_reported(self):
+        """A match in the wrong city keeps the company but not the email."""
+        out = self.render(self.status(wrong_place=1))
+        self.assertIn("wrong city", out)
+
+    def test_a_skipped_crm_check_is_never_silent(self):
+        out = self.render(self.status(crm={"skipped": "no HUBSPOT_TOKEN"}))
+        self.assertIn("no HUBSPOT_TOKEN", out)
+
+    def test_enrichment_that_never_ran_says_why(self):
+        out = self.render(self.status(skipped="no APOLLO_API_KEY"))
+        self.assertIn("not enriched: no APOLLO_API_KEY", out)
+
+    def test_no_sheets_prints_nothing(self):
+        self.assertEqual(self.render({"sheets": [], "enrichment": []}), "")
+
+    def test_a_sheet_with_no_enrichment_record_still_reports_rows(self):
+        status = {"sheets": [{"file": "s.csv", "rows": 7}], "enrichment": []}
+        self.assertIn("7 rows", self.render(status))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -473,6 +473,59 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
         print("  (!) HUBSPOT_TOKEN not set -- rows will NOT be CRM-checked")
 
 
+def print_enrichment(status: dict) -> None:
+    """What each sheet actually came back with.
+
+    "12 rows" says nothing about whether those rows are contactable, and that
+    is the only question worth asking of a lead sheet. Reading it out of the
+    file, or inferring it from the gap between rows written and rows checked,
+    is not a report.
+    """
+    enrichment = {e.get("sheet"): e for e in status.get("enrichment", [])}
+    sheets = status.get("sheets", [])
+    if not sheets:
+        return
+
+    print("")
+    print("what came back")
+    print("-" * 58)
+    for sheet in sheets:
+        name = sheet["file"]
+        rows = sheet["rows"]
+        detail = enrichment.get(name) or {}
+        print(f"  {name}")
+        if detail.get("skipped"):
+            print(f"    {rows} rows -- not enriched: {detail['skipped']}")
+            continue
+
+        emails = detail.get("emails") or 0
+        share = f"{emails / rows:.0%}" if rows else "n/a"
+        print(f"    {rows} rows, {emails} with an email ({share})")
+
+        notes = []
+        if detail.get("dropped_too_small"):
+            notes.append(f"{detail['dropped_too_small']} dropped under the size bar")
+        if detail.get("size_unknown"):
+            notes.append(f"{detail['size_unknown']} unsized (not in Apollo)")
+        if detail.get("wrong_place"):
+            notes.append(f"{detail['wrong_place']} matched in the wrong city -- "
+                         f"contact withheld")
+        spent = detail.get("credits_spent")
+        if spent is not None:
+            notes.append(f"{spent} credits")
+        if notes:
+            print(f"    {'; '.join(notes)}")
+
+        crm = detail.get("crm") or {}
+        counts = crm.get("counts") or {}
+        if counts:
+            parts = [f"{v} {k}" for k, v in sorted(counts.items()) if k and v]
+            if parts:
+                print(f"    CRM: {', '.join(parts)}")
+        elif crm.get("skipped"):
+            print(f"    CRM: {crm['skipped']}")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -513,8 +566,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print_plan(config, status, when, export_dir)
 
-    for sheet in status.get("sheets", []):
-        print(f"[daily] {sheet['file']}: {sheet['rows']} rows")
+    print_enrichment(status)
+
     for problem in status.get("problems", []):
         print(f"[daily] PROBLEM: {problem}", file=sys.stderr)
 
