@@ -31,6 +31,7 @@ Two mistakes this module exists to avoid, both seen on real data:
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional
@@ -55,11 +56,55 @@ PEOPLE_SEARCH = "/mixed_people/api_search"
 BULK_MATCH = "/people/bulk_match"
 PROFILE = "/users/api_profile"
 
-#: Whoever signs off on a service contract at a 5-200 person trade business.
+#: Sent to Apollo as the title filter. Deliberately broad -- the ranking below
+#: decides who is actually the decision-maker.
 OWNER_TITLES = [
-    "owner", "president", "founder", "co-founder", "ceo",
-    "general manager", "vice president", "operations manager",
+    "owner", "proprietor", "president", "founder", "co-founder", "ceo",
+    "chief executive officer", "managing member", "managing partner",
+    "principal", "general manager", "vice president", "operations manager",
 ]
+
+#: Who to approach about selling the business, best first. Matched as whole
+#: words: a substring test ranked "Vice President of Sales" as a president,
+#: above both the founder and the CEO, because "president" sits inside "vice
+#: president". And "ceo" is not inside "Chief Executive Officer", so the CEO of
+#: one real company ranked below its general manager.
+_VICE_PRESIDENT = re.compile(r"\b(?:vice\s*president|vp|svp|evp)\b", re.I)
+
+_TITLE_RANKS = (
+    (re.compile(r"\b(?:owner|proprietor)\b", re.I),                  0),
+    (re.compile(r"\b(?:co-?)?founder\b", re.I),                      1),
+    (re.compile(r"\b(?:ceo|chief\s+executive(?:\s+officer)?)\b", re.I), 2),
+    (re.compile(r"\bpresident\b", re.I),                             3),
+    (re.compile(r"\bmanaging\s+(?:member|partner|director)\b", re.I), 4),
+    (re.compile(r"\bprincipal\b", re.I),                             5),
+    (re.compile(r"\b(?:coo|chief\s+operating(?:\s+officer)?)\b", re.I), 6),
+    (re.compile(r"\bgeneral\s+manager\b", re.I),                    7),
+    (_VICE_PRESIDENT,                                                 8),
+    (re.compile(r"\boperations\s+manager\b", re.I),                 9),
+)
+
+UNRANKED = len(_TITLE_RANKS)
+
+
+def title_rank(title: str) -> int:
+    """How close this title is to the person who can sell the company.
+
+    Lower is better; UNRANKED means no match. A vice president never scores as
+    a president, whatever the string contains.
+    """
+    text = title or ""
+    is_vp = bool(_VICE_PRESIDENT.search(text))
+    for pattern, rank in _TITLE_RANKS:
+        if pattern is _VICE_PRESIDENT:
+            if is_vp:
+                return rank
+            continue
+        if rank == 3 and is_vp:
+            continue          # "Vice President of Sales" is not a president
+        if pattern.search(text):
+            return rank
+    return UNRANKED
 
 MAX_MATCH_BATCH = 10   # Apollo's documented ceiling for bulk_match
 
@@ -292,15 +337,14 @@ class PeopleClient:
         if not people:
             return None
         self.stats.candidates += len(people)
-        # OWNER_TITLES is in descending authority, so prefer the earliest
-        # title that appears rather than whatever Apollo happened to rank first.
-        def rank(person):
-            title = (person.get("title") or "").lower()
-            for index, wanted in enumerate(OWNER_TITLES):
-                if wanted in title:
-                    return index
-            return len(OWNER_TITLES)
-        return sorted(people, key=rank)[0]
+        # Apollo tells us up front whether it holds an email for each person.
+        # Revealing one it does not have costs a credit and returns nothing, so
+        # a contactable general manager beats an unreachable CEO.
+        def key(person):
+            has_email = bool(person.get("has_email"))
+            return (0 if has_email else 1, title_rank(person.get("title")))
+
+        return sorted(people, key=key)[0]
 
     def match_people(self, people: List[dict]) -> List[dict]:
         """Emails for up to MAX_MATCH_BATCH people. This is the billable step."""

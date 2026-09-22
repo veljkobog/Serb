@@ -323,5 +323,92 @@ class DeprecationTest(unittest.TestCase):
         self.assertEqual(list(rows.values())[0]["email"], "dana@aceplumbing.com")
 
 
+
+class TitleRankTest(unittest.TestCase):
+    """Who to approach about selling the business.
+
+    Every title here came back from Apollo for a company on a real sheet. Two
+    bugs showed up: "president" sits inside "vice president", so a VP of Sales
+    outranked both the founder and the CEO; and "ceo" is not inside "Chief
+    Executive Officer", so one company's CEO ranked below its general manager.
+    """
+
+    def better(self, winner, loser):
+        self.assertLess(apollo_people.title_rank(winner),
+                        apollo_people.title_rank(loser),
+                        f"{winner!r} should outrank {loser!r}")
+
+    def test_an_owner_outranks_everyone(self):
+        for other in ("Founder/CEO", "Chief Executive Officer", "President",
+                      "General Manager", "Vice President of Sales"):
+            self.better("Owner", other)
+
+    def test_a_spelled_out_ceo_is_recognised(self):
+        """Rob's Roofing's CEO ranked below its general manager."""
+        self.better("Chief Executive Officer", "General Manager")
+        self.assertEqual(apollo_people.title_rank("Chief Executive Officer"),
+                         apollo_people.title_rank("CEO"))
+
+    def test_a_vice_president_is_never_a_president(self):
+        for vp in ("Vice President of Sales", "Vice President Operations",
+                   "VP Sales", "SVP Operations"):
+            self.better("President", vp)
+            self.better("Founder", vp)
+            self.better("Chief Executive Officer", vp)
+
+    def test_llc_titles_are_recognised(self):
+        """Common at contractor LLCs, and previously unranked entirely."""
+        for title in ("Managing Member", "Managing Partner", "Principal"):
+            self.better(title, "General Manager")
+
+    def test_a_compound_title_still_ranks(self):
+        self.assertEqual(apollo_people.title_rank("CEO Estimator/Project Manager"),
+                         apollo_people.title_rank("CEO"))
+
+    def test_an_unrelated_title_is_unranked(self):
+        self.assertEqual(apollo_people.title_rank("Estimator"),
+                         apollo_people.UNRANKED)
+        self.assertEqual(apollo_people.title_rank(""), apollo_people.UNRANKED)
+        self.assertEqual(apollo_people.title_rank(None), apollo_people.UNRANKED)
+
+
+class ContactablePreferenceTest(unittest.TestCase):
+    """Apollo says up front whether it holds an email. Revealing one it does
+    not have costs a credit and returns nothing, so a reachable general
+    manager beats an unreachable CEO."""
+
+    def pick(self, people):
+        client = apollo_people.PeopleClient.__new__(apollo_people.PeopleClient)
+        client.stats = apollo_people.PeopleStats()
+        client.min_delay = 0
+        client._posted = people
+
+        def fake_post(path, body):
+            return {"people": client._posted}
+        client._post = fake_post
+        return client.find_person(listing("Any Co", "a" * 24))
+
+    def test_a_contactable_manager_beats_an_unreachable_ceo(self):
+        chosen = self.pick([
+            {"id": "1" * 24, "title": "Chief Executive Officer", "has_email": False},
+            {"id": "2" * 24, "title": "General Manager", "has_email": True},
+        ])
+        self.assertEqual(chosen["title"], "General Manager")
+
+    def test_seniority_still_decides_among_contactable_people(self):
+        chosen = self.pick([
+            {"id": "1" * 24, "title": "General Manager", "has_email": True},
+            {"id": "2" * 24, "title": "Owner", "has_email": True},
+        ])
+        self.assertEqual(chosen["title"], "Owner")
+
+    def test_with_no_emails_at_all_the_most_senior_wins(self):
+        chosen = self.pick([
+            {"id": "1" * 24, "title": "Vice President of Sales", "has_email": False},
+            {"id": "2" * 24, "title": "Owner", "has_email": False},
+        ])
+        self.assertEqual(chosen["title"], "Owner")
+
+
 if __name__ == "__main__":
     unittest.main()
