@@ -737,5 +737,61 @@ class SizeEvidenceTest(unittest.TestCase):
                          "the scrape must not filter on reviews")
 
 
+
+class CmdletNameTest(unittest.TestCase):
+    """A misspelled cmdlet fails only when the script is run.
+
+    `New-ScheduledTaskSettings` shipped in place of
+    `New-ScheduledTaskSettingsSet` and got as far as the user: PowerShell
+    cannot run where these are written, so nothing catches a name that does
+    not exist until someone types the command.
+    """
+
+    def checker(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+        import check_powershell
+        return check_powershell
+
+    def test_the_real_scripts_use_real_cmdlets(self):
+        import subprocess
+        root = os.path.dirname(HERE)
+        result = subprocess.run(
+            [sys.executable, os.path.join(root, "tools", "check_powershell.py")],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_exact_typo_that_shipped_is_caught(self):
+        check = self.checker()
+        self.assertEqual(
+            check.unknown_cmdlets(["$s = New-ScheduledTaskSettings -WakeToRun"]),
+            ["New-ScheduledTaskSettings"])
+
+    def test_the_correct_name_passes(self):
+        check = self.checker()
+        self.assertEqual(
+            check.unknown_cmdlets(["$s = New-ScheduledTaskSettingsSet -WakeToRun"]),
+            [])
+
+    def test_cmdlets_outside_the_checked_modules_are_left_alone(self):
+        """Listing every built-in would make this a burden that gets switched
+        off, so only the scheduler cmdlets are covered."""
+        check = self.checker()
+        self.assertEqual(
+            check.unknown_cmdlets(["Write-Host x", "Join-Path a b",
+                                   "Invoke-RestMethod -Uri y"]), [])
+
+    def test_a_comment_mentioning_a_typo_is_not_a_finding(self):
+        """Comments are stripped before scanning -- the checker was fooled by
+        its own explanatory comment once already."""
+        import tempfile as tf
+        check = self.checker()
+        with tf.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "s.ps1")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("# not New-ScheduledTaskSettings, which is wrong\n"
+                         "New-ScheduledTaskSettingsSet -WakeToRun\n")
+            self.assertEqual(check.check(path), [])
+
+
 if __name__ == "__main__":
     unittest.main()

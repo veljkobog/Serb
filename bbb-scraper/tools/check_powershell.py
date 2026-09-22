@@ -12,10 +12,14 @@ because the thing it looks for went wrong in a real run:
     scraper's first progress line and left a log containing only a timestamp.
   * unbalanced braces or parens -- a parse error the script cannot report
     about itself.
+  * a misspelled cmdlet -- `New-ScheduledTaskSettings` instead of
+    `New-ScheduledTaskSettingsSet` reached the user, because a name that does
+    not exist fails only at the moment the script is run.
 """
 
 import glob
 import os
+import re
 import sys
 
 
@@ -34,6 +38,42 @@ def code_lines(path):
             continue
         out.append(line)
     return out
+
+
+#: Cmdlets used by these scripts, spelled the way PowerShell spells them.
+#: A module is only imported on a Windows host, so nothing here can resolve a
+#: name at check time -- this list is the substitute, and any Verb-Noun token
+#: from a covered module that is not on it is treated as a typo.
+KNOWN_CMDLETS = {
+    # ScheduledTasks
+    "New-ScheduledTaskAction", "New-ScheduledTaskTrigger",
+    "New-ScheduledTaskSettingsSet", "New-ScheduledTaskPrincipal",
+    "Register-ScheduledTask", "Unregister-ScheduledTask",
+    "Get-ScheduledTask", "Get-ScheduledTaskInfo", "Start-ScheduledTask",
+    "Set-ScheduledTask", "Disable-ScheduledTask", "Enable-ScheduledTask",
+}
+
+#: Only these prefixes are checked. Everything else -- Write-Host, Join-Path,
+#: Test-Path and the rest of the core cmdlets -- is out of scope, because
+#: listing every built-in would make the check a maintenance burden that
+#: eventually gets switched off.
+CHECKED_NOUNS = ("ScheduledTask",)
+
+_CMDLET_RE = re.compile(r"\b([A-Z][a-z]+)-([A-Za-z]+)\b")
+
+
+def unknown_cmdlets(lines):
+    """Verb-Noun tokens from a covered module that are not real cmdlets."""
+    bad = []
+    for line in lines:
+        for match in _CMDLET_RE.finditer(line):
+            name = match.group(0)
+            noun = match.group(2)
+            if not any(noun.startswith(n) for n in CHECKED_NOUNS):
+                continue
+            if name not in KNOWN_CMDLETS:
+                bad.append(name)
+    return bad
 
 
 def check(path):
@@ -56,6 +96,9 @@ def check(path):
             problems.append(
                 "pipes native stderr while ErrorActionPreference is Stop -- "
                 "any warning becomes a terminating error")
+
+    for name in unknown_cmdlets(code_lines(path)):
+        problems.append(f"no such cmdlet: {name}")
     return problems
 
 
