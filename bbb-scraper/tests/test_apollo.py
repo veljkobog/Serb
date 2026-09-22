@@ -508,5 +508,92 @@ class LookupVolumeTest(unittest.TestCase):
                            "with --require-website the lookup must precede the filter")
 
 
+
+class GoogleLookupVolumeTest(unittest.TestCase):
+    """Google bills per lookup, so where the pass runs decides the bill AND
+    which rows end up enriched.
+
+    A real run enriched 108 survivors, spent its whole 40-lookup cap on the
+    first 40, then trimmed to 15 rows that were mostly not among them. The
+    sheet came back unsized while Google had been paid for 40 lookups.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from fixture_server import start_server
+        cls.server, cls.base_url = start_server()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def setUp(self):
+        from places_server import start_places_server
+        self.places, self.places_url, self.places_handler = start_places_server()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = os.path.join(self.tmp.name, "out.csv")
+        self.endpoints = os.path.join(self.tmp.name, "endpoints.json")
+        import json
+        with open(self.endpoints, "w", encoding="utf-8") as fh:
+            json.dump({"endpoints": [{
+                "url": f"{self.base_url}/api/businesssearch",
+                "params": {"find_country": "USA"},
+                "page_param": "page",
+                "category_param": "find_text",
+                "location_param": "find_loc",
+            }]}, fh)
+
+    def tearDown(self):
+        self.places.shutdown()
+        self.places.server_close()
+        self.tmp.cleanup()
+
+    def run_cli(self, *extra):
+        import io
+        from contextlib import redirect_stdout
+
+        import scraper
+        argv = ["--category", "plumber", "--location", "wilmington-nc",
+                "--endpoints", self.endpoints, "--output", self.out,
+                "--checkpoint", os.path.join(self.tmp.name, "c.json"),
+                "--no-fallback", "--min-delay", "0", "--max-delay", "0",
+                "--no-detail", "--google-key", "test-key",
+                "--google-endpoint", self.places_url,
+                "--google-cache", os.path.join(self.tmp.name, "g.json"),
+                *extra]
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = scraper.main(argv)
+        return code, buf.getvalue()
+
+    def test_only_the_trimmed_rows_are_looked_up(self):
+        code, out = self.run_cli("--max-results", "20", "--target-rows", "3")
+        self.assertEqual(code, 0, out)
+        self.assertLessEqual(self.places_handler.requests, 3,
+                             f"billed {self.places_handler.requests} lookups for a "
+                             f"3-row sheet")
+
+    def test_every_row_on_the_sheet_gets_its_lookup(self):
+        """The point is not just spending less -- it is that the rows that
+        survive are the ones enriched."""
+        import csv
+        self.run_cli("--max-results", "20", "--target-rows", "3")
+        with open(self.out, encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        self.assertTrue(rows)
+        self.assertTrue(any(r.get("google_reviews") for r in rows),
+                        "no row on the sheet carries a review count")
+
+    def test_a_google_filter_still_runs_the_pass_first(self):
+        """--min-google-reviews reads what this pass fills, so with that flag
+        the lookup must precede the filter."""
+        code, out = self.run_cli("--max-results", "20", "--target-rows", "3",
+                                 "--min-google-reviews", "1")
+        self.assertEqual(code, 0, out)
+        self.assertGreater(self.places_handler.requests, 3,
+                           "with a google filter the pass must come first")
+
+
 if __name__ == "__main__":
     unittest.main()

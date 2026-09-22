@@ -1256,10 +1256,19 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
     kept, rejected = apply_filters(unique, local, args.drop_unknown)
     rejected.extend(excluded_rows)
 
+    # Google bills per lookup, so where this runs decides the bill AND which
+    # rows end up enriched. Running it before the trim spent the whole cap on
+    # the first 40 of 108 survivors, then trimmed to 15 rows that were mostly
+    # NOT among them -- paying for lookups that never reached the sheet while
+    # the sheet stayed unsized.
+    #
+    # It has to come first only when a Google filter is active, since that
+    # filter reads what this pass fills. Otherwise it waits for the trim.
+    google_first = bool(google)
     google_stats = None
     if uses_google(args) and kept and args.google_dry_run:
         report_google_preflight(args, kept)
-    elif uses_google(args) and kept:
+    elif uses_google(args) and kept and google_first:
         google_stats = run_google_enrichment(args, kept)
         kept, rejected_google = apply_filters(kept, google, args.drop_unknown)
         rejected.extend(rejected_google)
@@ -1270,6 +1279,8 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         kept = kept[:args.target_rows]
 
     # The cheap case: only the rows that made the sheet get looked up.
+    if uses_google(args) and kept and not google_first and not args.google_dry_run:
+        google_stats = run_google_enrichment(args, kept)
     if uses_apollo(args) and kept and not apollo_first:
         apollo_stats = run_apollo_enrichment(args, kept)
 
