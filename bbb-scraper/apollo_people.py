@@ -470,12 +470,13 @@ def enrich_listings(
                 row["notes"] = "last name masked by Apollo plan"
             if size is None:
                 row["notes"] = ("; ".join(n for n in [row["notes"],
-                                "headcount unknown -- size filter not applied"] if n))
-            elif too_small:
-                row["notes"] = ("; ".join(n for n in [
-                    row["notes"],
-                    f"under the {client.min_employees} employee bar "
-                    f"({size} employees)"] if n))
+                                "Apollo has no headcount for this company"] if n))
+            # No note when the headcount is under the bar. Apollo sees one
+            # signal of two: on a live sheet Herrell Plumbing carried 181
+            # Google reviews and a QUALIFIED screen while this note still read
+            # "under the 20 employee bar", so a passing row read as a failing
+            # one. The headcount is in its own column and the verdict belongs
+            # to the screen, which is the only place that sees both signals.
             if row["email"]:
                 client.stats.emails += 1
             rows[key] = row

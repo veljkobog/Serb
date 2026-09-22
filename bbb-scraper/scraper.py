@@ -277,6 +277,21 @@ def _google_value(field, allow_low_match):
     return getter
 
 
+#: Anything that is not a letter or a digit is a word separator in a company
+#: name. Punctuation is where the same brand spells itself differently.
+_NAME_SEPARATORS = re.compile(r"[^a-z0-9]+")
+
+
+def normalize_name(name: str) -> str:
+    """Lowercase, punctuation-free and space-padded, for whole-word matching.
+
+    Two problems, one fix. 'Roto-Rooter' and 'Roto Rooter' are one company,
+    and BBB spells franchises both ways; and padding means a fragment only
+    matches whole words, so 'Any Hour' cannot fire on 'Company Hours'.
+    """
+    return " " + _NAME_SEPARATORS.sub(" ", (name or "").lower()).strip() + " "
+
+
 def load_exclusions(args) -> tuple:
     """(name fragments, domains) to drop, from the flags and any --exclude-file."""
     names = [n.strip().lower() for n in (args.exclude_name or "").split(",") if n.strip()]
@@ -293,11 +308,14 @@ def load_exclusions(args) -> tuple:
                     domains.append(line.lower().lstrip("."))
                 else:
                     names.append(line.lower())
+    # A fragment of pure punctuation would normalize to a bare space and
+    # match every company on the sheet, so it is dropped rather than trusted.
+    names = [f for f in (normalize_name(n) for n in names) if f.strip()]
     return names, domains
 
 
 def excluded(listing, names, domains) -> bool:
-    company = (listing.company_name or "").lower()
+    company = normalize_name(listing.company_name)
     if any(fragment in company for fragment in names):
         return True
     website = (listing.website or "").lower()

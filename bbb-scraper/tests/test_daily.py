@@ -537,10 +537,36 @@ class NationalChainTest(unittest.TestCase):
         self.assertTrue(self.excluded("DaBella"))
         self.assertTrue(self.excluded("Bumble Roofing of Charlotte"))
 
+    def test_a_franchise_is_caught_under_any_of_its_local_names(self):
+        """'Benjamin Franklin of Orlando' reached a live sheet as QUALIFIED
+        with 1,882 Google reviews: the list said 'Benjamin Franklin Plumbing',
+        which is not a substring of how that city spells it."""
+        for name in ("Benjamin Franklin Plumbing of Tampa",
+                     "Benjamin Franklin of Orlando",
+                     "One Hour Heating & Air Conditioning",
+                     "One Hour Air Conditioning and Heating of KC",
+                     "Mister Sparky Electric"):
+            self.assertTrue(self.excluded(name), name)
+
+    def test_punctuation_does_not_hide_a_chain(self):
+        """BBB spells the same brand both ways from one city to the next."""
+        for name in ("Roto-Rooter Plumbing & Water Cleanup",
+                     "Roto Rooter Services Company",
+                     "Mr. Rooter Plumbing of Orlando",
+                     "Mr Rooter Plumbing"):
+            self.assertTrue(self.excluded(name), name)
+
     def test_independent_operators_are_untouched(self):
         for name in ("Horizon Roofing", "Merritt Roofing, LLC",
                      "Tribe Built Roofing, LLC", "Four Peaks Roofing",
-                     "Rob's Roofing LLC"):
+                     "Rob's Roofing LLC",
+                     # Shorter stems must not start swallowing real targets:
+                     # a first name, a word inside a longer word, and a
+                     # champion who does not sell windows.
+                     "Franklin Plumbing & Drain", "Benjamin Heating Co",
+                     "Champion Roofing & Siding", "Sparky's Electric LLC",
+                     "Window World of Central Florida",
+                     "Rooter Ranger Plumbing"):
             self.assertFalse(self.excluded(name), name)
 
     def test_the_exclusions_reach_the_scraper(self):
@@ -582,10 +608,12 @@ class EnrichmentReportTest(unittest.TestCase):
         self.assertIn("n/a", self.render(status))
 
     def test_the_size_gate_is_visible(self):
-        """And says the rows were kept -- they used to be deleted."""
-        out = self.render(self.status(dropped_too_small=3))
-        self.assertIn("3 under the size bar", out)
+        """And says the rows were kept -- they used to be deleted -- without
+        reading as a verdict: Apollo's headcount is one signal of two."""
+        out = self.render(self.status(apollo_small_headcount=3))
+        self.assertIn("3 under the headcount bar on Apollo alone", out)
         self.assertIn("kept", out)
+        self.assertIn("the screen column decides", out)
 
     def test_unsized_rows_are_named_as_such(self):
         out = self.render(self.status(size_unknown=9))
@@ -649,11 +677,11 @@ class SmallCompaniesStayTest(unittest.TestCase):
         from contextlib import redirect_stdout
         status = {"sheets": [{"file": "s.csv", "rows": 12}],
                   "enrichment": [{"sheet": "s.csv", "emails": 4,
-                                  "dropped_too_small": 3}]}
+                                  "apollo_small_headcount": 3}]}
         buf = io.StringIO()
         with redirect_stdout(buf):
             daily.print_enrichment(status)
-        self.assertIn("kept, sorted last", buf.getvalue())
+        self.assertIn("kept", buf.getvalue())
 
 
 

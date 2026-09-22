@@ -246,7 +246,7 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
         "rows_before": len(rows),
         "rows_after": len(kept),
         "emails": stats.emails,
-        "dropped_too_small": stats.too_small,
+        "apollo_small_headcount": stats.too_small,
         "size_unknown": stats.size_unknown,
         "wrong_place": stats.wrong_place,
         "credit_cap_hit": stats.cap_hit,
@@ -610,9 +610,13 @@ def print_enrichment(status: dict) -> None:
         print(f"    {rows} rows, {emails} with an email ({share})")
 
         notes = []
-        if detail.get("dropped_too_small"):
-            notes.append(f"{detail['dropped_too_small']} under the size bar "
-                         f"(kept, sorted last)")
+        if detail.get("apollo_small_headcount"):
+            # Not a verdict. Apollo's headcount is one of the two size signals
+            # and the weaker one for trade contractors, so a row counted here
+            # can still be QUALIFIED on Google review volume.
+            notes.append(f"{detail['apollo_small_headcount']} under the "
+                         f"headcount bar on Apollo alone (kept; the screen "
+                         f"column decides)")
         if detail.get("size_unknown"):
             notes.append(f"{detail['size_unknown']} unsized (not in Apollo)")
         if detail.get("wrong_place"):

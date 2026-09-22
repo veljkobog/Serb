@@ -138,8 +138,19 @@ class EnrichTest(unittest.TestCase):
         row = list(rows.values())[0]
         self.assertEqual(row["email"], "lee@tiny.com")
         self.assertEqual(row["apollo_employees"], 2)
-        self.assertIn("under the 5 employee bar", row["notes"])
         self.assertEqual(c.stats.too_small, 1, "it is still counted as small")
+
+    def test_a_small_headcount_never_reads_as_a_verdict(self):
+        """Apollo sees one signal of two. A live sheet had Herrell Plumbing
+        QUALIFIED on 181 Google reviews while this note read 'under the 20
+        employee bar' -- a passing row that read as a failing one. The screen
+        column is the only place that sees both signals."""
+        with self.client(min_employees=5) as c:
+            rows = apollo_people.enrich_listings([listing("Tiny Shop", "c" * 24)], c)
+        notes = list(rows.values())[0]["notes"]
+        self.assertNotIn("bar", notes)
+        self.assertNotIn("under", notes)
+        self.assertNotIn("too small", notes.lower())
 
     def test_a_company_over_the_bar_carries_no_size_note(self):
         with self.client(min_employees=5) as c:
@@ -153,7 +164,7 @@ class EnrichTest(unittest.TestCase):
             rows = apollo_people.enrich_listings([listing("Budget", "b" * 24)], c)
         row = list(rows.values())[0]
         self.assertEqual(row["email"], "pat@budget.com")
-        self.assertIn("headcount unknown", row["notes"])
+        self.assertIn("no headcount", row["notes"])
         self.assertEqual(c.stats.size_unknown, 1)
         self.assertEqual(c.stats.too_small, 0)
 

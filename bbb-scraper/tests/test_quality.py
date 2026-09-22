@@ -116,8 +116,13 @@ class ExclusionTest(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("# comment\nroto-rooter\n\nhomedepot.com\nace hardware\n")
             names, domains = scraper.load_exclusions(self.args(path=path))
-        self.assertIn("roto-rooter", names)
-        self.assertIn("ace hardware", names)
+        # Asserted through the matcher, not the list: how a fragment is stored
+        # is the matcher's business, which side of the split it landed on
+        # is not.
+        self.assertTrue(scraper.excluded(
+            Listing(company_name="Roto-Rooter of Tampa"), names, domains))
+        self.assertTrue(scraper.excluded(
+            Listing(company_name="Ace Hardware #14"), names, domains))
         self.assertIn("homedepot.com", domains)
 
     def test_shipped_example_file_parses(self):
