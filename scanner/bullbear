@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # The button.
 #
-#   ./bullbear            one press: BULL/BEAR out of ten per symbol
-#   ./bullbear            press it again later to re-confirm the first read
-#   ./bullbear web        the same thing in a browser tab
-#   ./bullbear record     stream classified trade side from the open
-#   ./bullbear doctor     check the live wiring: token, quotes, chains, stream
+#   ./bullbear setup      store your Tradier token and verify it (once)
+#   ./bullbear live       the whole session: record, read, re-confirm on a timer
+#
+#   ./bullbear            one press, right now
+#   ./bullbear web        the same button in a browser tab
+#   ./bullbear doctor     check the live wiring end to end
+#   ./bullbear scan       the full board, every metric
+#   ./bullbear record     record trade side only
 #   ./bullbear demo       fake data, works any time, no token needed
 #
 # Anything after the first word is passed through to the CLI.
@@ -14,10 +17,12 @@ cd "$(dirname "$0")"
 
 PY="${PYTHON:-python3}"
 case "${1:-go}" in
+  setup|configure) shift; exec "$PY" -m odte configure "$@" ;;
+  live)   shift; exec "$PY" -m odte live "$@" ;;
   web)    shift; exec "$PY" -m odte serve --open "$@" ;;
-  record) shift; exec "$PY" -m odte record --until 10:30 --out "out/sides-$(date +%F).json" "$@" ;;
-  scan)   shift; exec "$PY" -m odte scan "$@" ;;
   doctor) shift; exec "$PY" -m odte doctor "$@" ;;
+  scan)   shift; exec "$PY" -m odte scan "$@" ;;
+  record) shift; exec "$PY" -m odte record --until 10:30 --out "out/sides-$(date +%F).json" "$@" ;;
   demo)   shift; exec "$PY" -m odte go --provider synthetic --force "$@" ;;
   go)     shift || true; exec "$PY" -m odte go "$@" ;;
   *)      exec "$PY" -m odte go "$@" ;;

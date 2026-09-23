@@ -6,9 +6,18 @@ the score printed underneath. Press it again later and each read is graded
 against the first one: CONFIRMED, HOLDING, FADED or FLIPPED.
 
 ```bash
-./bullbear          # the read
-./bullbear          # ...and again at 11:15 to re-confirm it
+./bullbear setup    # once: paste your Tradier token, it verifies itself
+./bullbear live     # every morning: records, reads, re-confirms, all day
+```
+
+That is the whole thing. `live` records classified trade side from the moment
+you start it, prints the opening read at 10:05 ET, and re-confirms every 45
+minutes until you stop it. Everything else is optional:
+
+```bash
+./bullbear          # one press, right now
 ./bullbear web      # the same button in a browser tab
+./bullbear doctor   # check the live wiring end to end
 ./bullbear demo     # fake data, any time, no token needed
 ```
 
@@ -55,77 +64,71 @@ streaming endpoint. Sandbox tokens return delayed data and are flagged
 
 ## Going live
 
-1. **Get a Tradier token.** Log in at tradier.com, open the dashboard, and find
-   API Access. A sandbox token works immediately and returns delayed data; a
-   production token needs a funded brokerage account with the market-data
-   agreements accepted, and that is what gives you real-time quotes and the
-   streaming endpoint this tool is built around.
+**1. Get a Tradier token.** tradier.com → dashboard → **API Access**. A sandbox
+token works in two minutes and returns delayed data; a **production** token
+needs a funded brokerage account with the market-data agreements accepted, and
+that is what gives you real-time quotes and the streaming endpoint the trade-side
+classification depends on.
 
-2. **Put it in your shell profile**, so every terminal has it:
+**2. Run setup, once:**
 
-   ```bash
-   echo 'export TRADIER_TOKEN=your_token_here' >> ~/.zshrc
-   echo 'export TRADIER_ENV=production'        >> ~/.zshrc
-   source ~/.zshrc
-   ```
+```bash
+./bullbear setup
+```
 
-3. **Check the wiring before you need it.** During market hours:
+It asks for the token (hidden input), asks production or sandbox, writes
+`scanner/.env` with owner-only permissions (gitignored, never committed), and
+then immediately runs the doctor against it:
 
-   ```bash
-   ./bullbear doctor --stream-seconds 10
-   ```
+```
+  [ ok ] token           44-char token, env=production
+  [ ok ] auth            market is open (Market is open from 09:30 to 16:00)
+  [ ok ] quotes          SPY 589.88 (589.87/589.89), last print 0 min ago
+  [ ok ] 0DTE expiry     2026-09-23 is listed for SPY
+  [ ok ] chain           348 contracts, 348 with greeks, 291 traded today
+  [ ok ] stream session  a1b2c3d4... issued
 
-   ```
-   odte 0.3.0 doctor
+  You're set. Tomorrow morning, one command:
 
-     [ ok ] python          3.11.9 on Darwin
-     [ ok ] clock           2026-09-23 10:14 ET
-     [ ok ] token           44-char token, env=production
-     [ ok ] auth            market is open (Market is open from 09:30 to 16:00)
-     [ ok ] quotes          SPY 589.88 (589.87/589.89), last print 0 min ago
-     [ ok ] 0DTE expiry     2026-09-23 is listed for SPY
-     [ ok ] chain           348 contracts, 348 with greeks, 291 traded today
-     [ ok ] stream session  a1b2c3d4... issued
-     [ ok ] live prints     1,284 prints in 10s across 37 contracts - 812 bought / 401 sold
-   ```
+      ./bullbear live
+```
 
-   It walks the same path a real scan takes and stops at the first thing that is
-   broken, with the fix on the next line. `[FAIL] auth` means the token or env is
-   wrong; `[FAIL] stream session` means no streaming entitlement, and the scanner
-   will fall back to proxy flow.
+Every command loads `.env` on startup, so nothing depends on remembering to
+export anything. A real environment variable always wins over the file.
 
-4. **See the output shape any time**, no token and no market needed:
+**3. Run the day:**
 
-   ```bash
-   ./bullbear demo
-   ```
+```bash
+./bullbear live
+```
 
-5. **A live day:**
+```
+live session  |  8 press(es): 10:05, 10:50, 11:35, 12:20, 13:05, 13:50, 14:35, 15:20
+  recording trade side on 320 contracts across 8 symbols
+  ... 10:05 ET in 38m12s
+```
 
-   ```bash
-   09:30  ./bullbear record      # classifies trade side until 10:30
-   10:05  ./bullbear             # the read
-   11:15  ./bullbear             # re-confirm it
-   ```
+Start it any time — before the open to catch the full tape, or at 13:10, in
+which case the first press happens immediately. Ctrl-C stops it and saves the
+side tape. Knobs, if you want them:
 
-   Run the recorder in its own terminal, or from cron:
+```bash
+./bullbear live --first 10:30 --every 30 --until 14:00   # different rhythm
+./bullbear live --presses 3                              # three reads, then stop
+./bullbear live --no-record                              # skip the trade-side stream
+./bullbear live --universe index                         # SPY/QQQ/IWM/DIA only
+```
 
-   ```cron
-   30 9 * * 1-5 cd /path/to/scanner && ./bullbear record >> out/record.log 2>&1
-   ```
-
-   On a Mac that sleeps, cron won't fire — use a launchd agent, or just leave the
-   recorder running in a terminal you don't close.
-
-6. **First week, don't size on it.** Add `--save-snapshot out/$(date +%F).json`
-   to the read, and at the close compare what the cards said to what the tape
-   actually did. That is also the data you need to retune the setup strengths in
-   `odte/setups.py` — they are priors, not fitted parameters.
+**4. First week, don't size on it.** The cards and every metric behind them land
+in `out/` on each press (`latest.json`, `latest.csv`, `latest.html`, plus the
+press history in `out/runs/`). At the close, compare what the cards said to what
+the tape actually did. That is also the data you need to retune the setup
+strengths in `odte/setups.py` — they are priors, not fitted parameters.
 
 ## Run
 
-The button is `./bullbear` (or `python -m odte`, same thing — `go` is the
-default subcommand):
+`./bullbear live` covers a normal day. These are the pieces it is built from,
+for when you want one of them on its own (`./bullbear` alone is `go`, one press):
 
 ```bash
 ./bullbear                       # the read, top 5 cards
@@ -159,8 +162,8 @@ Replay, for tuning after the close:
 
 Exchange volume carries no buy/sell label, and it cannot be reconstructed after
 the fact — classification needs the bid and ask standing at each print, which
-only the live stream carries. So record from the open and press the button
-against it:
+only the live stream carries. `./bullbear live` does this for you — it starts the stream the moment you launch
+it. To run the recorder on its own instead:
 
 ```bash
 # 09:30 — stream and classify 0DTE prints until 10:30
@@ -174,12 +177,6 @@ The recorder saves every 30 seconds, so a dropped connection costs you the last
 half-minute, not the session. `--append` folds a new run into an existing tape.
 No tape and no `--stream-seconds`? `flow` falls back to the unsigned proxy and
 every card carries the `No trade side` blocker.
-
-Cron the recorder on weekdays and press the button yourself:
-
-```cron
-30 9 * * 1-5 cd /path/to/scanner && ./bullbear record
-```
 
 ## The rating
 
@@ -391,7 +388,7 @@ snapshots before trusting any weight you changed.
 cd scanner && python -m unittest discover -s tests -v
 ```
 
-117 tests, stdlib-only, no network: the Tradier client is exercised through
+143 tests, stdlib-only, no network: the Tradier client is exercised through
 recorded response shapes and a fake client, the browser button through a real
 loopback server, and the scoring engine through deterministic synthetic data.
 

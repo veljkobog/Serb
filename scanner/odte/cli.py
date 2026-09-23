@@ -6,6 +6,8 @@
     python -m odte record ...      stream classified time & sales to a side tape
     python -m odte serve           the same button, in a browser
     python -m odte doctor          check the live wiring end to end
+    python -m odte configure       store a Tradier token and verify it
+    python -m odte live            the whole session on one timer
 
 `go` is the default, so the subcommand can be left off.
 """
@@ -21,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from . import __version__, report, session
+from .env import load_env
 from .config import (
     EQUITY_UNIVERSE,
     INDEX_UNIVERSE,
@@ -38,7 +41,7 @@ from .runs import Run, RunLog, compare, entry_from_score
 from .scoring import SymbolData, score_universe
 from .sides import SideTape
 
-SUBCOMMANDS = ("go", "scan", "record", "serve", "doctor")
+SUBCOMMANDS = ("go", "live", "scan", "record", "serve", "doctor", "configure")
 
 
 def _add_universe_args(p: argparse.ArgumentParser) -> None:
@@ -98,6 +101,36 @@ def build_parser() -> argparse.ArgumentParser:
     go.add_argument("--out-dir", default="out", help="where runs and outputs are kept")
     go.add_argument("--fresh", action="store_true", help="start a new press chain today")
     go.add_argument("--no-save", action="store_true", help="don't record this press")
+
+    live = subs.add_parser(
+        "live", help="the whole session on one timer: record, read, re-confirm"
+    )
+    _add_universe_args(live)
+    _add_tradier_args(live)
+    _add_scan_core_args(live)
+    live.add_argument("--first", default="10:05", help="ET time of the opening read")
+    live.add_argument("--every", type=float, default=45, help="minutes between re-confirms")
+    live.add_argument("--until", default="15:30", help="ET time to stop pressing")
+    live.add_argument("--presses", type=int, default=8, help="maximum presses today")
+    live.add_argument("--top", type=int, default=5, help="cards per press")
+    live.add_argument("--out-dir", default="out")
+    live.add_argument("--fresh", action="store_true", help="re-baseline on the first press")
+    live.add_argument(
+        "--no-record", dest="record", action="store_false",
+        help="skip trade-side recording (flow falls back to the proxy)",
+    )
+
+    conf = subs.add_parser("configure", help="store your Tradier token and verify it")
+    conf.add_argument("--token", help="set it non-interactively")
+    conf.add_argument("--env", choices=["production", "sandbox"])
+    conf.add_argument("--reset", action="store_true", help="ignore what is already stored")
+    conf.add_argument("--no-doctor", action="store_true", help="skip the verification run")
+    conf.add_argument("--non-interactive", action="store_true", help="never prompt")
+    conf.add_argument("--env-file", help="write somewhere other than scanner/.env")
+    conf.add_argument(
+        "--stream-seconds", type=float, default=0.0,
+        help="also sample the live tape during verification",
+    )
 
     scan = subs.add_parser("scan", help="the full board: every metric, one row per symbol")
     _add_universe_args(scan)
@@ -366,54 +399,73 @@ def run_scan(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_go(args: argparse.Namespace) -> int:
-    """The button. One press scores the day; the next press grades that read."""
-    now = resolve_now(args)
-    out_dir = Path(args.out_dir)
-
-    # Use today's recorded side tape automatically when one is sitting there.
+def auto_sides(args: argparse.Namespace, now: datetime, out_dir: Path) -> None:
+    """Pick up today's recorded side tape without being told about it."""
     if not args.sides:
         auto = out_dir / f"sides-{now:%Y-%m-%d}.json"
         if auto.exists():
             args.sides = str(auto)
 
-    try:
-        scores, label, mins_left = perform_scan(args, now)
-    except ScanFailed as exc:
-        print(str(exc), file=sys.stderr)
-        return exc.code
+
+def press_once(
+    args: argparse.Namespace,
+    now: datetime,
+    out_dir: Path,
+    top: int = 5,
+    save: bool = True,
+    fresh: bool = False,
+):
+    """One press of the button: scan, grade against the first read, print cards.
+
+    Returns the scored symbols, or raises ScanFailed.
+    """
+    auto_sides(args, now, out_dir)
+    scores, label, mins_left = perform_scan(args, now)
 
     log = RunLog.for_date(out_dir / "runs", now)
-    if args.fresh:
+    if fresh:
         log.runs.clear()
     baseline = log.first
     press = log.next_press
-    changes = {}
-    if not args.no_save:
+    if save:
         run = log.record(scores, now, label)
         changes = compare(run, baseline)
         press = run.press
-    elif baseline is not None:
+    else:
         changes = compare(
             Run(ts=now.isoformat(), press=press, provider=label,
                 entries={s.symbol: entry_from_score(s) for s in scores}),
             baseline,
-        )
+        ) if baseline is not None else {}
 
-    print(report.render_cards(scores, now, label, mins_left, press, changes, args.top))
+    print(report.render_cards(scores, now, label, mins_left, press, changes, top))
 
-    meta = {
-        "version": __version__,
-        "scanned_at": now.isoformat(),
-        "provider": label,
-        "press": press,
-        "minutes_to_close": round(mins_left),
-    }
-    if not args.no_save:
+    if save:
+        meta = {
+            "version": __version__,
+            "scanned_at": now.isoformat(),
+            "provider": label,
+            "press": press,
+            "minutes_to_close": round(mins_left),
+        }
         report.write_json(out_dir / "latest.json", scores, meta)
         report.write_csv(out_dir / "latest.csv", scores)
         report.write_html(out_dir / "latest.html", scores, meta)
         print(f"  saved: {out_dir}/latest.[json|csv|html]  runs: {log.path}", file=sys.stderr)
+    return scores
+
+
+def run_go(args: argparse.Namespace) -> int:
+    """The button. One press scores the day; the next press grades that read."""
+    now = resolve_now(args)
+    try:
+        press_once(
+            args, now, Path(args.out_dir), top=args.top,
+            save=not args.no_save, fresh=args.fresh,
+        )
+    except ScanFailed as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.code
     return 0
 
 
@@ -480,6 +532,7 @@ def run_record(args: argparse.Namespace) -> int:
 
 
 def run(argv: Optional[Sequence[str]] = None) -> int:
+    load_env()
     argv = list(sys.argv[1:] if argv is None else argv)
     # `scan` is the default subcommand, so plain flags still work.
     if not argv or argv[0] not in SUBCOMMANDS + ("--version", "-h", "--help"):
@@ -487,6 +540,14 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "record":
         return run_record(args)
+    if args.command == "live":
+        from .live import run_live
+
+        return run_live(args)
+    if args.command == "configure":
+        from .configure import run_configure
+
+        return run_configure(args)
     if args.command == "doctor":
         from .doctor import run_doctor
 
