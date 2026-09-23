@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
@@ -289,6 +290,25 @@ class DryRunOutputTest(unittest.TestCase):
         self.assertIn("min employees", out)
         self.assertIn("20", out)
 
+    def test_the_review_bar_is_on_the_plan_too(self):
+        """It is the signal that carries these sheets, and a stale config
+        could switch it off without the plan ever showing it."""
+        _code, out = self.dry_run()
+        self.assertIn("min google revs", out)
+        self.assertIn("30", out)
+
+    def test_a_missing_google_key_is_called_out(self):
+        """It warned about the other two keys and not this one. A live config
+        lost its key and the plan looked perfectly healthy."""
+        with mock.patch.dict(os.environ, {}, clear=True):
+            _code, out = self.dry_run()
+        self.assertIn("no Google key", out)
+
+    def test_a_present_google_key_draws_no_warning(self):
+        with mock.patch.dict(os.environ, {"GOOGLE_MAPS_API_KEY": "AIza-test"}):
+            _code, out = self.dry_run()
+        self.assertNotIn("no Google key", out)
+
     def test_it_names_the_destination(self):
         _code, out = self.dry_run()
         self.assertIn(self.tmp.name, out)
@@ -316,6 +336,47 @@ class DryRunOutputTest(unittest.TestCase):
             if saved is not None:
                 os.environ["HUBSPOT_TOKEN"] = saved
         self.assertIn("HUBSPOT_TOKEN", out)
+
+
+class MissingGoogleKeyTest(unittest.TestCase):
+    """Screening on review counts with no key is not a screen: every row comes
+    back unsized and the sheet still looks full."""
+
+    def config(self, **over):
+        config = dict(CONFIG, min_google_reviews=30)
+        config.update(over)
+        return config
+
+    def run_status(self, config, env):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, env, clear=True):
+                return daily.run(config, tmp, MONDAY,
+                                 os.path.join(tmp, "s.json"), dry_run=True)
+
+    def test_the_run_reports_it_rather_than_sizing_on_apollo_in_silence(self):
+        config = self.config()
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {}, clear=True):
+                with mock.patch.object(daily, "scrape", return_value=1):
+                    status = daily.run(config, tmp, MONDAY,
+                                       os.path.join(tmp, "s.json"))
+        self.assertTrue(any("no Google key" in p for p in status["problems"]),
+                        status["problems"])
+
+    def test_a_config_that_does_not_screen_on_reviews_is_left_alone(self):
+        """A bar of 0 means do not screen on this signal, so no key is needed."""
+        config = self.config(min_google_reviews=0)
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {}, clear=True):
+                with mock.patch.object(daily, "scrape", return_value=1):
+                    status = daily.run(config, tmp, MONDAY,
+                                       os.path.join(tmp, "s.json"))
+        self.assertFalse([p for p in status["problems"] if "Google key" in p])
+
+    def test_a_dry_run_says_nothing_it_cannot_know(self):
+        """The plan warns; the problem list belongs to a real run."""
+        status = self.run_status(self.config(), {})
+        self.assertEqual(status["problems"], [])
 
 
 

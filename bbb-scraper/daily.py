@@ -444,6 +444,17 @@ def run(config: dict, export_dir: str, when: dt.date,
         status["note"] = "dry run -- nothing was fetched"
         return status
 
+    if config.get("min_google_reviews") and not (
+            config.get("google_key") or os.environ.get("GOOGLE_MAPS_API_KEY")):
+        # Screening on review counts without a key is not a screen. Every row
+        # comes back unsized and the sheet still looks full, which is how a
+        # morning's work passes for finished.
+        status["problems"].append(
+            f"no Google key, but the config screens on "
+            f"{config['min_google_reviews']}+ reviews -- that signal did not "
+            f"run, so sizing fell back to Apollo headcount alone. Set "
+            f"GOOGLE_MAPS_API_KEY or rotation.json google_key.")
+
     for item in plan:
         stamp = when.strftime("%Y-%m-%d")
         name = f"{item['category']}-{item['metro']}-{stamp}.csv"
@@ -553,8 +564,15 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
     print("")
     print("screen")
     print("-" * 46)
+    google_key = config.get("google_key") or os.environ.get("GOOGLE_MAPS_API_KEY")
     print(f"  min employees   : {config.get('min_employees') or 'none'}"
           f"   (>= $500K EBITDA proxy)")
+    # The review bar belongs on the plan next to the headcount bar: it is the
+    # signal that actually carries these sheets, and it was invisible here
+    # while a stale config could switch it off.
+    if config.get("min_google_reviews"):
+        print(f"  min google revs : {config['min_google_reviews']}"
+              f"   (either signal qualifies)")
     if config.get("detail"):
         print(f"  min years       : {config.get('min_years') or 'none'}")
     else:
@@ -578,6 +596,13 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
         print("\n  (!) APOLLO_API_KEY not set -- no owner names or emails")
     if not os.environ.get("HUBSPOT_TOKEN"):
         print("  (!) HUBSPOT_TOKEN not set -- rows will NOT be CRM-checked")
+    if not google_key:
+        # The key went missing from a live config once and nothing said so:
+        # the plan warned about the other two keys, not this one, and Google
+        # review volume is the stronger of the two size signals.
+        print("  (!) no Google key (rotation.json google_key or "
+              "GOOGLE_MAPS_API_KEY) -- no review counts, so rows Apollo "
+              "cannot size come out unsized")
 
 
 def print_enrichment(status: dict) -> None:
