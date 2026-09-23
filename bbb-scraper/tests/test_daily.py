@@ -338,6 +338,78 @@ class DryRunOutputTest(unittest.TestCase):
         self.assertIn("HUBSPOT_TOKEN", out)
 
 
+class RanTodayAlreadyTest(unittest.TestCase):
+    """The 9am task fired and a manual run followed ten minutes later: four
+    sheets, double the credits, and nothing anywhere said the morning's lists
+    had already been pulled."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = os.path.join(self.tmp.name, "s.json")
+        self.addCleanup(self.tmp.cleanup)
+
+    def first_run(self):
+        with mock.patch.object(daily, "scrape", return_value=1):
+            return daily.run(CONFIG, self.tmp.name, MONDAY, self.state)
+
+    def test_a_second_run_on_the_same_day_spends_nothing(self):
+        self.first_run()
+        with mock.patch.object(daily, "scrape") as scrape:
+            status = daily.run(CONFIG, self.tmp.name, MONDAY, self.state)
+        scrape.assert_not_called()
+        self.assertTrue(status.get("already_ran"))
+        self.assertIn("already ran today", status["note"])
+
+    def test_it_names_what_was_already_pulled(self):
+        """'Already ran' with no detail leaves you guessing which lists."""
+        self.first_run()
+        status = daily.run(CONFIG, self.tmp.name, MONDAY, self.state)
+        self.assertIn("roofing-contractors in wichita-ks", status["note"])
+
+    def test_again_overrides_it(self):
+        self.first_run()
+        with mock.patch.object(daily, "scrape", return_value=1) as scrape:
+            status = daily.run(CONFIG, self.tmp.name, MONDAY, self.state,
+                               again=True)
+        self.assertTrue(scrape.called)
+        self.assertFalse(status.get("already_ran"))
+
+    def test_the_next_day_is_not_blocked(self):
+        self.first_run()
+        with mock.patch.object(daily, "scrape", return_value=1) as scrape:
+            daily.run(CONFIG, self.tmp.name, TUESDAY, self.state)
+        self.assertTrue(scrape.called)
+
+    def test_a_blocked_run_never_overwrites_the_mornings_status_file(self):
+        """Its own 'nothing was fetched' would erase the 9am report."""
+        daily.write_status(self.tmp.name, {"date": MONDAY.isoformat(),
+                                           "sheets": [{"file": "real.csv",
+                                                       "rows": 12}],
+                                           "problems": []})
+        self.first_run()
+        code = daily.main(["--config", self.config_file(),
+                           "--export-dir", self.tmp.name,
+                           "--state", self.state,
+                           "--date", MONDAY.isoformat()])
+        with open(os.path.join(self.tmp.name, "_daily-status.json"),
+                  encoding="utf-8") as fh:
+            kept = json.load(fh)
+        self.assertEqual(kept["sheets"][0]["file"], "real.csv")
+        self.assertEqual(code, 0)
+
+    def config_file(self):
+        path = os.path.join(self.tmp.name, "rotation.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(CONFIG, fh)
+        return path
+
+    def test_a_dry_run_says_the_day_is_already_done(self):
+        self.first_run()
+        status = daily.run(CONFIG, self.tmp.name, MONDAY, self.state,
+                           dry_run=True)
+        self.assertIn("already been pulled", status["note"])
+
+
 class MissingGoogleKeyTest(unittest.TestCase):
     """Screening on review counts with no key is not a screen: every row comes
     back unsized and the sheet still looks full."""

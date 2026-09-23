@@ -12,10 +12,12 @@
 
 .EXAMPLE
   .\daily-leads.ps1 -DryRun        # show today's plan, fetch nothing
+  .\daily-leads.ps1 -Again         # pull again on a day that already ran
   .\daily-leads.ps1 -Date 2026-09-07
 #>
 param(
     [switch]$DryRun,
+    [switch]$Again,
     [string]$Date,
     [string]$ExportFolder
 )
@@ -39,6 +41,10 @@ $log = Join-Path $logDir ("run-" + (Get-Date -Format "yyyy-MM-dd") + ".log")
 
 $dailyArgs = @("daily.py", "--export-dir", $ExportFolder)
 if ($DryRun) { $dailyArgs += "--dry-run" }
+# The 9am task and a manual run on the same morning pulled four sheets and
+# spent double the credits. daily.py stops the second one unless it is asked
+# for on purpose.
+if ($Again)  { $dailyArgs += "--again" }
 if ($Date)   { $dailyArgs += @("--date", $Date) }
 
 "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File -FilePath $log -Append -Encoding utf8

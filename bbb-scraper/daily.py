@@ -424,7 +424,7 @@ def write_status(export_dir: str, status: dict) -> None:
 
 
 def run(config: dict, export_dir: str, when: dt.date,
-        state_path: str, dry_run: bool = False) -> dict:
+        state_path: str, dry_run: bool = False, again: bool = False) -> dict:
     state = load_state(state_path)
     plan = todays_lists(config, state, when)
     status = {
@@ -440,8 +440,29 @@ def run(config: dict, export_dir: str, when: dt.date,
         status["note"] = "nothing scheduled today"
         return status
 
+    # The scheduler fires at 9am and a person can run the same script by hand
+    # ten minutes later. That happened: two 9am lists, then the next two
+    # metros, four sheets and double the credits, with nothing saying so. The
+    # rotation history is the record of what has already been pulled.
+    ran_today = [entry for entry in (state.get("history") or [])
+                 if entry.get("date") == when.isoformat()]
+
     if dry_run:
         status["note"] = "dry run -- nothing was fetched"
+        if ran_today:
+            status["note"] += (f"; today's lists have already been pulled "
+                               f"{len(ran_today)}x -- a real run would move on "
+                               f"to the metros above")
+        return status
+
+    if ran_today and not again:
+        done = ", ".join(f"{li['category']} in {li['metro']}"
+                         for entry in ran_today for li in entry.get("lists", []))
+        status["note"] = (f"already ran today ({done}) -- nothing re-fetched "
+                          f"and no credits spent. Pass --again "
+                          f"(.\\daily-leads.ps1 -Again) to pull the next "
+                          f"metros anyway.")
+        status["already_ran"] = True
         return status
 
     if config.get("min_google_reviews") and not (
@@ -673,6 +694,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--date", default=None, help="YYYY-MM-DD, for testing a weekday")
     p.add_argument("--dry-run", action="store_true",
                    help="print today's plan without fetching anything")
+    p.add_argument("--again", action="store_true",
+                   help="run even though today's lists were already pulled "
+                        "(the next metros in the rotation, and more credits)")
     p.add_argument("--state", default=None, help="rotation cursor file")
     args = p.parse_args(argv)
 
@@ -695,8 +719,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     when = (dt.date.fromisoformat(args.date) if args.date else dt.date.today())
     state_path = args.state or os.path.join(HERE, STATE_FILE)
 
-    status = run(config, export_dir, when, state_path, dry_run=args.dry_run)
-    if not args.dry_run:
+    status = run(config, export_dir, when, state_path, dry_run=args.dry_run,
+                 again=args.again)
+    if not args.dry_run and not status.get("already_ran"):
         # A dry run must not touch the status file: overwriting a real run's
         # record with "nothing was fetched" would erase the morning's report.
         write_status(export_dir, status)

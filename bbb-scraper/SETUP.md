@@ -153,6 +153,15 @@ companies do not come back on Thursday.
 .\daily-leads.ps1
 ```
 
+Once the schedule is live, a second run on the same day stops itself and says
+which lists the morning already pulled -- the 9am task and a manual run ten
+minutes later otherwise produce four sheets and spend twice the credits. To
+pull the next two metros anyway:
+
+```powershell
+.\daily-leads.ps1 -Again
+```
+
 **5. Schedule it:**
 
 ```powershell
