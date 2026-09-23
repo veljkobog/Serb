@@ -44,11 +44,12 @@ enables Pages automatically and publishes the site on each push.
 
 ## Also in this repo
 
-[`scanner/`](scanner/README.md) — a 0DTE options bias scanner (Python CLI).
-Scores index ETFs and heavy-volume names on a -100/+100 upside-downside scale
-an hour after the open, combining relative strength and VWAP/opening-range
-position with 0DTE implied vol, skew, open interest, gamma structure and
-classified buy/sell flow from Tradier's real-time feed. Unrelated to the
-calculator above; it ships nothing to the site.
+[`scanner/`](scanner/README.md) — a 0DTE options scanner (Python CLI). One
+button, pressed an hour after the open, rates index ETFs and heavy-volume names
+**BULL or BEAR out of ten**, with the market-structure setups behind each score:
+dealer gamma regime, call and put walls, max pain, VWAP and opening-range
+position, and classified buy/sell flow from Tradier's real-time feed. Press it
+again later and each read is graded — confirmed, faded or flipped. Unrelated to
+the calculator above; it ships nothing to the site.
 
 > Educational estimate only — not financial, tax, or legal advice.

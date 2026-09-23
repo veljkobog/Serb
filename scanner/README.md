@@ -1,29 +1,40 @@
 # 0DTE bias scanner
 
-Scans same-day-expiry options on index ETFs and heavy-volume single names, one
-hour after the cash open, and scores each symbol on a **-100 (downside) to +100
-(upside)** bias scale with a separate **0-100 confidence** score.
+One button. Press it an hour after the open and every scanned symbol comes back
+as **BULL 8/10** or **BEAR 5/10**, with the market-structure setups that earned
+the score printed underneath. Press it again later and each read is graded
+against the first one: CONFIRMED, HOLDING, FADED or FLIPPED.
 
-It combines the tape (relative strength, VWAP, opening range) with the 0DTE
-chain (implied vol, skew, volume, open interest, gamma structure) and — via
-streamed, classified time & sales — **who was the aggressor on every print**,
-so the bias is not just "what moved" but "what moved, with real buying behind
-it."
+```bash
+./bullbear          # the read
+./bullbear          # ...and again at 11:15 to re-confirm it
+./bullbear web      # the same button in a browser tab
+./bullbear demo     # fake data, any time, no token needed
+```
+
+```
+0DTE OPENING READ ==================================================== 10:31:04 ET
+  tradier:production  |  329 min to the close  |  5 symbols shown
+
+-- SPY ------------------------------------------------------- BULL 8/10  STRONG
+   589.88  +0.83%   bias +53   conf 75
+   + Short-gamma breakout
+       net GEX -333mm, above OR high 588.24, +1.8s over VWAP
+   + Pressing the call wall
+       spot 589.88 into call wall 590.00, flow +0.22
+   levels  VWAP 586.72  OR 584.19-588.24  max pain 590.00  flip 587.34  EM +/-1.16
+   chain   ATM IV 9.8%  net GEX -333.1mm/1%  P/C vol 0.33  classified +28.2mm net delta (72%)
+   trade   calls  ATM 590.00 / 1EM 595.00  target 591.04  invalidate 586.72
+```
+
+Under the rating sits the full engine: relative strength, VWAP and opening-range
+position, implied vol, skew, open interest, dealer gamma structure, and — via
+streamed, classified time & sales — **who was the aggressor on every print**.
+`./bullbear scan` shows all of it as one row per symbol.
 
 Data comes from **Tradier**: real-time REST quotes and chains with the broker's
 own greeks, plus an HTTP event stream for time & sales. Stdlib only — no
 `requests`, no websocket library.
-
-```
-0DTE BIAS SCAN  |  2026-09-22 10:30:00 EDT  |  provider=synthetic  |  330 min to close
-======================================================================================================================
-SYM      BIAS  CONF  VERDICT              LAST     %PC     RS   VWZ   ORB  ATMIV    EM%   RR25   P/C  V/OI    NETD$  FLAGS
-----------------------------------------------------------------------------------------------------------------------
-IWM     -50.4    77  LEAN SHORT         220.31   -0.76  -0.76  -2.1  -1.8   15.0   0.32   +0.1  3.36  0.27   -8.1mm  synthetic
-SPY     +51.9    75  LEAN LONG          589.88   +0.83  +0.00  +1.8  +1.8    9.8   0.20   +0.0  0.33  0.26  +28.2mm  synthetic
-QQQ     +42.2    69  LEAN LONG          510.30   +1.05  +0.98  +2.8  +3.4   12.8   0.26   +0.0  0.36  0.26  +34.3mm  synthetic
-DIA      +8.5    71  NO TRADE           429.47   -0.12  -0.41  -1.4  -1.1    9.0   0.21   +0.1  0.70  0.26  +14.8mm  synthetic
-```
 
 ## Install
 
@@ -44,59 +55,147 @@ streaming endpoint. Sandbox tokens return delayed data and are flagged
 
 ## Run
 
+The button is `./bullbear` (or `python -m odte`, same thing — `go` is the
+default subcommand):
+
 ```bash
-# full universe, one hour after the open
-python -m odte
-
-# index ETFs only, with CSV + HTML output
-python -m odte --universe index --csv out/scan.csv --html out/scan.html
-
-# just the setups that clear the gates, strongest three
-python -m odte --only-tradeable --top 3
-
-# sample classified trade flow for 90 seconds, then score
-python -m odte --stream-seconds 90
-
-# save the raw pull, then re-score it later without touching the network
-python -m odte --save-snapshot out/2026-09-22.json
-python -m odte --provider snapshot --snapshot-path out/2026-09-22.json --as-of 2026-09-22T10:30:00
-
-# see it work outside market hours (deterministic fake data)
-python -m odte --provider synthetic --as-of 2026-09-22T10:30:00
+./bullbear                       # the read, top 5 cards
+./bullbear --top 8               # more cards
+./bullbear --universe index      # index ETFs only
+./bullbear --fresh               # re-baseline: this press becomes read #1
+./bullbear demo                  # fake data, any time, no token
 ```
 
-The scan refuses to run outside **10:00-11:30 ET** unless you pass `--force`:
-before 10:00 the opening range isn't set and 0DTE volume is still noise.
+Everything lands in `out/`: `latest.json`, `latest.csv`, `latest.html`, and the
+day's press history in `out/runs/`.
+
+The full board, when you want every metric rather than a verdict:
+
+```bash
+./bullbear scan --csv out/scan.csv --html out/scan.html
+./bullbear scan --only-tradeable --top 3
+```
+
+Both refuse to run outside **10:00-11:30 ET** unless you pass `--force`: before
+10:00 the opening range isn't set and 0DTE volume is still noise.
+
+Replay, for tuning after the close:
+
+```bash
+./bullbear scan --save-snapshot out/2026-09-22.json
+./bullbear scan --provider snapshot --snapshot-path out/2026-09-22.json --as-of 2026-09-22T10:30:00
+```
 
 ### Recording trade side from the open
 
 Exchange volume carries no buy/sell label, and it cannot be reconstructed after
 the fact — classification needs the bid and ask standing at each print, which
-only the live stream carries. So record from the open and scan against it:
+only the live stream carries. So record from the open and press the button
+against it:
 
 ```bash
 # 09:30 — stream and classify 0DTE prints until 10:30
-python -m odte record --until 10:30 --out out/sides-$(date +%F).json
+./bullbear record
 
-# 10:30 — score the session with the full hour of classified flow
-python -m odte --sides out/sides-$(date +%F).json
+# 10:00+ — the button picks up out/sides-<today>.json automatically
+./bullbear
 ```
 
 The recorder saves every 30 seconds, so a dropped connection costs you the last
 half-minute, not the session. `--append` folds a new run into an existing tape.
-Without a tape, `flow` falls back to the unsigned proxy and every row is
-flagged `proxy-flow`.
+No tape and no `--stream-seconds`? `flow` falls back to the unsigned proxy and
+every card carries the `No trade side` blocker.
 
-Cron both on weekdays:
+Cron the recorder on weekdays and press the button yourself:
 
 ```cron
-30 9  * * 1-5 cd /path/to/scanner && python -m odte record --until 10:30 --out "out/sides-$(date +\%F).json"
-30 10 * * 1-5 cd /path/to/scanner && python -m odte --sides "out/sides-$(date +\%F).json" --csv "out/$(date +\%F).csv" --html "out/$(date +\%F).html"
+30 9 * * 1-5 cd /path/to/scanner && ./bullbear record
 ```
+
+## The rating
+
+Bias says which way and how hard. Confidence says how much the inputs can be
+trusted. Setups say whether a known structure is behind it. The rating folds all
+three into one number:
+
+```
+score = (bias points + aligned setups - opposing setups - blockers) x confidence haircut
+```
+
+Bias alone tops out at **7/10** — the last three points have to be earned by
+structure. A blocker (a pin, an exhausted move, an illiquid chain) drags the
+score down no matter how clean the tape looks. The confidence haircut floors at
+0.55, so a strong setup on mediocre data still beats nothing.
+
+| Score | Band |
+|---|---|
+| 8.5-10 | MAX CONVICTION |
+| 6.5-8.4 | STRONG |
+| 4.5-6.4 | MODERATE |
+| 3.0-4.4 | LEAN |
+| under 3 | STAND DOWN |
+
+## The setups
+
+Each one is an explicit rule over the tape and the chain, so a rating can always
+be explained as "these four things were true at 10:31." `+` drives the card's
+side, `-` argues against it, `!` blocks it outright.
+
+| Setup | Side | Pts | Fires when |
+|---|---|---|---|
+| Short-gamma breakout / breakdown | bull / bear | 1.5 | Net GEX negative, opening range broken, >0.5σ past VWAP, flow not fighting it. Dealers short gamma hedge *with* the move, so breaks extend instead of fading. |
+| Pressing the call / put wall | bull / bear | 1.2 | Spot within 0.4 EM of the heaviest call- or put-gamma strike with classified flow pushing the same way. Through the wall, hedging flips from damping to chasing. |
+| Gap and go / gap fade | bull / bear | 1.2 | Gap over 0.2% held and the opening range taken — or gapped up, filled, and red on the day. |
+| Max-pain magnet above / below | bull / bear | 1.0 | Long-gamma tape with max pain more than half an expected move away. Pinning flow drifts toward the strike that expires the most OI worthless. |
+| VWAP reclaim / rejection | bull / bear | 1.0 | Price on one side of VWAP after spending the session on the other. |
+| Put unwind / call unwind | bull / bear | 1.0 | Classified flow shows customers *writing* puts (bullish) or *writing* calls (bearish) — dealers re-hedge as those positions come off. Needs a side tape. |
+| Pinned | blocker | 1.5 | Long gamma, sitting on the gamma wall, near max pain. Range day: both sides bleed theta. |
+| Move already used | blocker | 1.0 | More than 1.2x the 14-day average daily range is already spent. |
+| Flow disagrees with tape | blocker | 1.0 | Price going one way, classified option flow the other. |
+| No trade side | blocker | 0.5 | Flow is the unsigned proxy: nothing confirms who was the aggressor. |
+| Illiquid chain | blocker | 2.0 | Thin 0DTE volume or wide ATM spreads — the entry costs more than the edge. |
+
+**On "backtested":** these encode widely documented 0DTE market-structure
+behavior, and they are *priors, not parameters fitted to a backtest* — none has
+been backtested in this repo. Strengths are deliberately coarse for that reason.
+The snapshot and side-tape replay path exists precisely so you can validate and
+retune them on your own tape before leaning on them. Treat any rating as a
+starting point for your read, not a substitute for it.
+
+## Pressing again
+
+Every press appends to `out/runs/runs-<date>.json`. The second press onward
+grades each symbol against **the first read of the day**:
+
+| Status | Means |
+|---|---|
+| CONFIRMED | Same side, score held, and price has moved at least 0.15 EM your way |
+| HOLDING | Same side, nothing has happened yet |
+| FADED | Score bled 1.5+ points, price gave back 0.35 EM, or classified flow flipped under it |
+| FLIPPED | The read changed sides |
+| NEW | Wasn't in the first read |
+
+The card shows the status, the point change, how far price has travelled in
+expected moves, and how long ago the first read was. `--fresh` starts a new
+chain if you want to re-baseline mid-session.
+
+## The browser button
+
+```bash
+./bullbear web            # http://127.0.0.1:8787, opens a tab
+```
+
+One page, one big button, cards with a 0-10 meter per symbol. It binds loopback
+only on purpose: the process holds a brokerage token, and the page will run
+scans for anyone who can reach it. Bull/bear is drawn as a blue/red diverging
+pair rather than green/red — that is the one pair colorblind readers cannot
+separate — and every card states the side in words with an arrow, so color never
+carries it alone.
 
 ## How the score is built
 
-Ten components, each mapped to [-1, +1] where negative is downside, then a
+The rating sits on top of the composite bias, which is built from ten
+components, each mapped to [-1, +1] where negative is downside, then a
 weighted sum scaled to -100..+100. Weights live in `odte/config.py:Weights`.
 
 | Component | Weight | What it measures |
@@ -223,9 +322,9 @@ snapshots before trusting any weight you changed.
 cd scanner && python -m unittest discover -s tests -v
 ```
 
-77 tests, stdlib-only, no network: the Tradier client is exercised through
-recorded response shapes and a fake client, and the scoring engine through
-deterministic synthetic data.
+117 tests, stdlib-only, no network: the Tradier client is exercised through
+recorded response shapes and a fake client, the browser button through a real
+loopback server, and the scoring engine through deterministic synthetic data.
 
 ---
 

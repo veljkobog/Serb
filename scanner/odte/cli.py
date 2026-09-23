@@ -1,9 +1,12 @@
 """Command line entry point.
 
-    python -m odte                 scan the universe and print the board
+    python -m odte                 the button: BULL/BEAR out of ten per symbol
+    python -m odte                 (press again later to re-confirm the read)
+    python -m odte scan            the full board, every metric
     python -m odte record ...      stream classified time & sales to a side tape
+    python -m odte serve           the same button, in a browser
 
-`scan` is the default, so the subcommand can be left off.
+`go` is the default, so the subcommand can be left off.
 """
 
 from __future__ import annotations
@@ -30,10 +33,11 @@ from .option_metrics import compute_option_metrics
 from .price_metrics import compute_price_metrics
 from .providers import get_provider
 from .providers.snapshot import save_snapshots
+from .runs import Run, RunLog, compare, entry_from_score
 from .scoring import SymbolData, score_universe
 from .sides import SideTape
 
-SUBCOMMANDS = ("scan", "record")
+SUBCOMMANDS = ("go", "scan", "record", "serve")
 
 
 def _add_universe_args(p: argparse.ArgumentParser) -> None:
@@ -51,6 +55,30 @@ def _add_tradier_args(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_scan_core_args(p: argparse.ArgumentParser) -> None:
+    """Everything both `go` and `scan` need to pull and score the data."""
+    p.add_argument(
+        "--provider", default="tradier", choices=["tradier", "yahoo", "synthetic", "snapshot"]
+    )
+    p.add_argument("--snapshot-path", help="snapshot file to replay (--provider snapshot)")
+    p.add_argument("--interval", default="5m", help="intraday bar interval (1m/5m/15m)")
+    p.add_argument("--as-of", help="ISO timestamp to score as (replay/testing)")
+    p.add_argument("--force", action="store_true", help="run outside the advised window")
+    p.add_argument("--sides", help="side tape from `odte record` to merge in")
+    p.add_argument(
+        "--stream-seconds", type=float, default=0.0,
+        help="sample classified time & sales inline for N seconds before scoring",
+    )
+    p.add_argument(
+        "--stream-contracts", type=int, default=40,
+        help="contracts per symbol to subscribe to when streaming",
+    )
+    p.add_argument("--min-bias", type=float, default=Gates.min_bias_to_trade)
+    p.add_argument("--min-confidence", type=float, default=Gates.min_confidence_to_trade)
+    p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--save-snapshot", help="write the raw pulled data here for replay")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="odte",
@@ -59,35 +87,37 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"odte {__version__}")
     subs = p.add_subparsers(dest="command")
 
-    scan = subs.add_parser("scan", help="score the universe (default)")
+    go = subs.add_parser(
+        "go", help="the button: one press, BULL/BEAR out of ten, press again to re-confirm"
+    )
+    _add_universe_args(go)
+    _add_tradier_args(go)
+    _add_scan_core_args(go)
+    go.add_argument("--top", type=int, default=5, help="cards to print")
+    go.add_argument("--out-dir", default="out", help="where runs and outputs are kept")
+    go.add_argument("--fresh", action="store_true", help="start a new press chain today")
+    go.add_argument("--no-save", action="store_true", help="don't record this press")
+
+    scan = subs.add_parser("scan", help="the full board: every metric, one row per symbol")
     _add_universe_args(scan)
     _add_tradier_args(scan)
-    scan.add_argument(
-        "--provider", default="tradier", choices=["tradier", "yahoo", "synthetic", "snapshot"]
-    )
-    scan.add_argument("--snapshot-path", help="snapshot file to replay (--provider snapshot)")
-    scan.add_argument("--interval", default="5m", help="intraday bar interval (1m/5m/15m)")
-    scan.add_argument("--as-of", help="ISO timestamp to score as (replay/testing)")
-    scan.add_argument("--force", action="store_true", help="scan outside the advised window")
-    scan.add_argument("--sides", help="side tape from `odte record` to merge in")
-    scan.add_argument(
-        "--stream-seconds", type=float, default=0.0,
-        help="sample classified time & sales inline for N seconds before scoring",
-    )
-    scan.add_argument(
-        "--stream-contracts", type=int, default=40,
-        help="contracts per symbol to subscribe to when streaming",
-    )
+    _add_scan_core_args(scan)
     scan.add_argument("--top", type=int, default=0, help="only print the N strongest setups")
     scan.add_argument("--detail", type=int, default=3, help="detail blocks to print")
     scan.add_argument("--only-tradeable", action="store_true", help="drop NO TRADE / AVOID rows")
-    scan.add_argument("--min-bias", type=float, default=Gates.min_bias_to_trade)
-    scan.add_argument("--min-confidence", type=float, default=Gates.min_confidence_to_trade)
-    scan.add_argument("--workers", type=int, default=8)
     scan.add_argument("--csv", help="write a flat CSV of every metric here")
     scan.add_argument("--json", dest="json_path", help="write full JSON output here")
     scan.add_argument("--html", help="write a standalone HTML table here")
-    scan.add_argument("--save-snapshot", help="write the raw pulled data here for replay")
+
+    serve = subs.add_parser("serve", help="the same button, in a browser")
+    _add_universe_args(serve)
+    _add_tradier_args(serve)
+    _add_scan_core_args(serve)
+    serve.add_argument("--host", default="127.0.0.1", help="loopback by default, on purpose")
+    serve.add_argument("--port", type=int, default=8787)
+    serve.add_argument("--top", type=int, default=8, help="cards to show")
+    serve.add_argument("--out-dir", default="out")
+    serve.add_argument("--open", action="store_true", help="open a browser tab on start")
 
     rec = subs.add_parser(
         "record", help="stream and classify 0DTE time & sales into a side tape"
@@ -173,19 +203,33 @@ def _sample_sides_inline(provider, snaps: Dict[str, SymbolSnapshot], args) -> No
     print(f"classified {tape.trades:,} prints", file=sys.stderr)
 
 
-def run_scan(args: argparse.Namespace) -> int:
-    now = session.to_et(datetime.fromisoformat(args.as_of)) if args.as_of else session.now_et()
+class ScanFailed(Exception):
+    """Raised with an exit code when a scan can't be produced."""
+
+    def __init__(self, message: str, code: int = 1):
+        super().__init__(message)
+        self.code = code
+
+
+def resolve_now(args: argparse.Namespace) -> datetime:
+    return (
+        session.to_et(datetime.fromisoformat(args.as_of))
+        if getattr(args, "as_of", None)
+        else session.now_et()
+    )
+
+
+def perform_scan(args: argparse.Namespace, now: datetime):
+    """Pull, merge side data, score. Shared by `go`, `scan` and `serve`."""
     if not session.in_scan_window(now) and not args.force:
-        print(
+        raise ScanFailed(
             f"Outside the advised scan window ({session.window_label()}); "
             f"now {now:%H:%M} ET. Re-run with --force to scan anyway.",
-            file=sys.stderr,
+            2,
         )
-        return 2
 
     if args.provider == "snapshot" and not args.snapshot_path:
-        print("--provider snapshot requires --snapshot-path", file=sys.stderr)
-        return 2
+        raise ScanFailed("--provider snapshot requires --snapshot-path", 2)
 
     try:
         provider = get_provider(
@@ -196,8 +240,7 @@ def run_scan(args: argparse.Namespace) -> int:
             env=args.tradier_env,
         )
     except Exception as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        return 2
+        raise ScanFailed(f"{type(exc).__name__}: {exc}", 2) from exc
 
     symbols = resolve_symbols(args)
     if args.provider == "snapshot" and not args.symbols:
@@ -217,8 +260,7 @@ def run_scan(args: argparse.Namespace) -> int:
 
     snaps = fetch_all(provider, symbols, now, args.workers)
     if not snaps:
-        print("No data returned for any symbol.", file=sys.stderr)
-        return 1
+        raise ScanFailed("No data returned for any symbol.", 1)
 
     if args.sides:
         tape = SideTape.load(args.sides)
@@ -270,6 +312,20 @@ def run_scan(args: argparse.Namespace) -> int:
         )
 
     scores = score_universe(data, cfg)
+    label = provider.name
+    if args.provider == "tradier":
+        label += f":{provider.env}"
+    return scores, label, mins_left
+
+
+def run_scan(args: argparse.Namespace) -> int:
+    now = resolve_now(args)
+    try:
+        scores, label, mins_left = perform_scan(args, now)
+    except ScanFailed as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.code
+
     if args.only_tradeable:
         scores = [s for s in scores if not s.verdict.startswith(("NO TRADE", "AVOID"))]
     if args.top:
@@ -278,19 +334,16 @@ def run_scan(args: argparse.Namespace) -> int:
         print("Nothing cleared the filters.", file=sys.stderr)
         return 0
 
-    label = provider.name
-    if args.provider == "tradier":
-        label += f":{provider.env}"
     print(report.render_console(scores, now, label, mins_left, args.detail))
 
     meta = {
         "version": __version__,
         "scanned_at": now.isoformat(),
         "provider": label,
-        "benchmark": bench,
+        "benchmark": args.benchmark.upper(),
         "bar_interval": args.interval,
         "minutes_to_close": round(mins_left),
-        "weights": cfg.weights.as_dict(),
+        "weights": Weights().as_dict(),
     }
     if args.csv:
         print(f"csv  -> {report.write_csv(args.csv, scores)}", file=sys.stderr)
@@ -298,6 +351,57 @@ def run_scan(args: argparse.Namespace) -> int:
         print(f"json -> {report.write_json(args.json_path, scores, meta)}", file=sys.stderr)
     if args.html:
         print(f"html -> {report.write_html(args.html, scores, meta)}", file=sys.stderr)
+    return 0
+
+
+def run_go(args: argparse.Namespace) -> int:
+    """The button. One press scores the day; the next press grades that read."""
+    now = resolve_now(args)
+    out_dir = Path(args.out_dir)
+
+    # Use today's recorded side tape automatically when one is sitting there.
+    if not args.sides:
+        auto = out_dir / f"sides-{now:%Y-%m-%d}.json"
+        if auto.exists():
+            args.sides = str(auto)
+
+    try:
+        scores, label, mins_left = perform_scan(args, now)
+    except ScanFailed as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.code
+
+    log = RunLog.for_date(out_dir / "runs", now)
+    if args.fresh:
+        log.runs.clear()
+    baseline = log.first
+    press = log.next_press
+    changes = {}
+    if not args.no_save:
+        run = log.record(scores, now, label)
+        changes = compare(run, baseline)
+        press = run.press
+    elif baseline is not None:
+        changes = compare(
+            Run(ts=now.isoformat(), press=press, provider=label,
+                entries={s.symbol: entry_from_score(s) for s in scores}),
+            baseline,
+        )
+
+    print(report.render_cards(scores, now, label, mins_left, press, changes, args.top))
+
+    meta = {
+        "version": __version__,
+        "scanned_at": now.isoformat(),
+        "provider": label,
+        "press": press,
+        "minutes_to_close": round(mins_left),
+    }
+    if not args.no_save:
+        report.write_json(out_dir / "latest.json", scores, meta)
+        report.write_csv(out_dir / "latest.csv", scores)
+        report.write_html(out_dir / "latest.html", scores, meta)
+        print(f"  saved: {out_dir}/latest.[json|csv|html]  runs: {log.path}", file=sys.stderr)
     return 0
 
 
@@ -367,11 +471,17 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     # `scan` is the default subcommand, so plain flags still work.
     if not argv or argv[0] not in SUBCOMMANDS + ("--version", "-h", "--help"):
-        argv = ["scan"] + argv
+        argv = ["go"] + argv
     args = build_parser().parse_args(argv)
     if args.command == "record":
         return run_record(args)
-    return run_scan(args)
+    if args.command == "serve":
+        from .server import run_serve
+
+        return run_serve(args)
+    if args.command == "scan":
+        return run_scan(args)
+    return run_go(args)
 
 
 def main() -> None:  # pragma: no cover

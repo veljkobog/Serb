@@ -38,14 +38,14 @@ class TestCli(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             code = run([
-                "--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY,QQQ,NVDA",
+                "scan", "--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY,QQQ,NVDA",
                 "--csv", str(out / "scan.csv"),
                 "--json", str(out / "scan.json"),
                 "--html", str(out / "scan.html"),
             ])
             self.assertEqual(code, 0)
             csv_text = (out / "scan.csv").read_text()
-            self.assertIn("symbol,bias,confidence,verdict", csv_text)
+            self.assertIn("symbol,rating,bias,confidence,verdict", csv_text)
             self.assertEqual(len(csv_text.strip().splitlines()), 4)  # header + 3
             payload = json.loads((out / "scan.json").read_text())
             self.assertEqual(len(payload["scans"]), 3)
@@ -59,12 +59,12 @@ class TestCli(unittest.TestCase):
             replay_json = Path(tmp) / "replay.json"
             base = ["--as-of", AS_OF, "--symbols", "SPY,QQQ,IWM"]
             self.assertEqual(
-                run(["--provider", "synthetic"] + base
+                run(["scan", "--provider", "synthetic"] + base
                     + ["--save-snapshot", str(snap_path), "--json", str(live_json)]),
                 0,
             )
             self.assertEqual(
-                run(["--provider", "snapshot", "--snapshot-path", str(snap_path)] + base
+                run(["scan", "--provider", "snapshot", "--snapshot-path", str(snap_path)] + base
                     + ["--json", str(replay_json)]),
                 0,
             )
@@ -97,16 +97,19 @@ class TestCli(unittest.TestCase):
     def test_only_tradeable_filters_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "t.json"
-            run(["--provider", "synthetic", "--as-of", AS_OF, "--universe", "all",
+            run(["scan", "--provider", "synthetic", "--as-of", AS_OF, "--universe", "all",
                  "--only-tradeable", "--json", str(out)])
             for row in json.loads(out.read_text())["scans"]:
                 self.assertFalse(row["verdict"].startswith(("NO TRADE", "AVOID")))
 
-    def test_scan_is_the_default_subcommand(self):
-        self.assertEqual(
-            run(["--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY"]),
-            run(["scan", "--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY"]),
-        )
+    def test_go_is_the_default_subcommand(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = ["--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY",
+                    "--out-dir", tmp]
+            self.assertEqual(run(base), 0)
+            self.assertEqual(run(["go"] + base), 0)
+            log = json.loads(next(Path(tmp).glob("runs/runs-*.json")).read_text())
+            self.assertEqual([r["press"] for r in log["runs"]], [1, 2])
 
     def test_sides_file_is_merged_into_the_scan(self):
         from odte.providers import get_provider
@@ -122,7 +125,7 @@ class TestCli(unittest.TestCase):
             sides_path = Path(tmp) / "sides.json"
             tape.save(sides_path)
             out = Path(tmp) / "scan.json"
-            code = run(["--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY",
+            code = run(["scan", "--provider", "synthetic", "--as-of", AS_OF, "--symbols", "SPY",
                         "--sides", str(sides_path), "--json", str(out)])
             self.assertEqual(code, 0)
             row = json.loads(out.read_text())["scans"][0]

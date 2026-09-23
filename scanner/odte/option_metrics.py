@@ -21,6 +21,8 @@ class StrikeGamma:
     strike: float
     net_gex: float    # calls minus puts, $ per 1% move (regime / flip)
     total_gex: float  # calls plus puts, $ per 1% move (magnet / wall)
+    call_gex: float = 0.0
+    put_gex: float = 0.0
 
 
 @dataclass
@@ -47,10 +49,14 @@ class OptionMetrics:
     net_premium_dollars: float        # bought minus sold premium, delta-signed
     sampled_volume: float             # contracts with a classified side
     side_coverage: Optional[float]    # sampled / traded volume in the window
+    call_flow_tilt: Optional[float]   # +1 customers buying calls, -1 writing them
+    put_flow_tilt: Optional[float]    # +1 customers selling puts, -1 buying them
     call_delta_dollars: float
     put_delta_dollars: float
     max_pain: Optional[float]
     gamma_wall: Optional[float]       # strike holding the most total gamma
+    call_wall: Optional[float]        # heaviest call-gamma strike above spot
+    put_wall: Optional[float]         # heaviest put-gamma strike below spot
     gamma_flip: Optional[float]       # strike where cumulative net GEX crosses 0
     net_gex: float                    # chain-wide net gamma exposure
     chain_volume: float
@@ -133,8 +139,8 @@ def _strike_gex(
     ivs: Dict[Tuple[float, str], float],
     atm_iv: Optional[float],
     r: float,
-) -> Tuple[float, float]:
-    """Gamma exposure held at one strike, in $ per 1% spot move: (net, total).
+) -> Tuple[float, float, float, float]:
+    """Gamma exposure at one strike, $ per 1% spot move: (net, total, call, put).
 
     Net signs calls positive and puts negative — the usual published "net GEX"
     construction, standing in for dealers being short customer options. Total
@@ -142,7 +148,7 @@ def _strike_gex(
     what makes a level act as a magnet. Both are proxies: real dealer
     positioning is not public, so read the sign and the levels, not the size.
     """
-    net = total = 0.0
+    call_gex = put_gex = 0.0
     for o in chain:
         if o.strike != strike:
             continue
@@ -153,9 +159,11 @@ def _strike_gex(
         if g is None:
             continue
         gex = g * o.open_interest * CONTRACT_MULT * spot * spot * 0.01
-        net += gex if o.right.upper().startswith("C") else -gex
-        total += gex
-    return net, total
+        if o.right.upper().startswith("C"):
+            call_gex += gex
+        else:
+            put_gex += gex
+    return call_gex - put_gex, call_gex + put_gex, call_gex, put_gex
 
 
 def _zero_gamma_level(
@@ -293,6 +301,7 @@ def compute_option_metrics(
     # tell a call buyer from a call seller.
     call_dd = put_dd = 0.0
     net_delta = gross_delta = 0.0
+    call_net = call_gross = put_net = put_gross = 0.0
     net_premium = 0.0
     sampled = 0.0
     for o in in_window:
@@ -309,15 +318,27 @@ def compute_option_metrics(
                 put_dd += dollars
         if o.sampled:
             sampled += o.sampled_volume
-            net_delta += o.net_volume * d
-            gross_delta += (o.buy_volume + o.sell_volume) * abs(d)
+            signed = o.net_volume * d
+            gross = (o.buy_volume + o.sell_volume) * abs(d)
+            net_delta += signed
+            gross_delta += gross
             net_premium += (o.buy_premium - o.sell_premium) * math.copysign(1.0, d)
+            # Split by right so the setups can tell call buying from put
+            # selling — both are bullish, but they are different tapes.
+            if o.right.upper().startswith("C"):
+                call_net += signed
+                call_gross += gross
+            else:
+                put_net += signed
+                put_gross += gross
 
     proxy_tilt = None
     if call_dd + put_dd > 0:
         proxy_tilt = (call_dd - put_dd) / (call_dd + put_dd)
 
     signed_tilt = (net_delta / gross_delta) if gross_delta > 0 else None
+    call_tilt = (call_net / call_gross) if call_gross > 0 else None
+    put_tilt = (put_net / put_gross) if put_gross > 0 else None
     window_vol = call_vol + put_vol
     coverage = (sampled / window_vol) if window_vol > 0 else None
 
@@ -333,10 +354,23 @@ def compute_option_metrics(
     # signed so that calls contribute positive and puts negative GEX.
     profile = []
     for k in strikes:
-        net_k, total_k = _strike_gex(chain, k, spot, t, ivs, atm_iv, risk_free)
-        profile.append(StrikeGamma(strike=k, net_gex=net_k, total_gex=total_k))
+        net_k, total_k, call_k, put_k = _strike_gex(
+            chain, k, spot, t, ivs, atm_iv, risk_free
+        )
+        profile.append(
+            StrikeGamma(
+                strike=k, net_gex=net_k, total_gex=total_k,
+                call_gex=call_k, put_gex=put_k,
+            )
+        )
     net_gex = sum(g.net_gex for g in profile)
     wall = max(profile, key=lambda g: g.total_gex).strike if profile else None
+    # The walls dealers actually defend: heaviest call gamma overhead, heaviest
+    # put gamma underneath. Price tends to stall there and accelerate through.
+    above = [g for g in profile if g.strike > spot and g.call_gex > 0]
+    below = [g for g in profile if g.strike < spot and g.put_gex > 0]
+    call_wall = max(above, key=lambda g: g.call_gex).strike if above else None
+    put_wall = max(below, key=lambda g: g.put_gex).strike if below else None
     flip = _zero_gamma_level(chain, strikes, t, ivs, atm_iv, risk_free, spot)
 
     spreads = [o.spread_pct for o in in_window if o.spread_pct is not None and o.volume > 0]
@@ -365,10 +399,14 @@ def compute_option_metrics(
         net_premium_dollars=net_premium,
         sampled_volume=sampled,
         side_coverage=coverage,
+        call_flow_tilt=call_tilt,
+        put_flow_tilt=put_tilt,
         call_delta_dollars=call_dd,
         put_delta_dollars=put_dd,
         max_pain=max_pain(calls, puts),
         gamma_wall=wall,
+        call_wall=call_wall,
+        put_wall=put_wall,
         gamma_flip=flip,
         net_gex=net_gex,
         chain_volume=chain_volume,

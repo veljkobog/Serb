@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# The button.
+#
+#   ./bullbear            one press: BULL/BEAR out of ten per symbol
+#   ./bullbear            press it again later to re-confirm the first read
+#   ./bullbear web        the same thing in a browser tab
+#   ./bullbear record     stream classified trade side from the open
+#   ./bullbear demo       fake data, works any time, no token needed
+#
+# Anything after the first word is passed through to the CLI.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+PY="${PYTHON:-python3}"
+case "${1:-go}" in
+  web)    shift; exec "$PY" -m odte serve --open "$@" ;;
+  record) shift; exec "$PY" -m odte record --until 10:30 --out "out/sides-$(date +%F).json" "$@" ;;
+  scan)   shift; exec "$PY" -m odte scan "$@" ;;
+  demo)   shift; exec "$PY" -m odte go --provider synthetic --force "$@" ;;
+  go)     shift || true; exec "$PY" -m odte go "$@" ;;
+  *)      exec "$PY" -m odte go "$@" ;;
+esac

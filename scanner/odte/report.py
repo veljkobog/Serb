@@ -7,7 +7,7 @@ import html
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence  # noqa: F401
 
 from .scoring import SymbolScore
 
@@ -50,6 +50,100 @@ def _money(v: Optional[float]) -> str:
 
 def _pct(v: Optional[float], nd: int = 2) -> str:
     return "-" if v is None else f"{v:+.{nd}f}%"
+
+
+CARD_WIDTH = 82
+
+
+def _rule(left: str, right: str, fill: str = "=") -> str:
+    pad = CARD_WIDTH - len(left) - len(right) - 2
+    return f"{left} {fill * max(pad, 1)} {right}"
+
+
+def render_cards(
+    scores: Sequence[SymbolScore],
+    now: datetime,
+    provider: str,
+    minutes_to_close: float,
+    press: int = 1,
+    changes: Optional[Dict[str, Any]] = None,
+    limit: int = 5,
+) -> str:
+    """The one-button view: a card per symbol, rating first."""
+    changes = changes or {}
+    mode = "OPENING READ" if press <= 1 else f"RE-CONFIRM #{press - 1}"
+    lines = [
+        "",
+        _rule(f"0DTE {mode}", f"{now:%H:%M:%S} ET", "="),
+        f"  {provider}  |  {minutes_to_close:.0f} min to the close"
+        f"  |  {len(scores)} symbol{'s' if len(scores) != 1 else ''} shown",
+    ]
+
+    for s in scores[:limit]:
+        r, p, o, pl = s.rating, s.price, s.options, s.plan
+        lines.append("")
+        lines.append(_rule(f"-- {s.symbol}", f"{r.side} {r.stars}/10  {r.band}", "-"))
+
+        move = p.ret_prev_close_pct if p.ret_prev_close_pct is not None else p.ret_open_pct
+        head = (
+            f"   {p.last:,.2f}  {move:+.2f}%   bias {s.bias:+.0f}   conf {s.confidence:.0f}"
+        )
+        change = changes.get(s.symbol)
+        if change:
+            bits = [f"score {change.d_score:+.1f}"]
+            if change.progress_em is not None:
+                bits.append(f"{change.progress_em:+.2f} EM your way")
+            head += f"   {change.status} ({', '.join(bits)})"
+        lines.append(head)
+        if change and change.note:
+            lines.append(f"      vs first read {change.minutes:.0f} min ago: {change.note}")
+
+        if not s.setups:
+            lines.append("   (no named setup fired - this is a raw score)")
+        direction = 1 if r.side == "BULL" else -1
+        for hit in s.setups[:6]:
+            # Marked relative to this card's side: + backs the call, - argues
+            # against it, ! blocks it outright.
+            mark = "!" if hit.side == 0 else ("+" if hit.side == direction else "-")
+            lines.append(f"   {mark} {hit.setup.label}")
+            lines.append(f"       {hit.detail}")
+
+        if o:
+            levels = [
+                f"VWAP {p.vwap:,.2f}",
+                f"OR {p.or_low:,.2f}-{p.or_high:,.2f}",
+                f"max pain {_f(o.max_pain)}",
+                f"flip {_f(o.gamma_flip)}",
+                f"call wall {_f(o.call_wall)}",
+                f"put wall {_f(o.put_wall)}",
+                f"EM +/-{_f(o.em_dollars)}",
+            ]
+            lines.append("   levels  " + "  ".join(levels))
+            flow = (
+                f"classified {_money(o.net_delta_dollars)} net delta"
+                f" ({(o.side_coverage or 0) * 100:.0f}% of volume)"
+                if o.flow_source == "side"
+                else f"proxy only, tilt {_f(o.proxy_flow_tilt)}"
+            )
+            lines.append(
+                f"   chain   ATM IV {(o.atm_iv or 0) * 100:.1f}%  "
+                f"net GEX {_money(o.net_gex)}/1%  P/C vol {_f(o.pc_volume_ratio)}  {flow}"
+            )
+        lines.append(
+            f"   trade   {pl.direction}  ATM {_f(pl.atm_strike)} / 1EM {_f(pl.otm_1em_strike)}"
+            f"  target {_f(pl.target)}  invalidate {_f(pl.invalidation)}"
+        )
+
+    lines.append("")
+    lines.append("=" * CARD_WIDTH)
+    lines.append(
+        "  + drives the score   - fights it   ! blocks it."
+        "   Press again later to re-confirm."
+    )
+    lines.append(
+        "  Not investment advice. 0DTE premium can go to zero the same session."
+    )
+    return "\n".join(lines)
 
 
 def render_console(
@@ -147,12 +241,87 @@ def _detail_block(s: SymbolScore) -> List[str]:
     return out
 
 
+def card_payload(
+    scores: Sequence[SymbolScore],
+    changes: Optional[Dict[str, Any]] = None,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    """The card view as data — shared by the browser button and the JSON output."""
+    changes = changes or {}
+    cards: List[Dict[str, Any]] = []
+    for s in scores[:limit]:
+        r, p, o, pl = s.rating, s.price, s.options, s.plan
+        direction = 1 if r.side == "BULL" else -1
+        change = changes.get(s.symbol)
+        cards.append(
+            {
+                "symbol": s.symbol,
+                "side": r.side,
+                "stars": r.stars,
+                "score": r.score,
+                "band": r.band,
+                "bias": round(s.bias, 1),
+                "confidence": round(s.confidence),
+                "verdict": s.verdict,
+                "last": round(p.last, 2),
+                "move_pct": round(
+                    p.ret_prev_close_pct if p.ret_prev_close_pct is not None else p.ret_open_pct, 2
+                ),
+                "flags": s.flags,
+                "change": None if change is None else {
+                    "status": change.status,
+                    "d_score": change.d_score,
+                    "d_bias": change.d_bias,
+                    "progress_em": change.progress_em,
+                    "minutes": round(change.minutes),
+                    "note": change.note,
+                },
+                "setups": [
+                    {
+                        "mark": "!" if h.side == 0 else ("+" if h.side == direction else "-"),
+                        "label": h.setup.label,
+                        "detail": h.detail,
+                        "why": h.setup.why,
+                    }
+                    for h in s.setups
+                ],
+                "levels": {
+                    "vwap": round(p.vwap, 2),
+                    "or_high": round(p.or_high, 2),
+                    "or_low": round(p.or_low, 2),
+                    "max_pain": o.max_pain if o else None,
+                    "gamma_flip": o.gamma_flip if o else None,
+                    "call_wall": o.call_wall if o else None,
+                    "put_wall": o.put_wall if o else None,
+                    "expected_move": round(o.em_dollars, 2) if o and o.em_dollars else None,
+                },
+                "chain": {
+                    "atm_iv_pct": round(o.atm_iv * 100, 1) if o and o.atm_iv else None,
+                    "net_gex": round(o.net_gex) if o else None,
+                    "pc_volume_ratio": round(o.pc_volume_ratio, 2) if o and o.pc_volume_ratio else None,
+                    "flow_source": o.flow_source if o else "none",
+                    "net_delta_dollars": round(o.net_delta_dollars) if o else None,
+                    "side_coverage": round(o.side_coverage, 3) if o and o.side_coverage else None,
+                },
+                "trade": {
+                    "direction": pl.direction,
+                    "atm": pl.atm_strike,
+                    "otm_1em": pl.otm_1em_strike,
+                    "target": round(pl.target, 2) if pl.target else None,
+                    "invalidation": round(pl.invalidation, 2) if pl.invalidation else None,
+                },
+            }
+        )
+    return cards
+
+
 def to_rows(scores: Sequence[SymbolScore]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for s in scores:
         p, o = s.price, s.options
         row: Dict[str, Any] = {
             "symbol": s.symbol,
+            "rating": f"{s.rating.side} {s.rating.stars}/10",
             "bias": round(s.bias, 1),
             "confidence": round(s.confidence, 0),
             "verdict": s.verdict,
@@ -216,6 +385,10 @@ def to_rows(scores: Sequence[SymbolScore]) -> List[Dict[str, Any]]:
             row[f"w_{k}"] = round(s.contributions.get(k, 0.0), 2)
         row.update(
             {
+                "rating_side": s.rating.side,
+                "rating_score": s.rating.score,
+                "rating_band": s.rating.band,
+                "setups": "|".join(h.key for h in s.setups),
                 "trade_direction": s.plan.direction,
                 "strike_atm": s.plan.atm_strike,
                 "strike_1em_otm": s.plan.otm_1em_strike,

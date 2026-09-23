@@ -12,4 +12,4 @@ time & sales classified into buyer- and seller-initiated volume, which is what
 turns "flow" from a positioning proxy into actual directional pressure.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

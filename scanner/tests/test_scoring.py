@@ -28,6 +28,7 @@ def om(**over) -> OptionMetrics:
         flow_tilt=0.3, flow_source="proxy", proxy_flow_tilt=0.3,
         signed_flow_tilt=None, net_delta_contracts=0.0, net_delta_dollars=0.0,
         net_premium_dollars=0.0, sampled_volume=0.0, side_coverage=None,
+        call_flow_tilt=None, put_flow_tilt=None, call_wall=103.0, put_wall=97.0,
         call_delta_dollars=5e6, put_delta_dollars=2e6,
         max_pain=101.0, gamma_wall=103.0, gamma_flip=99.0, net_gex=5e7,
         chain_volume=50_000, window_volume=30_000, total_oi=120_000,

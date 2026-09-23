@@ -21,6 +21,8 @@ from typing import Dict, List, Optional, Sequence
 from .config import Gates, ScanConfig, Weights
 from .option_metrics import OptionMetrics
 from .price_metrics import PriceMetrics
+from .rating import Rating, rate
+from .setups import Hit, detect
 
 
 @dataclass
@@ -57,6 +59,8 @@ class SymbolScore:
     price: PriceMetrics
     options: Optional[OptionMetrics]
     plan: TradePlan
+    rating: Rating
+    setups: List[Hit] = field(default_factory=list)
     expiry: Optional[str] = None
 
 
@@ -306,6 +310,7 @@ def score_universe(data: Sequence[SymbolData], cfg: ScanConfig) -> List[SymbolSc
 
         conf, flags = _confidence(d, comps, cfg.weights, cfg.gates)
         flags = list(dict.fromkeys(flags + list(d.notes)))
+        hits = detect(d.price, d.options, flags)
         out.append(
             SymbolScore(
                 symbol=d.symbol,
@@ -318,8 +323,11 @@ def score_universe(data: Sequence[SymbolData], cfg: ScanConfig) -> List[SymbolSc
                 price=d.price,
                 options=d.options,
                 plan=_plan(d, bias),
+                rating=rate(bias, conf, hits),
+                setups=hits,
                 expiry=d.expiry,
             )
         )
-    out.sort(key=lambda s: abs(s.bias) * (s.confidence / 100.0), reverse=True)
+    # Rank by conviction: the button should show the best read first.
+    out.sort(key=lambda s: s.rating.score, reverse=True)
     return out
