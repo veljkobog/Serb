@@ -1,0 +1,19 @@
+# Captured browser sessions and generated endpoint configs carry cookies.
+*.har
+endpoints.json
+.bbb-browser-profile/
+
+# Run artifacts
+.checkpoint-*.json
+.progress-*.json
+.google-places-cache.json
+.apollo-cache.json
+.apollo-people-cache.json
+.rotation-state.json
+rotation.json
+logs/
+*.csv
+browser-test.csv
+detail-sample.html
+__pycache__/
+*.pyc

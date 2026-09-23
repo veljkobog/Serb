@@ -1,0 +1,88 @@
+# Companies never to source as targets: they are already your EL'd
+# partners, or the PE parent of one. AVI Roofing surfaced in a live
+# Apollo query while testing the screen -- without this file it would
+# have landed on a target sheet.
+#
+# One entry per line. A line with a dot and no spaces is treated as a
+# domain; anything else matches as a company-name fragment, so short
+# generic names are commented out rather than deleted -- 'Zeus' or
+# 'Clarion' as a fragment would drop unrelated businesses.
+#
+# Generated from the EL'd partner list (69 partners).
+
+# --- partners ---
+# 4M   # too generic as a fragment -- enable if you see it slip through
+Alloy Roofing
+Ally Services
+Alphi Capital
+# (parentheticals split into the operating brands that actually appear on a listing)
+Alpine Investors
+# Apex    # 'Apex Plumbing' is a common independent name -- would drop real targets
+# Orion   # same problem
+American Landscaping Partners
+Any Hour
+# APHIX   # too generic as a fragment -- enable if you see it slip through
+Atlas Facilities Maintenance
+AVI Roofing
+Baxter's Bakery
+Bertram Capital
+# Blue Fox   # too generic as a fragment -- enable if you see it slip through
+Canopy Service Partners
+CenterOak Partners
+CenterPoint Companies
+Champions Group
+# Clarion   # too generic as a fragment -- enable if you see it slip through
+Clean Scapes
+# Cobalt   # too generic as a fragment -- enable if you see it slip through
+Columbia Home Services
+Comfort Connect
+Commercial Fire Protection
+Ethoscapes
+Evergreen Services Group
+# Flint Group   # too generic as a fragment -- enable if you see it slip through
+Garnett Station Partners
+Gauge Capital
+Goettl
+Harley Exteriors
+# High Ground   # too generic as a fragment -- enable if you see it slip through
+Infinity Home Services
+# IOS   # too generic as a fragment -- enable if you see it slip through
+Ironclad Holdings
+ISLA Partners
+Knox Lane
+Koa Capital Partners
+# Link 1   # too generic as a fragment -- enable if you see it slip through
+Netstock
+Netsurit
+# Nexcore   # too generic as a fragment -- enable if you see it slip through
+O'Hara's Son Roofing
+O2 Investments
+Osceola Capital Management
+Pine Services Group
+ProCern Technology Solutions
+RAFTRx Roofing
+Redwood Services
+Ridgeline Roofing
+Riverview Landscapes
+Roofing Corp of America
+Ruppert
+Saw Mill Capital
+Seaside Equity
+Service Country
+SILA Services
+# Skycrest   # too generic as a fragment -- enable if you see it slip through
+Solidaire
+Southern Home Services
+Stonegrove Roofing Partners
+Strattam
+Stronghouse Brands
+SubSplit
+The SEER Group
+# Timoneer   # too generic as a fragment -- enable if you see it slip through
+Valor Exterior Partners
+Walk On Capital
+Worklyn Partners
+# Zeus   # too generic as a fragment -- enable if you see it slip through
+
+# --- PE parents named in the notes ---
+Percheron Capital

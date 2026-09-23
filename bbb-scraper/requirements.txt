@@ -1,0 +1,9 @@
+# Approach A (preferred)
+httpx>=0.27
+
+# DOM parsing for Approach B, and for detail pages
+beautifulsoup4>=4.12
+
+# Approach B (fallback) -- also run: playwright install chromium
+playwright>=1.44
+playwright-stealth>=1.0.6

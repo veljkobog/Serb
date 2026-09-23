@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Endpoint config for Approach A. NOTHING here is a real BBB endpoint --",
+    "the URL and headers below are placeholders. Fill them from your own",
+    "browser session, or let the tool do it:",
+    "",
+    "  1. Open bbb.org, run the search by hand with your category + location",
+    "  2. DevTools > Network > filter XHR/Fetch, find the paginated JSON call",
+    "  3. Right-click the request > 'Save all as HAR with content'",
+    "  4. python scraper.py --category plumber --location wilmington-nc \\",
+    "       --from-har search.har --save-endpoints endpoints.json",
+    "",
+    "Add --save-cookies only if the endpoint needs them; cookies are session",
+    "credentials, so keep the generated file out of git (see .gitignore).",
+    "Multiple entries are tried in order until one returns business records."
+  ],
+  "endpoints": [
+    {
+      "url": "https://www.bbb.org/api/PLACEHOLDER-copy-the-real-path-from-your-har",
+      "method": "GET",
+      "params": {
+        "find_country": "USA",
+        "find_text": "plumber",
+        "find_loc": "wilmington-nc",
+        "pageSize": "25"
+      },
+      "headers": {
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.bbb.org/search?find_text=plumber&find_loc=wilmington-nc",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      "cookies": {},
+      "page_param": "page",
+      "page_size_param": "pageSize",
+      "page_size": 25,
+      "first_page": 1,
+      "category_param": "find_text",
+      "location_param": "find_loc"
+    }
+  ]
+}

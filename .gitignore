@@ -1,0 +1,7 @@
+# Run artifacts can land at the repo root when a scrape is driven from here
+# rather than from bbb-scraper/, so the ignores are mirrored at both levels.
+.progress-*.json
+.checkpoint-*.json
+*.csv
+__pycache__/
+*.pyc
