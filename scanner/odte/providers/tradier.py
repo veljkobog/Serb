@@ -200,6 +200,14 @@ class TradierClient:
         )
         return _as_list(payload.get("options"), "option")
 
+    def clock(self) -> Dict[str, Any]:
+        """Market clock — the cheapest call that proves the token works."""
+        return self.get("/markets/clock").get("clock") or {}
+
+    def profile(self) -> Dict[str, Any]:
+        """Account profile. Data-only tokens are allowed to refuse this."""
+        return self.get("/user/profile").get("profile") or {}
+
     def stream_session(self) -> Dict[str, str]:
         payload = self.post("/markets/events/session")
         return payload.get("stream") or {}

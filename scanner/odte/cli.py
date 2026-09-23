@@ -5,6 +5,7 @@
     python -m odte scan            the full board, every metric
     python -m odte record ...      stream classified time & sales to a side tape
     python -m odte serve           the same button, in a browser
+    python -m odte doctor          check the live wiring end to end
 
 `go` is the default, so the subcommand can be left off.
 """
@@ -37,7 +38,7 @@ from .runs import Run, RunLog, compare, entry_from_score
 from .scoring import SymbolData, score_universe
 from .sides import SideTape
 
-SUBCOMMANDS = ("go", "scan", "record", "serve")
+SUBCOMMANDS = ("go", "scan", "record", "serve", "doctor")
 
 
 def _add_universe_args(p: argparse.ArgumentParser) -> None:
@@ -118,6 +119,17 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--top", type=int, default=8, help="cards to show")
     serve.add_argument("--out-dir", default="out")
     serve.add_argument("--open", action="store_true", help="open a browser tab on start")
+
+    doc = subs.add_parser(
+        "doctor", help="check the live wiring: token, quotes, chains, streaming"
+    )
+    _add_tradier_args(doc)
+    doc.add_argument("--symbol", default="SPY", help="symbol to probe")
+    doc.add_argument(
+        "--stream-seconds", type=float, default=0.0,
+        help="also listen to the live tape for N seconds",
+    )
+    doc.add_argument("--as-of", help="ISO timestamp to evaluate the clock against")
 
     rec = subs.add_parser(
         "record", help="stream and classify 0DTE time & sales into a side tape"
@@ -475,6 +487,10 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "record":
         return run_record(args)
+    if args.command == "doctor":
+        from .doctor import run_doctor
+
+        return run_doctor(args)
     if args.command == "serve":
         from .server import run_serve
 

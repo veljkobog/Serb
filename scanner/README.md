@@ -53,6 +53,75 @@ streaming endpoint. Sandbox tokens return delayed data and are flagged
 (The optional Yahoo fallback — `--provider yahoo` — needs
 `pip install -r requirements.txt`.)
 
+## Going live
+
+1. **Get a Tradier token.** Log in at tradier.com, open the dashboard, and find
+   API Access. A sandbox token works immediately and returns delayed data; a
+   production token needs a funded brokerage account with the market-data
+   agreements accepted, and that is what gives you real-time quotes and the
+   streaming endpoint this tool is built around.
+
+2. **Put it in your shell profile**, so every terminal has it:
+
+   ```bash
+   echo 'export TRADIER_TOKEN=your_token_here' >> ~/.zshrc
+   echo 'export TRADIER_ENV=production'        >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+3. **Check the wiring before you need it.** During market hours:
+
+   ```bash
+   ./bullbear doctor --stream-seconds 10
+   ```
+
+   ```
+   odte 0.3.0 doctor
+
+     [ ok ] python          3.11.9 on Darwin
+     [ ok ] clock           2026-09-23 10:14 ET
+     [ ok ] token           44-char token, env=production
+     [ ok ] auth            market is open (Market is open from 09:30 to 16:00)
+     [ ok ] quotes          SPY 589.88 (589.87/589.89), last print 0 min ago
+     [ ok ] 0DTE expiry     2026-09-23 is listed for SPY
+     [ ok ] chain           348 contracts, 348 with greeks, 291 traded today
+     [ ok ] stream session  a1b2c3d4... issued
+     [ ok ] live prints     1,284 prints in 10s across 37 contracts - 812 bought / 401 sold
+   ```
+
+   It walks the same path a real scan takes and stops at the first thing that is
+   broken, with the fix on the next line. `[FAIL] auth` means the token or env is
+   wrong; `[FAIL] stream session` means no streaming entitlement, and the scanner
+   will fall back to proxy flow.
+
+4. **See the output shape any time**, no token and no market needed:
+
+   ```bash
+   ./bullbear demo
+   ```
+
+5. **A live day:**
+
+   ```bash
+   09:30  ./bullbear record      # classifies trade side until 10:30
+   10:05  ./bullbear             # the read
+   11:15  ./bullbear             # re-confirm it
+   ```
+
+   Run the recorder in its own terminal, or from cron:
+
+   ```cron
+   30 9 * * 1-5 cd /path/to/scanner && ./bullbear record >> out/record.log 2>&1
+   ```
+
+   On a Mac that sleeps, cron won't fire — use a launchd agent, or just leave the
+   recorder running in a terminal you don't close.
+
+6. **First week, don't size on it.** Add `--save-snapshot out/$(date +%F).json`
+   to the read, and at the close compare what the cards said to what the tape
+   actually did. That is also the data you need to retune the setup strengths in
+   `odte/setups.py` — they are priors, not fitted parameters.
+
 ## Run
 
 The button is `./bullbear` (or `python -m odte`, same thing — `go` is the

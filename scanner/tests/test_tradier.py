@@ -54,7 +54,22 @@ class FakeClient:
 
     def quotes(self, symbols, greeks=False) -> Dict[str, Dict]:
         self.calls.append("quotes")
-        return {s: {"symbol": s, "last": 587.9, "prevclose": 584.6, "average_volume": 78e6} for s in symbols}
+        return {
+            s: {
+                "symbol": s, "last": 587.9, "bid": 587.88, "ask": 587.9,
+                "prevclose": 584.6, "average_volume": 78e6,
+                "trade_date": int(NOW.timestamp() * 1000),
+            }
+            for s in symbols
+        }
+
+    def clock(self) -> Dict[str, str]:
+        self.calls.append("clock")
+        return {"state": "open", "description": "Market is open from 09:30 to 16:00"}
+
+    def stream_session(self) -> Dict[str, str]:
+        self.calls.append("stream_session")
+        return {"sessionid": "abcdef0123456789", "url": "https://stream.tradier.com/v1/markets/events"}
 
     def timesales(self, symbol, start, end, interval="5min"):
         self.calls.append("timesales")
