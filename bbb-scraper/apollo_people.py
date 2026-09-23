@@ -180,30 +180,82 @@ def is_masked(value: str) -> bool:
     return any(marker in low for marker in _MASK_MARKERS)
 
 
+#: BBB writes "MO"; Apollo writes "Missouri". A state that agrees in one
+#: spelling and not the other withheld five of fifteen contacts on the
+#: St. Louis electricians sheet -- every one of them the right company.
+STATE_NAMES = {
+    "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas",
+    "ca": "california", "co": "colorado", "ct": "connecticut",
+    "de": "delaware", "dc": "district of columbia", "fl": "florida",
+    "ga": "georgia", "hi": "hawaii", "id": "idaho", "il": "illinois",
+    "in": "indiana", "ia": "iowa", "ks": "kansas", "ky": "kentucky",
+    "la": "louisiana", "me": "maine", "md": "maryland",
+    "ma": "massachusetts", "mi": "michigan", "mn": "minnesota",
+    "ms": "mississippi", "mo": "missouri", "mt": "montana",
+    "ne": "nebraska", "nv": "nevada", "nh": "new hampshire",
+    "nj": "new jersey", "nm": "new mexico", "ny": "new york",
+    "nc": "north carolina", "nd": "north dakota", "oh": "ohio",
+    "ok": "oklahoma", "or": "oregon", "pa": "pennsylvania",
+    "ri": "rhode island", "sc": "south carolina", "sd": "south dakota",
+    "tn": "tennessee", "tx": "texas", "ut": "utah", "vt": "vermont",
+    "va": "virginia", "wa": "washington", "wv": "west virginia",
+    "wi": "wisconsin", "wy": "wyoming",
+}
+STATE_CODES = {name: code for code, name in STATE_NAMES.items()}
+
+#: The same place, written two ways. BBB says "Saint Louis" where Apollo says
+#: "St. Louis", and the plain comparison read that as two different cities.
+PLACE_WORDS = {"st": "saint", "ste": "sainte", "ft": "fort", "mt": "mount",
+               "n": "north", "s": "south", "e": "east", "w": "west"}
+
+_NOT_PLACE_TEXT = re.compile(r"[^a-z0-9]+")
+
+
+def normalize_place(text: str) -> str:
+    """Lowercase, punctuation-free, with the usual abbreviations spelled out.
+
+    Space-padded so a comparison matches whole words: "mo" must not find the
+    "mo" inside "monroe".
+    """
+    words = [PLACE_WORDS.get(word, word)
+             for word in _NOT_PLACE_TEXT.sub(" ", (text or "").lower()).split()]
+    return " " + " ".join(words) + " " if words else ""
+
+
 def same_place(listing: Listing, person: dict) -> Optional[bool]:
     """Does the matched person's employer sit where the BBB record does?
 
     None when Apollo gave no location to compare -- unknown, not agreement.
     A national franchise's HQ in another state is exactly how a name search
-    hands back a stranger's email.
+    hands back a stranger's email. Spelling is not a different state, though:
+    the comparison runs on normalized text and accepts a state by either its
+    code or its name.
     """
     org = person.get("organization") or {}
-    haystack = " ".join(str(v) for v in (
+    states = normalize_place(" ".join(str(v) for v in (
+        org.get("state"), person.get("state")) if v))
+    haystack = normalize_place(" ".join(str(v) for v in (
         org.get("city"), org.get("state"), org.get("raw_address"),
         person.get("city"), person.get("state"),
-    ) if v).lower()
+    ) if v))
     if not haystack:
         return None
 
-    city = (listing.city or "").lower().strip()
-    state = (listing.state or "").lower().strip()
-    if city and city in haystack:
+    city = normalize_place(listing.city).strip()
+    if city and f" {city} " in haystack:
         return True
-    if state and len(state) == 2:
-        # Match the state as a standalone token, so "ks" doesn't hit "Kansas
-        # City, MO" via a substring or "ks" inside another word.
-        if state in haystack.replace(",", " ").split():
-            return True
+
+    state = normalize_place(listing.state).strip()
+    code = STATE_CODES.get(state, state)
+    # The code is safe to look for anywhere: "mo" is a token an address only
+    # carries as the state. The spelled-out name is not -- "kansas" appears in
+    # "Kansas City, Missouri", which is a different state entirely -- so it is
+    # only ever compared against Apollo's own state fields.
+    if code and f" {code} " in haystack:
+        return True
+    name = STATE_NAMES.get(code, "")
+    if name and states and f" {name} " in states:
+        return True
     return False
 
 

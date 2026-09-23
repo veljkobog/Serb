@@ -79,6 +79,42 @@ class GuardTest(unittest.TestCase):
         person = {"organization": {"city": "Kansas City", "state": "MO"}}
         self.assertIs(apollo_people.same_place(l, person), False)
 
+    def test_the_spelled_out_state_name_is_the_same_state(self):
+        """BBB writes MO, Apollo writes Missouri. That disagreement withheld
+        five of fifteen contacts on the St. Louis electricians sheet --
+        Kaemmerlen, Streib, Fielder, RJP and Innovet, every one of them the
+        right company at the right address."""
+        l = listing("Streib Company", "a" * 24,
+                    city="Saint Louis", state="MO")
+        person = {"organization": {"city": "St. Louis", "state": "Missouri"}}
+        self.assertIs(apollo_people.same_place(l, person), True)
+
+    def test_saint_and_st_are_the_same_city(self):
+        l = listing("Ace", "a" * 24, city="Saint Louis", state="MO")
+        person = {"organization": {"city": "St Louis", "state": ""}}
+        self.assertIs(apollo_people.same_place(l, person), True)
+
+    def test_a_suburb_in_the_same_state_still_counts(self):
+        """Apollo files a company at its suburb; BBB files it under the metro.
+        Same state is enough to know the email is not a stranger's."""
+        l = listing("Ace", "a" * 24, city="Saint Louis", state="MO")
+        person = {"organization": {"city": "Crestwood", "state": "Missouri"}}
+        self.assertIs(apollo_people.same_place(l, person), True)
+
+    def test_a_state_name_inside_another_states_city_is_still_wrong(self):
+        """The fix must not undo the guard: 'Kansas' lives inside 'Kansas
+        City, Missouri', which is a different state entirely."""
+        l = listing("Ace", "a" * 24, city="Wichita", state="KS")
+        person = {"organization": {"city": "Kansas City", "state": "Missouri",
+                                   "raw_address": "100 Main St, Kansas City, "
+                                                  "Missouri 64106"}}
+        self.assertIs(apollo_people.same_place(l, person), False)
+
+    def test_a_genuinely_distant_match_is_still_refused(self):
+        l = listing("Ace", "a" * 24, city="Saint Louis", state="MO")
+        person = {"organization": {"city": "Dallas", "state": "Texas"}}
+        self.assertIs(apollo_people.same_place(l, person), False)
+
     def test_headcount_reads_through_missing_values(self):
         self.assertEqual(apollo_people.headcount(
             {"organization": {"estimated_num_employees": 12}}), 12)
