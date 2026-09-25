@@ -8,6 +8,7 @@
     python -m odte doctor          check the live wiring end to end
     python -m odte configure       store a Tradier token and verify it
     python -m odte live            the whole session on one timer
+    python -m odte grade           what the reads were worth, by band and setup
 
 `go` is the default, so the subcommand can be left off.
 """
@@ -41,7 +42,9 @@ from .runs import Run, RunLog, compare, entry_from_score
 from .scoring import SymbolData, score_universe
 from .sides import SideTape
 
-SUBCOMMANDS = ("go", "live", "scan", "record", "serve", "doctor", "configure")
+SUBCOMMANDS = (
+    "go", "live", "scan", "record", "serve", "doctor", "configure", "grade",
+)
 
 
 def _add_universe_args(p: argparse.ArgumentParser) -> None:
@@ -119,6 +122,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-record", dest="record", action="store_false",
         help="skip trade-side recording (flow falls back to the proxy)",
     )
+
+    grade = subs.add_parser(
+        "grade", help="did the reads pay? hit rate by band and by setup"
+    )
+    grade.add_argument("--out-dir", default="out")
+    grade.add_argument("--date", help="one session, YYYY-MM-DD (default: all of them)")
+    grade.add_argument("--csv", help="write the per-read detail here")
 
     conf = subs.add_parser("configure", help="store your Tradier token and verify it")
     conf.add_argument("--token", help="set it non-interactively")
@@ -540,6 +550,10 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "record":
         return run_record(args)
+    if args.command == "grade":
+        from .grade import run_grade
+
+        return run_grade(args)
     if args.command == "live":
         from .live import run_live
 

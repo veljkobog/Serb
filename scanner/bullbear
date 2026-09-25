@@ -6,6 +6,7 @@
 #
 #   ./bullbear            one press, right now
 #   ./bullbear web        the same button in a browser tab
+#   ./bullbear grade      what past reads were worth, by band and by setup
 #   ./bullbear doctor     check the live wiring end to end
 #   ./bullbear scan       the full board, every metric
 #   ./bullbear record     record trade side only
@@ -20,6 +21,7 @@ case "${1:-go}" in
   setup|configure) shift; exec "$PY" -m odte configure "$@" ;;
   live)   shift; exec "$PY" -m odte live "$@" ;;
   web)    shift; exec "$PY" -m odte serve --open "$@" ;;
+  grade)  shift; exec "$PY" -m odte grade "$@" ;;
   doctor) shift; exec "$PY" -m odte doctor "$@" ;;
   scan)   shift; exec "$PY" -m odte scan "$@" ;;
   record) shift; exec "$PY" -m odte record --until 10:30 --out "out/sides-$(date +%F).json" "$@" ;;

@@ -17,6 +17,7 @@ minutes until you stop it. Everything else is optional:
 ```bash
 ./bullbear          # one press, right now
 ./bullbear web      # the same button in a browser tab
+./bullbear grade    # what past reads were actually worth
 ./bullbear doctor   # check the live wiring end to end
 ./bullbear demo     # fake data, any time, no token needed
 ```
@@ -121,9 +122,29 @@ side tape. Knobs, if you want them:
 
 **4. First week, don't size on it.** The cards and every metric behind them land
 in `out/` on each press (`latest.json`, `latest.csv`, `latest.html`, plus the
-press history in `out/runs/`). At the close, compare what the cards said to what
-the tape actually did. That is also the data you need to retune the setup
-strengths in `odte/setups.py` — they are priors, not fitted parameters.
+press history in `out/runs/`). Then let the data argue:
+
+```bash
+./bullbear grade
+```
+
+```
+0DTE READ GRADE  |  5 session(s): 2026-09-28 ... 2026-10-02
+  140 graded reads, held 172 min on average, settled against each session's last press
+
+BY BAND
+              reads   hit  1 EM   mean    med  worst   best
+  STRONG         31   68%   39%  +0.61  +0.44  -1.80  +2.90
+  MODERATE       44   52%   20%  +0.09  +0.05  -2.10  +2.10
+  LEAN           38   47%   16%  -0.04  -0.02  -1.90  +1.70
+  STAND DOWN     27   44%   11%  -0.12  -0.08  -2.40  +1.20
+```
+
+Every press is graded against the last press of its session: how far price went
+**in the rated direction**, in expected moves. Cut by band, by setup and by
+symbol, with `--csv` for the per-read detail. That is how the setup strengths in
+`odte/setups.py` stop being priors — if STRONG doesn't separate from LEAN after
+a month, the weights are wrong and the grader will say so.
 
 ## Run
 
@@ -244,6 +265,29 @@ grades each symbol against **the first read of the day**:
 The card shows the status, the point change, how far price has travelled in
 expected moves, and how long ago the first read was. `--fresh` starts a new
 chain if you want to re-baseline mid-session.
+
+## Grading the reads
+
+```bash
+./bullbear grade                       # every session recorded so far
+./bullbear grade --date 2026-09-25     # one day
+./bullbear grade --csv out/grades.csv  # per-read detail
+```
+
+For each press except a session's last, the grader computes
+
+```
+progress = (final spot - spot at the read) / expected move,  signed by the rated side
+```
+
+A **hit** is progress above zero; **1 EM** means the read paid a full expected
+move, which for a 0DTE entry is roughly the line between a scratch and a real
+winner. Results are bucketed by rating band, by setup key and by symbol.
+
+Two honest limits. It settles against the session's last press, not against an
+entry and exit you actually took — no slippage, no theta, no stop. And small
+samples lie: a band or setup needs 30+ reads before its numbers mean anything.
+It is evidence for retuning weights, not a P&L statement.
 
 ## The browser button
 

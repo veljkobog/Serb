@@ -383,10 +383,14 @@ class TradierTapeStream:
         return self.tape
 
     def run_for(self, symbols: Sequence[str], seconds: float) -> SideTape:
-        """Blocking convenience wrapper: stream for `seconds`, then stop."""
+        """Blocking wrapper: stream for `seconds`, or until the stream dies."""
         self.start(symbols)
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline and not self._stop.is_set():
+            # A dropped or refused stream should surface now, not at the
+            # deadline — the caller has a scan waiting on it.
+            if self._thread is not None and not self._thread.is_alive():
+                break
             time.sleep(0.25)
         return self.stop()
 
