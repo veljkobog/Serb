@@ -141,6 +141,31 @@ notepad rotation.json
 rotation cycles through that list and remembers where it stopped, so the same
 companies do not come back on Thursday.
 
+**2b. Optional: an independent check on every email (Hunter.io).**
+
+Without this, an email on the sheet is Apollo's assertion and nothing else.
+With it, each address is verified before you see it, and rows that have a
+website but no contact get one looked up.
+
+```powershell
+setx HUNTER_API_KEY "your-key"
+```
+
+Open a new PowerShell window afterwards. Three columns appear on the sheet:
+
+| column | means |
+| --- | --- |
+| `email_source` | `apollo` or `hunter` -- never blank when an email is present |
+| `email_check` | `deliverable`, `risky`, `undeliverable`, `unknown`, or `not-checked` |
+| `email_score` | Hunter's 0-100 confidence |
+
+An `undeliverable` row is kept and sorted below the rows you can mail, never
+deleted. Verification runs before discovery, because on a small plan the quota
+runs out and protecting the addresses you are about to send matters more than
+finding one more. `hunter_daily_cap` in rotation.json is the ceiling -- two
+sheets of 15 rows can ask for 60 lookups, and Hunter's free plan allows 25 a
+month.
+
 **3. See what tomorrow would do, without fetching anything:**
 
 ```powershell

@@ -48,6 +48,10 @@ CONFIG_DEFAULTS = {
     "target_rows": 15,
     "max_results": 150,
     "daily_credit_cap": 40,
+    # Two sheets of 15 rows can ask for 60 Hunter lookups in a morning (verify
+    # every email, then search every domain without one). The free plan allows
+    # 25 a MONTH, so this is a ceiling, not a target.
+    "hunter_daily_cap": 60,
 }
 
 
@@ -165,6 +169,20 @@ def scrape(config: dict, category: str, metro: str, out_path: str,
     return scraper.main(argv)
 
 
+def mailable(row: dict) -> bool:
+    """An address worth putting in front of a human.
+
+    An undeliverable one is not. It stays on the sheet -- the company is still
+    a target and a vanished row teaches nothing -- but it must not outrank a
+    row you can actually mail.
+    """
+    import hunter
+
+    if not (row.get("email") or "").strip():
+        return False
+    return (row.get("email_check") or "") in hunter.SENDABLE
+
+
 def enrich_contacts(config: dict, csv_path: str) -> dict:
     """Owner name + work email + the headcount gate, in place on the CSV."""
     import apollo_people
@@ -233,9 +251,16 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
     # contractors skews small, so the rows it knows enough about to size are
     # the same rows it holds an owner for. A sheet of unsized names with no
     # emails is not a stricter screen, it is a worse one.
+    import hunter
+
+    checked = verify_contacts(config, kept)
+    for column in hunter.COLUMNS:
+        if column not in fieldnames:
+            fieldnames.append(column)
+
     order = {"QUALIFIED": 0, "REVIEW-UNSIZED": 1, "REVIEW": 2, "TOO-SMALL": 3}
     kept.sort(key=lambda r: (order.get(r.get("screen", ""), 4),
-                             0 if r.get("email") else 1))
+                             0 if mailable(r) else 1))
 
     with open(csv_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
@@ -245,7 +270,12 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
     return {
         "rows_before": len(rows),
         "rows_after": len(kept),
-        "emails": stats.emails,
+        # Counted off the finished sheet, not off Apollo's own tally. With a
+        # second source filling blanks, Apollo's count is no longer the
+        # sheet's count, and the smaller number would read as the truth.
+        "emails": sum(1 for r in kept if (r.get("email") or "").strip()),
+        "mailable": sum(1 for r in kept if mailable(r)),
+        "apollo_emails": stats.emails,
         "apollo_small_headcount": stats.too_small,
         "size_unknown": stats.size_unknown,
         "wrong_place": stats.wrong_place,
@@ -253,7 +283,37 @@ def enrich_contacts(config: dict, csv_path: str) -> dict:
         "credit_cap_unverified": stats.cap_unverified,
         "credits_spent": governor.spent,
         "notes": stats.notes,
+        "hunter": checked,
     }
+
+
+def verify_contacts(config: dict, rows: List[dict]) -> dict:
+    """Hunter's second opinion on the emails, and a fallback for the blanks.
+
+    Optional by design. With no key the sheet is exactly what it was before,
+    every email marked apollo and unchecked -- never silently presented as
+    verified by something that never ran.
+    """
+    import hunter
+
+    key = config.get("hunter_key") or hunter.resolve_api_key(None)
+    if not key:
+        return {"skipped": "no HUNTER_API_KEY -- emails are Apollo's word alone"}
+
+    try:
+        with hunter.HunterClient(
+            key,
+            cache=hunter.HunterCache(os.path.join(HERE, ".hunter-cache.json")),
+            cap=config.get("hunter_daily_cap", 60),
+            # Hunter allows far more than this; the delay is politeness, and it
+            # costs 3 seconds across a 30-row morning.
+            min_delay=0.1,
+            verbose=True,
+        ) as client:
+            hunter.enrich_rows(rows, client)
+            return hunter.summary(client.stats, client.spent)
+    except hunter.HunterUnavailable as exc:
+        return {"skipped": str(exc)}
 
 
 def read_report(csv_path: str) -> dict:
@@ -617,6 +677,9 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
         print("\n  (!) APOLLO_API_KEY not set -- no owner names or emails")
     if not os.environ.get("HUBSPOT_TOKEN"):
         print("  (!) HUBSPOT_TOKEN not set -- rows will NOT be CRM-checked")
+    if not (config.get("hunter_key") or os.environ.get("HUNTER_API_KEY")):
+        print("  (i) no Hunter key -- emails carry Apollo's own status and "
+              "nothing independent checks them")
     if not google_key:
         # The key went missing from a live config once and nothing said so:
         # the plan warned about the other two keys, not this one, and Google
@@ -624,6 +687,44 @@ def print_plan(config: dict, status: dict, when: dt.date, export_dir: str) -> No
         print("  (!) no Google key (rotation.json google_key or "
               "GOOGLE_MAPS_API_KEY) -- no review counts, so rows Apollo "
               "cannot size come out unsized")
+
+
+def print_hunter(check: dict) -> None:
+    """What the second opinion actually said.
+
+    Silence here would let a skipped pass look like a clean one -- the whole
+    point of the pass is that an unchecked email and a checked one are
+    different things.
+    """
+    if not check:
+        return
+    if check.get("skipped"):
+        print(f"    Hunter: not run ({check['skipped']})")
+        return
+
+    parts = []
+    if check.get("verified"):
+        parts.append(f"{check['verified']} checked "
+                     f"({check.get('deliverable', 0)} deliverable, "
+                     f"{check.get('risky', 0)} risky, "
+                     f"{check.get('undeliverable', 0)} dead, "
+                     f"{check.get('unknown', 0)} unknown)")
+    if check.get("found"):
+        generic = check.get("found_generic") or 0
+        found = f"{check['found']} email(s) it found that Apollo lacked"
+        if generic:
+            found += f" ({generic} a shared mailbox)"
+        parts.append(found)
+    if check.get("errors"):
+        parts.append(f"{check['errors']} lookup error(s)")
+    if check.get("cap_hit"):
+        parts.append("stopped at the Hunter cap -- some rows unchecked")
+    if check.get("quota_unverified"):
+        parts.append("could not read the plan's remaining quota, so only the "
+                     "local cap applied")
+    if parts:
+        print(f"    Hunter: {'; '.join(parts)} "
+              f"[{check.get('lookups_spent', 0)} lookups]")
 
 
 def print_enrichment(status: dict) -> None:
@@ -653,7 +754,13 @@ def print_enrichment(status: dict) -> None:
 
         emails = detail.get("emails") or 0
         share = f"{emails / rows:.0%}" if rows else "n/a"
-        print(f"    {rows} rows, {emails} with an email ({share})")
+        line = f"    {rows} rows, {emails} with an email ({share})"
+        dead = emails - (detail.get("mailable") or emails)
+        if dead > 0:
+            # An address Hunter rejected is on the sheet but must not be
+            # counted as reach.
+            line += f", {dead} of them undeliverable"
+        print(line)
 
         notes = []
         if detail.get("apollo_small_headcount"):
@@ -673,6 +780,7 @@ def print_enrichment(status: dict) -> None:
             notes.append(f"{spent} credits")
         if notes:
             print(f"    {'; '.join(notes)}")
+        print_hunter(detail.get("hunter") or {})
 
         crm = detail.get("crm") or {}
         counts = crm.get("counts") or {}

@@ -1,6 +1,7 @@
 """The 9am orchestrator: rotation, reporting, and failing loudly."""
 
 import datetime as dt
+import inspect
 import json
 import os
 import sys
@@ -408,6 +409,103 @@ class RanTodayAlreadyTest(unittest.TestCase):
         status = daily.run(CONFIG, self.tmp.name, MONDAY, self.state,
                            dry_run=True)
         self.assertIn("already been pulled", status["note"])
+
+
+class HunterWiringTest(unittest.TestCase):
+    """Hunter is the only independent check on an email before it is mailed, so
+    a pass that did not run must never look like one that did."""
+
+    def render(self, detail):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            daily.print_hunter(detail)
+        return buf.getvalue()
+
+    def test_a_dead_address_never_outranks_one_you_can_mail(self):
+        rows = [
+            {"screen": "QUALIFIED", "email": "dead@x.com",
+             "email_check": "undeliverable"},
+            {"screen": "QUALIFIED", "email": "", "email_check": ""},
+            {"screen": "QUALIFIED", "email": "live@x.com",
+             "email_check": "deliverable"},
+        ]
+        rows.sort(key=lambda r: 0 if daily.mailable(r) else 1)
+        self.assertEqual(rows[0]["email"], "live@x.com")
+
+    def test_an_unchecked_email_is_still_mailable(self):
+        """No Hunter key, or a lookup that failed, must not empty the sheet."""
+        self.assertTrue(daily.mailable({"email": "a@b.com", "email_check": ""}))
+        self.assertTrue(daily.mailable({"email": "a@b.com",
+                                        "email_check": "not-checked"}))
+
+    def test_no_email_is_not_mailable(self):
+        self.assertFalse(daily.mailable({"email": "", "email_check": ""}))
+
+    def test_a_skipped_pass_says_so_rather_than_printing_nothing(self):
+        out = self.render({"skipped": "no HUNTER_API_KEY"})
+        self.assertIn("not run", out)
+        self.assertIn("HUNTER_API_KEY", out)
+
+    def test_the_verdicts_reach_the_morning_report(self):
+        out = self.render({"verified": 4, "deliverable": 3, "risky": 0,
+                           "undeliverable": 1, "unknown": 0, "found": 2,
+                           "lookups_spent": 6})
+        self.assertIn("4 checked", out)
+        self.assertIn("1 dead", out)
+        self.assertIn("2 email(s) it found", out)
+        self.assertIn("6 lookups", out)
+
+    def test_a_cap_that_cut_the_pass_short_is_reported(self):
+        out = self.render({"verified": 2, "cap_hit": True, "lookups_spent": 2})
+        self.assertIn("cap", out)
+
+    def test_an_unverified_quota_is_reported(self):
+        out = self.render({"verified": 1, "quota_unverified": True,
+                           "lookups_spent": 1})
+        self.assertIn("quota", out)
+
+    def test_no_key_means_no_lookups_rather_than_a_crash(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            out = daily.verify_contacts({}, [{"email": "a@b.com"}])
+        self.assertIn("HUNTER_API_KEY", out.get("skipped", ""))
+
+    def test_the_sheet_gains_the_source_columns(self):
+        import hunter
+        self.assertEqual(hunter.COLUMNS,
+                         ("email_source", "email_check", "email_score"))
+        source = inspect.getsource(daily.enrich_contacts)
+        self.assertIn("hunter.COLUMNS", source)
+
+    def test_the_email_count_is_the_sheets_not_apollos(self):
+        """Apollo's tally cannot see what Hunter filled in. Reporting it would
+        under-count a sheet that is actually contactable."""
+        source = inspect.getsource(daily.enrich_contacts)
+        self.assertIn('"emails": sum(', source)
+        self.assertIn('"apollo_emails": stats.emails', source)
+
+    def test_undeliverable_addresses_are_not_counted_as_reach(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        status = {"sheets": [{"file": "s.csv", "rows": 10}],
+                  "enrichment": [{"sheet": "s.csv", "emails": 4,
+                                  "mailable": 3}]}
+        with redirect_stdout(buf):
+            daily.print_enrichment(status)
+        self.assertIn("1 of them undeliverable", buf.getvalue())
+
+    def test_the_plan_says_when_nothing_checks_the_emails(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with redirect_stdout(buf):
+                daily.print_plan(daily.load_config(os.path.join(
+                    os.path.dirname(HERE), "rotation.example.json")),
+                    {"planned": []}, MONDAY, "out")
+        self.assertIn("no Hunter key", buf.getvalue())
 
 
 class MissingGoogleKeyTest(unittest.TestCase):

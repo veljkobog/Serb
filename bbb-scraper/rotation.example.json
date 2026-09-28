@@ -230,5 +230,21 @@
   ],
   "min_google_reviews": 30,
   "max_google_lookups": 40,
-  "google_key": ""
+  "google_key": "",
+  "_hunter": [
+    "Hunter.io is a second opinion on the contacts, and optional. Leave the",
+    "key blank and the sheet is what it always was: every email is Apollo's,",
+    "carrying Apollo's own status and nothing that independently checked it.",
+    "",
+    "With a key (HUNTER_API_KEY in the environment, or hunter_key here) each",
+    "email on the sheet is verified before you see it, and rows that have a",
+    "website but no contact get one looked up. Verification runs first: a dead",
+    "address costs sender reputation, which is dearer than a missing lead.",
+    "",
+    "hunter_daily_cap is a ceiling. Two sheets of 15 rows can ask for 60",
+    "lookups in a morning; the free plan allows 25 a month, so set this to",
+    "match your plan rather than leaving it at the default."
+  ],
+  "hunter_daily_cap": 60,
+  "hunter_key": ""
 }
