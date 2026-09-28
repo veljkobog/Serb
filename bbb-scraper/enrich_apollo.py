@@ -296,6 +296,7 @@ class ApolloClient:
         domain = normalize_domain(org.get("website_url") or org.get("domain"))
         if domain and not listing.website:
             listing.website = domain
+            listing.website_source = f"apollo-{confidence}"
             self.stats.websites_filled += 1
 
 

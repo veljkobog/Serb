@@ -76,6 +76,10 @@ FIELD_ORDER = [
     # and carries the org id forward so the people-match can scope to it.
     "apollo_org_id",
     "apollo_match",
+    # Which source the website came from. BBB withholds it on most listings,
+    # so a domain on the sheet may be BBB's, Apollo's or Google's -- and what
+    # you trust it for (a Hunter lookup, an outreach link) depends on which.
+    "website_source",
 ]
 
 # Fields that a search card rarely carries -- filtering on any of these means
@@ -115,6 +119,7 @@ class Listing:
     google_match: str = ""
     apollo_org_id: str = ""
     apollo_match: str = ""
+    website_source: str = ""
 
     def dedupe_key(self) -> Optional[str]:
         """Normalized website, falling back to phone. None if neither is known.
@@ -181,6 +186,7 @@ class Listing:
             # path outright. as_row and FIELD_ORDER must agree.
             "apollo_org_id": self.apollo_org_id,
             "apollo_match": self.apollo_match,
+            "website_source": self.website_source,
         }
 
 

@@ -152,6 +152,71 @@ class GoogleMatchTest(unittest.TestCase):
         self.assertEqual(enrich_google.match_confidence(listing, place), "medium")
 
 
+class GoogleWebsiteFillTest(unittest.TestCase):
+    """Google already returns the website -- it is in the field mask because
+    match_confidence scores on it -- and it used to be discarded. BBB withholds
+    the website on most listings, and a domain is what an email lookup needs,
+    so throwing it away cost the sheet its contactability: a live Raleigh pull
+    had 3 domains on 15 rows while Google had matched 14 of them."""
+
+    def fill(self, listing, place):
+        client = enrich_google.PlacesClient.__new__(enrich_google.PlacesClient)
+        client.cache = enrich_google.PlacesCache(None)
+        client.stats = enrich_google.GoogleStats()
+        client.min_delay = 0.0
+        client.verbose = False
+        client.search = lambda _l: place
+        client.enrich(listing)
+        return client
+
+    def test_a_missing_website_is_filled_from_the_match(self):
+        listing = Listing(company_name="Bond Roofing", city="Raleigh",
+                          phone="+19197877979")
+        self.fill(listing, {"displayName": {"text": "Bond Roofing Company"},
+                            "nationalPhoneNumber": "(919) 787-7979",
+                            "websiteUri": "https://www.bondroofing.com/contact",
+                            "userRatingCount": 119})
+        self.assertEqual(listing.website, "bondroofing.com")
+        self.assertEqual(listing.website_source, "google-high")
+
+    def test_bbbs_own_website_is_never_overwritten(self):
+        listing = Listing(company_name="Acme", city="Raleigh",
+                          website="fromBBB.com".lower())
+        self.fill(listing, {"displayName": {"text": "Acme"},
+                            "formattedAddress": "1 Main St, Raleigh, NC",
+                            "websiteUri": "https://something-else.com"})
+        self.assertEqual(listing.website, "frombbb.com")
+        self.assertEqual(listing.website_source, "")
+
+    def test_a_low_confidence_match_never_donates_a_domain(self):
+        """Attaching another company's domain would send the email lookup
+        downstream after a stranger."""
+        listing = Listing(company_name="Acme Plumbing", city="Wilmington")
+        self.fill(listing, {"displayName": {"text": "Bobs Roofing"},
+                            "formattedAddress": "9 Other Rd, Raleigh, NC",
+                            "websiteUri": "https://bobsroofing.com"})
+        self.assertEqual(listing.website, "")
+        self.assertEqual(listing.website_source, "")
+
+    def test_a_match_with_no_website_changes_nothing(self):
+        listing = Listing(company_name="Acme", city="Raleigh",
+                          phone="+19195550100")
+        client = self.fill(listing, {
+            "displayName": {"text": "Acme"},
+            "nationalPhoneNumber": "(919) 555-0100"})
+        self.assertEqual(listing.website, "")
+        self.assertEqual(client.stats.websites_filled, 0)
+
+    def test_the_fill_is_counted_for_the_run_summary(self):
+        listing = Listing(company_name="Acme", city="Raleigh",
+                          phone="+19195550100")
+        client = self.fill(listing, {
+            "displayName": {"text": "Acme"},
+            "nationalPhoneNumber": "(919) 555-0100",
+            "websiteUri": "https://acme.com"})
+        self.assertEqual(client.stats.websites_filled, 1)
+
+
 class PlacesClientTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

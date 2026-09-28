@@ -125,6 +125,7 @@ class GoogleStats:
     no_result: int = 0
     errors: int = 0
     capped: int = 0
+    websites_filled: int = 0
 
 
 class PlacesClient:
@@ -216,6 +217,24 @@ class PlacesClient:
         self.stats.matched += 1
         if confidence == "low":
             self.stats.low_match += 1
+
+        # The website was already fetched and paid for -- it is in the field
+        # mask because match_confidence scores on it -- and used to be thrown
+        # away. BBB withholds the website on most listings, and a domain is
+        # what an email lookup needs, so discarding it cost the sheet its
+        # contactability: 3 of 15 rows had a domain on a live Raleigh pull
+        # while Google had matched 14.
+        #
+        # Never overwritten: BBB's own value and Apollo's both outrank this.
+        # Never taken from a low-confidence match either -- that would attach
+        # some other company's domain, and the email lookup downstream would
+        # then find a stranger at it.
+        if not listing.website and confidence != "low":
+            found = normalize_domain(place.get("websiteUri"))
+            if found:
+                listing.website = found
+                listing.website_source = f"google-{confidence}"
+                self.stats.websites_filled += 1
 
 
 @dataclass

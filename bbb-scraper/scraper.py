@@ -1378,6 +1378,9 @@ def finish(args, result: RunResult, output: str, filters=None, locations=None,
         print(f"  google lookups  : {google_stats.looked_up} billed, "
               f"{google_stats.cached} cached, {google_stats.matched} matched "
               f"({google_stats.low_match} low-confidence)")
+        if google_stats.websites_filled:
+            print(f"                    {google_stats.websites_filled} website(s) "
+                  f"recovered that BBB withheld")
         if google_stats.no_result or google_stats.errors or google_stats.capped:
             print(f"                    {google_stats.no_result} no result, "
                   f"{google_stats.errors} errors, {google_stats.capped} skipped at cap")
@@ -1483,6 +1486,7 @@ def write_report(args, result, output, filters, locations, label, **counts) -> N
             "billed": google.looked_up, "cached": google.cached, "matched": google.matched,
             "low_confidence": google.low_match, "no_result": google.no_result,
             "errors": google.errors, "skipped_at_cap": google.capped,
+            "websites_filled": google.websites_filled,
         }
 
     path = args.report
