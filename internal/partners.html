@@ -125,6 +125,7 @@ select,.filters input{
 .el-yes{background:#123324;color:#5fd693;border:1px solid #1e5c40}
 .el-via{background:#1a2740;color:#7fb0e8;border:1px solid #2c4570}
 .el-no {background:#3a2020;color:#e8a396;border:1px solid #6b2f2f}
+.el-warn{background:#3a2f10;color:var(--hi-vis);border:1px solid #6b5218}
 .card .kind{
   display:inline-block;margin-bottom:7px;font-size:9.5px;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;padding:3px 8px;border-radius:5px;
@@ -483,8 +484,8 @@ const PARTNERS = [
  footprint:"Nine brands across six Southeastern states", states:["GA", "SC", "FL", "AL", "WV", "TN"], brands:["McGee Heating and Air (GA/SC)", "Castle Air (Englewood, FL)", "Childress Heating & Cooling (Gadsden, AL)", "Childers Air Plumbing & Electric (Beckley, WV)", "Holsenback Heating and Air (Monetta, SC)"], buyBox:"Residential HVAC, plumbing and electrical. Partners keep their own brand and leadership.", sourcingNotes:"Explicitly targets smaller cities and towns in the Southeast, not metros — the natural home for a good operator in a market Apex or Champions would pass on. Nine brands across six states already.",
  deals:[{when:"Recent",what:"Castle Air (FL) and Childress Heating & Cooling (AL)",note:""},{when:"Recent",what:"Childers Air Plumbing & Electric (WV); Holsenback Heating and Air (SC)",note:""},{when:"Launch",what:"McGee Heating and Air",note:"Grove Mountain Partners launches Service Country"}], links:[], confidence:"verified"},
 
-{id:"solidaire", name:"Solidaire", kind:"platform", el:{d:"2026-03-02",deal:57350626602}, hsId:52360638837, url:"https://solidaire.com", hsVertical:"Capital Partners", hsName:"Solidaire", sponsor:"", verticals:["hvac"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"",
+{id:"solidaire", name:"Solidaire", kind:"platform", el:{d:"2026-03-02",deal:57350626602,dup:["2026-08-18"]}, hsId:52360638837, url:"https://solidaire.com", hsVertical:"Capital Partners", hsName:"Solidaire", sponsor:"", verticals:["hvac"], hq:"",
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"Two Closed-Won records: the original 2 Mar 2026 and a second dated 18 Aug 2026. Confirm whether the second is a new scope or a duplicate before anyone quotes an engagement date. Nothing else is documented for this partner — no vertical, geography or buy box — so it is not safe to route a deal here yet.",
  deals:[], links:[], confidence:"unverified"},
 
 /* ---------- Commercial mechanical / facility ---------- */
@@ -501,7 +502,7 @@ const PARTNERS = [
  links:[{label:"Alpine — Orion",url:"https://alpineinvestors.com/update/alpine-launches-orion-group/"}],
  confidence:"verified"},
 
-{id:"pine", name:"Pine Services Group", kind:"platform", el:{d:"2026-05-04",deal:59963605140}, hsId:54711479678, url:"https://pineservicesgroup.com", hsLinkedin:"https://linkedin.com/company/pine-services-group", hsVertical:"Portfolio Company", hsName:"Pine Services Group", sponsor:"Evergreen Services Group",
+{id:"pine", name:"Pine Services Group", kind:"platform", el:{d:"2026-05-04",deal:59963605140,dup:["2025-10-16"]}, hsId:54711479678, url:"https://pineservicesgroup.com", hsLinkedin:"https://linkedin.com/company/pine-services-group", hsVertical:"Portfolio Company", hsName:"Pine Services Group", sponsor:"Evergreen Services Group",
  verticals:["it"], hq:"San Francisco, CA",
  footprint:"Evergreen's dedicated ERP vertical — North America plus the UK",
  states:["NC", "FL", "TX"],
@@ -719,13 +720,13 @@ const PARTNERS = [
  confidence:"verified"},
 
 /* ---------- Paving ---------- */
-{id:"heartland", name:"Heartland Paving Partners", kind:"platform", sponsor:"Soundcore Capital Partners",
+{id:"heartland", name:"Heartland Paving Partners", el:{approved:"2026-08-14"}, kind:"platform", sponsor:"Soundcore Capital Partners",
  verticals:["asphalt"], hq:"",
  footprint:"Eight-plus acquisitions across the Midwest, Northeast and Mid-Atlantic",
  states:["IL","WI","OH","IN","MI","NJ","NY","PA","MD","VA","MO","KY"],
  brands:["ACI Asphalt & Concrete","S&K Asphalt and Concrete","Klekamp & Company","Asphalt Solutions","ProCru","Professional Paving and Concrete","Garden State Pavement Solutions","Poblocki Paving","Macadam Company"],
  buyBox:"Commercial paving — pavement maintenance, rehabilitation, repair, milling, resurfacing and new construction. Acquired companies keep their own brand and leadership.",
- sourcingNotes:"No signed EL \u2014 there is no deal record for Heartland Paving Partners in the Client Pipeline at all. Everything below is market research, not a live partner mandate. Paving is under-covered by most intermediaries, and Heartland has closed nine deals in about two years. Any commercial paving or pavement-maintenance business from Chicago to the Mid-Atlantic is a live target.",
+ sourcingNotes:"Approved for an EL on 14 Aug 2026 but there is no Closed-Won record in the Client Pipeline — either it was never signed or the deal was never moved. Worth chasing, because until it is resolved this is research rather than a live mandate and should not be presented to a seller as one of our partners. Paving is under-covered by most intermediaries, so the relationship is worth having: Heartland has closed nine deals in about two years from Chicago to the Mid-Atlantic.",
  deals:[{when:"2025",what:"Macadam Company",note:"Mid-Atlantic, ~40 years in business"},
         {when:"May 2025",what:"Poblocki Paving",note:"Wisconsin / Midwest"},
         {when:"Jan 2025",what:"Garden State Pavement Solutions",note:"New Jersey"},
@@ -743,7 +744,7 @@ const PARTNERS = [
  sourcingNotes:"Formed Feb 2022 from UAS, SMG and Alert Alarm of Hawaii, and buying steadily since. The house-of-brands promise is explicit, which lands well with owners whose name is on the building. Fire and security together, so a mixed alarm/sprinkler book does not need splitting.",
  deals:[{when:"2022–25",what:"PASS Security (MO), Gallaher & Associates (TN), Atlas Security",note:"Extended beyond the founding three businesses"},{when:"Feb 2022",what:"Zeus formed from UAS, SMG of Chicago and Alert Alarm of Hawaii",note:""}], links:[], confidence:"verified"},
 
-{id:"cfp", name:"Commercial Fire Protection (CFP)", kind:"platform", el:{d:"2026-01-16",deal:54011040054}, hsId:49252531620, url:"https://www.fireprotected.com", hsLinkedin:"https://linkedin.com/company/commercial-fire-protection", hsVertical:"Portfolio Company", hsName:"Commercial Fire Protection", hsLoc:"Nevada", sponsor:"",
+{id:"cfp", name:"Commercial Fire Protection (CFP)", kind:"platform", el:{d:"2026-01-16",deal:54011040054}, hsId:49252531620, url:"https://www.fireprotected.com", hsLinkedin:"https://linkedin.com/company/commercial-fire-protection", hsVertical:"Portfolio Company", hsName:"Commercial Fire Protection", hsLoc:"Nevada", sponsor:"Gauge Capital",
  verticals:["fire"], hq:"",
  footprint:"Western and southern U.S. — San Francisco, San Diego, Denver, Salt Lake City, Portland, Dallas, Austin", states:["CA", "AZ", "NV", "CO", "UT", "OR", "WA", "TX"], brands:[],
  buyBox:"Fire alarm, sprinkler, standpipe, extinguisher, suppression, emergency lighting and monitoring across commercial, multifamily, retail, schools and municipalities.",
@@ -786,7 +787,7 @@ const PARTNERS = [
  links:[{label:"Acquisitions",url:"https://netsurit.com/en-us/acquisition/"}],
  confidence:"verified"},
 
-{id:"procern", name:"ProCern Technology Solutions", kind:"platform", el:{d:"2025-10-20",deal:46558020182}, hsId:42179582497, url:"https://procern.com", hsLinkedin:"https://linkedin.com/company/procern-technology-solutions", hsVertical:"Portfolio Company", hsName:"ProCern Technology Solutions", hsLoc:"Broomfield, Colorado", sponsor:"",
+{id:"procern", name:"ProCern Technology Solutions", kind:"platform", el:{d:"2025-10-20",deal:46558020182}, hsId:42179582497, url:"https://procern.com", hsLinkedin:"https://linkedin.com/company/procern-technology-solutions", hsVertical:"Portfolio Company", hsName:"ProCern Technology Solutions", hsLoc:"Broomfield, Colorado", sponsor:"Seaside Equity Partners",
  verticals:["it"], hq:"Broomfield, CO",
  footprint:"Colorado base, with clients and acquisitions across the U.S.",
  states:["CO"],
@@ -831,7 +832,7 @@ const PARTNERS = [
  footprint:"Simcoe County and Central Ontario — a coordinated network of specialist brands", states:[], brands:[], buyBox:"Integrated facility services — fire, HVAC, plumbing and restoration.", sourcingNotes:"Canadian, Ontario-based. Along with Alphi, one of only two partners that can transact north of the border, so route Ontario leads here. Multi-trade plus restoration under one roof is unusual and widens what they can absorb.", deals:[], links:[], confidence:"partial"},
 
 {id:"skycrest", name:"Skycrest Roof", founded:2024, kind:"platform", el:{d:"2025-07-30",deal:41104398250}, hsId:37009102920, url:"https://skycrestroof.com", hsName:"Skycrest Roof Co", sponsor:"Shore Capital Partners", verticals:["roofing"], hq:"Denver, CO",
- footprint:"Denver base, with partners in West Florida, Colorado and Nebraska", states:["CO", "FL", "NE"], brands:["Anthony C. Leonard Roofing", "Bulldog Roofing"], buyBox:"Roofing — inspections, replacement, maintenance, repair, storm response and solar.", sourcingNotes:"Formed Jan 2025 by Shore Capital with two founding partners and an openly national ambition, so almost every market is white space for them. Early-platform economics: the next few sellers in get founder-level terms.", deals:[{when:"Jan 2025",what:"Shore Capital forms Skycrest Roof",note:"Anthony C. Leonard Roofing and Bulldog Roofing join as the founding partners"}], links:[], confidence:"verified"},
+ footprint:"Denver base, with partners in West Florida, Colorado and Nebraska", states:["CO", "FL", "NE"], brands:["Anthony C. Leonard Roofing", "Bulldog Roofing"], buyBox:"Roofing — inspections, replacement, maintenance, repair, storm response and solar.", sourcingNotes:"Formed Jan 2025 by Shore Capital with two founding partners and an openly national ambition, so almost every market is white space. Early-platform economics: the next few sellers in get founder-level terms. Note Shore Capital itself has no engagement of its own — it appears only as an associated company on this record, so the relationship runs through Skycrest.", deals:[{when:"Jan 2025",what:"Shore Capital forms Skycrest Roof",note:"Anthony C. Leonard Roofing and Bulldog Roofing join as the founding partners"}], links:[], confidence:"verified"},
 
 {id:"bakery", name:"Baxter's Bakery", intl:["Ontario, Canada"], kind:"platform", el:{d:"2025-08-26",deal:41598072223}, hsId:37441155394, url:"https://www.baxtersbakery.ca", hsVertical:"Capital Partners", hsName:"Baxter's Bakery", hsLoc:"Ontario", sponsor:"",
  verticals:["other"], hq:"Toronto, Ontario",
@@ -851,6 +852,12 @@ const PARTNERS = [
  deals:[], links:[], confidence:"unverified"},
 
 /* ---------- Sponsors / capital ---------- */
+{id:"galaxy", name:"Galaxy Service Partners", kind:"platform", el:{d:"2026-09-21"}, sponsor:"", verticals:["facilities"], hq:"New York, NY", founded:2025, footprint:"Ten acquisitions since launching in 2025 — buying nationwide", states:["CA", "CO", "VA", "WI"], brands:["AM/PM Door (Los Angeles, CA)", "Sylvester's Maintenance & Mechanical (Denver, CO)", "Central Door Solutions (Plover & New Berlin, WI)", "Fox Valley Overhead Door (Appleton, WI)", "RCI Doors"], buyBox:"Commercial door, automatic gate and access control businesses, anywhere in the country. Management teams and employees stay in place.", sourcingNotes:"A third buyer in commercial doors and access, alongside Cobalt and IOS — run all three on any door, gate or access-control business and the tension is real. Their structure is the differentiator: owners take chips off the table but keep unit-level ownership, so they draw annual distributions and get a second bite at a full exit. That answers the objection from owners who are not ready to let go.", deals:[{when:"2026",what:"Central Door Solutions (WI)",note:"Tenth acquisition since launch; Central Door had just bought Fox Valley Overhead Door in Appleton"},{when:"2026",what:"Sylvester's Maintenance & Mechanical",note:"Denver CO plus Chesapeake VA"},{when:"2026",what:"AM/PM Door",note:"Los Angeles commercial overhead door and automatic gate"}], links:[{label:"galaxyservicepartners.com",url:"https://galaxyservicepartners.com/"}], confidence:"verified", url:"https://galaxyservicepartners.com"},
+
+{id:"leap", name:"Leap Partners", kind:"platform", el:{d:"2026-09-09"}, sponsor:"", verticals:["hvac", "plumbing", "electrical"], hq:"Nashville, TN", footprint:"28+ businesses across eight Southeastern states in about three and a half years", states:["TN", "AL", "FL", "GA", "KY", "MO", "NC", "WV", "VA"], brands:["Drain Werks (AL)", "George Plumbing (Hartselle, AL)", "Cool Wizard Air Conditioning (Tampa, FL)", "Paradise Home Services (Navarre, FL)", "Air Control Heating and Air Conditioning (Lexington, KY)", "Master Plumbers Heating and Cooling (Greensboro, NC)", "Van's Electric (Franklin, NC)", "Patriot Services (Chattanooga, TN)", "Tim Ferguson Plumbing, Air & Electric (Jackson, TN)", "Appalachian Heating (WV/VA)"], buyBox:"Small and mid-sized residential HVAC, plumbing and electrical businesses across the Southeast.", sourcingNotes:"One of the fastest cadences on the roster — 28 deals in roughly three and a half years. Competes head-on with Service Country and Southern Home Services for Southeastern deals, so running the three together is the obvious way to create a market for a seller in AL, TN, GA or the Carolinas.", deals:[{when:"Sep 2026",what:"Van's Electric, Franklin NC",note:"Electrical"},{when:"May 2026",what:"Air Hawk Heating & Cooling",note:""},{when:"Jul 2025",what:"Cool Wizard Air Conditioning",note:"Tampa Bay"},{when:"Oct 2024",what:"Appalachian Heating",note:"Entry into West Virginia; serving WV and VA since 1948"}], links:[], confidence:"verified", url:"https://theleappartners.com"},
+
+{id:"oharas", name:"O'Hara's Son Roofing", kind:"platform", el:{d:"2026-08-28"}, sponsor:"Angeles Equity Partners (March 2024)", verticals:["roofing"], hq:"Chicago, IL", founded:1987, footprint:"National commercial and industrial roofer — licensed in 48 states, top 20 nationally", states:["IL", "FL", "NJ", "TX", "AZ", "PA"], brands:["Starkweather Roofing (AZ)", "Total Systems Roofing (Crystal Lake, IL)", "CP Rankin (Chalfont, PA)"], buyBox:"Commercial and industrial roofing contractors.", sourcingNotes:"Commercial and industrial, not residential — same lane as Roofing Corp of America, and the two should be run against each other. Licensed in 48 states, so geography is rarely the blocker; scale and service capability are what they are buying.", deals:[{when:"Jan 2026",what:"CP Rankin, Chalfont PA",note:"Reported as a seven-location commercial roofer; verify before relying on the count"},{when:"Jun 2025",what:"Total Systems Roofing, Crystal Lake IL",note:"Second add-on under Angeles; strengthened the Midwest"},{when:"May 2025",what:"Starkweather Roofing",note:"First add-on under Angeles; extended into the Southwest"},{when:"Mar 2024",what:"Angeles Equity Partners acquires O'Hara's Son Roofing",note:""}], links:[], confidence:"verified", url:"https://www.oharasson.com"},
+
 {id:"alpine", name:"Alpine Investors", kind:"sponsor", el:{d:"2025-08-01",deal:41193603734}, hsId:3270268167, url:"https://alpineinvestors.com", hsLinkedin:"https://linkedin.com/company/alpine-investors", hsVertical:"Capital Partners", hsName:"Alpine Investors", hsLoc:"San Francisco, California", sponsor:"",
  verticals:["capital","hvac","mep","it"], hq:"San Francisco, CA",
  footprint:"Backs Apex Service Partners, Orion Services Group, Cobalt Service Partners and Evergreen Services Group",
@@ -869,7 +876,7 @@ const PARTNERS = [
  states:[],
  brands:["Any Hour Group","Ruppert Landscape"],
  buyBox:"Growth-oriented investments in consumer and services businesses.",
- sourcingNotes:"Two strong platforms in two different verticals. A landscaping lead and an HVAC lead can both go to Knox Lane companies — useful when we want one relationship to carry more than one deal.",
+ sourcingNotes:"Two platforms in two verticals — Any Hour Group in the trades and Ruppert Landscape in commercial grounds — so one relationship can carry more than one deal. Your roster also ties High Ground to Knox Lane; worth confirming how that entity relates before routing through it.",
  deals:[{when:"Jul 2021",what:"Any Hour Services investment forms Any Hour Group",note:""},
         {when:"Recent",what:"Acquired Ruppert Landscape",note:""}],
  links:[{label:"knoxlane.com",url:"https://www.knoxlane.com/"}],
@@ -925,9 +932,9 @@ const PARTNERS = [
 {id:"garnett", name:"Garnett Station Partners", kind:"sponsor", el:{d:"2026-06-17",deal:58406284148}, hsId:53284554782, url:"https://garnettstation.com", hsLinkedin:"https://linkedin.com/company/garnett-station-partners", hsVertical:"Capital Partners", hsName:"Garnett Station Partners", hsLoc:"New York, New York", sponsor:"",
  verticals:["capital","roofing"], hq:"New York, NY",
  footprint:"Backs Skybound Service Partners plus roofing investments",
- states:[], brands:["Skybound Service Partners","Technique Roofing Systems","Unicoat Industrial Roofing"],
+ states:[], brands:["Grizzly MEP (commercial MEP platform, launched May 2025)", "Skybound Service Partners", "Stiles Heating & Cooling (GA/SC)", "Excel Mechanical Contractors (Baltimore, MD)", "Air Design Systems", "Technique Roofing Systems", "Unicoat Industrial Roofing"],
  buyBox:"Residential roofing and exterior services; commercial/industrial roofing.",
- sourcingNotes:"Skybound launched June 2025 — a brand-new residential roofing and exteriors platform actively looking for its first wave of partners. Early-platform economics apply.",
+ sourcingNotes:"Two platforms worth knowing: Skybound Service Partners in residential roofing and exteriors, and Grizzly MEP, launched May 2025 under chairman Kelly Romano for commercial mechanical, electrical and plumbing. Grizzly has built out through about five partners — Stiles in Georgia and South Carolina, Excel Mechanical in Baltimore opening up DC/MD/VA, and Air Design Systems. A commercial MEP lead now has a Garnett home as well as Orion and NexCore.",
  deals:[{when:"Jun 2025",what:"Launched Skybound Service Partners",note:"Residential roofing and exterior services platform"}],
  links:[{label:"Partnerships",url:"https://garnettstation.com/partnerships/"}], confidence:"verified"},
 
@@ -953,10 +960,10 @@ const PARTNERS = [
 {id:"gauge", name:"Gauge Capital", kind:"sponsor", el:{d:"2025-10-05",deal:45224587847}, hsId:899382628, url:"http://www.gaugecapital.com", hsLinkedin:"https://linkedin.com/company/gauge-capital", hsVertical:"Capital Partners", hsName:"Gauge Capital", hsLoc:"Southlake, Texas", sponsor:"",
  verticals:["capital"], hq:"Southlake, TX", founded:2013,
  footprint:"Business services, technology, healthcare, food and consumer, financial services",
- states:[], brands:[],
+ states:[], brands:["Texas Direct Roofing", "APHIX", "Commercial Fire Protection"],
  buyBox:"Middle-market buyouts across business services and adjacent sectors.",
- sourcingNotes:"Broad mandate rather than a single trade platform. Worth a direct conversation to pin down which service verticals they are actively hunting right now.",
- deals:[], links:[], confidence:"partial"},
+ sourcingNotes:"Three touchpoints on this roster: Texas Direct Roofing, APHIX in commercial landscaping, and Commercial Fire Protection. That makes Gauge a relationship worth working directly — roofing, landscaping and fire-safety leads can all find a home without starting a new conversation.",
+ deals:[], links:[], confidence:"verified"},
 
 {id:"strattam", name:"Strattam Capital", kind:"sponsor", el:{d:"2025-10-08",deal:45489199485}, hsId:18017667733, url:"https://strattam.com", hsName:"Strattam", hsLoc:"San Francisco, Texas", sponsor:"",
  verticals:["capital","it"], hq:"Austin, TX",
@@ -995,7 +1002,7 @@ const PARTNERS = [
  footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"},
 
 {id:"highground", name:"High Ground", kind:"sponsor", el:{d:"2025-10-08",deal:45429641519}, sponsor:"", verticals:["capital"], hq:"",
- footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"", deals:[], links:[], confidence:"unverified"}
+ footprint:"", states:[], brands:[], buyBox:"", sourcingNotes:"Your roster lists this alongside Knox Lane and Any Hour, which suggests a connection, but nothing is documented — no vertical, geography or buy box. One call to Knox Lane would likely settle what this entity is and how deals should reach it.", deals:[], links:[], confidence:"unverified"}
 ];
 
 /* ---------- US tile-grid layout (col,row) ---------- */
@@ -1031,6 +1038,7 @@ const kindLabel = k => k==="sponsor" ? "Capital" : k==="platform+sponsor" ? "Pla
 const dealUrl = p => "https://app.hubspot.com/contacts/3983452/record/0-3/" + p.el.deal;
 const elSigned = p => !!(p.el && p.el.d);
 const elCovered = p => !!(p.el && p.el.via);
+const elApproved = p => !!(p.el && p.el.approved && !p.el.d);
 const fmtDate = d => { const [y,m,dd]=d.split("-");
   return dd.replace(/^0/,"")+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m-1]+" "+y; };
 const hsUrl = p => "https://app.hubspot.com/contacts/3983452/record/0-2/" + p.hsId;
@@ -1064,7 +1072,9 @@ function visible(){
     if(q){
       const hay = [p.name,p.sponsor,p.hq,p.footprint,p.buyBox,p.sourcingNotes,note(p.id),
                    p.url,p.hsVertical,p.hsName,p.hsLoc,(p.intl||[]).join(" "),
-                   (elSigned(p)?"el signed "+p.el.d:elCovered(p)?"under parent el "+p.el.via:"no el"),
+                   (elSigned(p)?"el signed "+p.el.d+" "+(p.el.dup||[]).join(" ")
+                     :elCovered(p)?"under parent el "+p.el.via
+                     :elApproved(p)?"el approved not signed "+p.el.approved:"no el"),
                    (p.brands||[]).join(" "),(p.states||[]).join(" "),
                    (p.verticals||[]).map(v=>VERTICALS[v]?VERTICALS[v].label:"").join(" "),
                    (p.deals||[]).map(d=>d.what+" "+(d.note||"")).join(" ")].join(" ").toLowerCase();
@@ -1169,6 +1179,7 @@ function renderGrid(){
       '<span class="kind '+kindClass(p.kind)+'">'+kindLabel(p.kind)+'</span>'+
       (elSigned(p)? '<span class="el-chip el-yes">EL signed</span>'
        : elCovered(p)? '<span class="el-chip el-via">Under parent EL</span>'
+       : elApproved(p)? '<span class="el-chip el-warn">Approved, not signed</span>'
        : '<span class="el-chip el-no">No EL</span>')+
       '<h4>'+esc(p.name)+'</h4>'+
       '<div class="meta">'+
@@ -1189,6 +1200,7 @@ function renderGrid(){
         (note(p.id)? ' &nbsp;&middot;&nbsp; <span style="color:var(--hi-vis)">has team note</span>':"")+
         (p.hsId? ' &nbsp;&middot;&nbsp; <span style="color:var(--steel-blue)">in HubSpot</span>':"")+
         (elSigned(p)? ' &nbsp;&middot;&nbsp; <span style="color:var(--good)">EL '+fmtDate(p.el.d)+'</span>':"")+
+        (elSigned(p)&&(p.el.dup||[]).length? ' &nbsp;&middot;&nbsp; <span style="color:var(--hi-vis)">'+(p.el.dup.length+1)+' records</span>':"")+
       '</div>';
     card.onclick = ()=>openDrawer(p.id);
     grid.appendChild(card);
@@ -1222,8 +1234,18 @@ function openDrawer(id){
     sec("Engagement letter",
       elSigned(p)
         ? '<dl class="kv"><dt>Status</dt><dd><b style="color:var(--good)">Signed</b> &mdash; Closed&nbsp;(Won), Client Pipeline</dd>'+
-          '<dt>EL date</dt><dd>'+fmtDate(p.el.d)+'</dd></dl>'+
-          '<div class="linkrow" style="margin-top:10px"><a class="linkbtn" target="_blank" rel="noopener" href="'+dealUrl(p)+'">Open the deal in HubSpot</a></div>'
+          '<dt>EL date</dt><dd>'+fmtDate(p.el.d)+'</dd>'+
+          ((p.el.dup||[]).length? '<dt>Other records</dt><dd><span style="color:var(--hi-vis)">'+
+             p.el.dup.map(fmtDate).join(', ')+'</span><br><span style="font-size:12.5px;color:var(--text-soft)">'+
+             'This partner has more than one Closed&nbsp;(Won) record. Merge them, or confirm the later one is a separate scope, '+
+             'before anyone quotes an engagement date.</span></dd>':'')+
+          '</dl>'+
+          (p.el.deal? '<div class="linkrow" style="margin-top:10px"><a class="linkbtn" target="_blank" rel="noopener" href="'+dealUrl(p)+'">Open the deal in HubSpot</a></div>'
+                    : '<p style="font-size:12px;color:var(--text-soft);margin:10px 0 0">No deal ID on file for this record yet.</p>')
+      : elApproved(p)
+        ? '<p style="margin:0;font-size:14.5px;color:var(--hi-vis)"><b>Approved, not signed.</b> An EL was approved on '+
+          fmtDate(p.el.approved)+' but no Closed&nbsp;(Won) record exists in the Client Pipeline &mdash; either it was never '+
+          'signed or the deal was never moved. Until that is resolved, treat everything below as research, not a live mandate.</p>'
       : elCovered(p)
         ? '<p style="margin:0;font-size:14.5px">No standalone EL. This platform sits under the <b>'+esc(p.el.via)+
           '</b> engagement, so it is in scope through the parent relationship &mdash; route deals via that sponsor.</p>'
@@ -1434,7 +1456,7 @@ function exportData(){
   const payload = {
     exported: new Date().toISOString(),
     source: "EL Partner Sourcing Desk",
-    elSource: "HubSpot Client Pipeline, Closed (Won) — pipeline 772899739 / stage 1128447549",
+    elSource: "HubSpot Client Pipeline, Closed (Won) — pipeline 772899739 / stage 1128447549. Roster as of 9 Oct 2026: 73 records, ~65 distinct partners.",
     verticals: VERTICALS,
     partners: merged
   };

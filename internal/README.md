@@ -17,12 +17,14 @@ copy-to-clipboard (the host blocks page-initiated downloads).
 To rebuild and redeploy after editing `partners.html`:
 
 ```bash
+python3 internal/fetch-fonts.py fonts.css      # only if fonts.css is missing
 python3 internal/build-artifact.py fonts.css desk.html
 # then republish desk.html to the SAME artifact URL above
 ```
 
-`fonts.css` holds `@font-face` rules with base64 `woff2` data URIs for Barlow 400/600/700
-and Barlow Condensed 700/800. Regenerate it from the Google Fonts CSS if it is lost.
+`fonts.css` is a build artifact, not source — it holds base64 `woff2` data URIs for
+Barlow 400/600/700 and Barlow Condensed 700/800, and is too large to keep in the repo.
+`fetch-fonts.py` regenerates it from Google Fonts whenever it has been cleaned up.
 
 Publishing to a *different* URL creates a second artifact instead of updating this
 one, so always pass the existing URL when redeploying.
@@ -72,33 +74,44 @@ Alpine shows up under HVAC, Commercial MEP and IT.
 ### Engagement letters — the source of truth
 
 Partner status comes from the **HubSpot Client Pipeline, `Closed (Won)` stage**
-(pipeline `772899739`, stage `1128447549`). That stage holds **69 deals across 68
-unique partners**, which is the signed-EL roster.
+(pipeline `772899739`, stage `1128447549`). As of **9 Oct 2026** that stage holds
+**73 deal records**, which the tool reconciles exactly.
 
 Every partner carries one of three states, shown as a chip on the card and as the
 first section of the drawer:
 
 | State | Count | Meaning |
 | --- | --- | --- |
-| **EL signed** | 68 | Has a Closed (Won) deal. Drawer shows the EL date and links to the deal. |
+| **EL signed** | 71 | Has a Closed (Won) record. Drawer shows the EL date and links to the deal. |
 | **Under parent EL** | 3 | Apex and Orion (under `Alpine Investors; Apex & Orion`) and Percheron (under `Alloy Roofing (Percheron Capital)`). In scope through the parent, no standalone EL. |
-| **No EL** | 1 | Heartland Paving Partners. |
+| **Approved, not signed** | 1 | Heartland Paving Partners — EL approved 14 Aug 2026, no Closed (Won) record. |
+
+71 signed partners plus 2 duplicate records = the 73 records in the stage.
+
+**Why the tool says 71 and the deal board says ~65 partners.** It is a counting
+convention, not missing data. The board groups a sponsor and its platform as one
+partner; the tool keeps them as separate rows, because you route a deal to a
+platform, not to a fund. Bertram/Ridgeline, O2/Harley, Gauge/Commercial Fire
+Protection and Walk On/Blue Fox/Link 1 are each one relationship but several rows.
+
+**Duplicate records** carry a yellow "N records" marker on the card and list the other
+dates in the drawer: **Solidaire** (2 Mar and 18 Aug 2026 — merge, or confirm the
+second is a new scope) and **Pine Services Group** (16 Oct 2025 and 4 May 2026).
 
 Sort by **Most recent EL** to see the newest signings first. American Landscaping
 Partners is the most recent (11 Aug 2026). There is no Engagement filter in the rail —
 with 68 of 72 signed, the distinction did not earn a filter; it lives on the card chip
 and in the drawer instead.
 
-**Heartland Paving Partners has no deal record in HubSpot at all** — not in Closed
-(Won), not anywhere in the Client Pipeline. The tool says so plainly in the drawer.
-Its research is retained but must not be presented to a seller as a live mandate.
+**Heartland Paving Partners** was approved for an EL on 14 Aug 2026 but has no Closed
+(Won) record — either it was never signed or the deal was never moved. The drawer says
+so plainly; its research is retained but must not be presented to a seller as a live
+mandate. Separately, `Heartland Home Services` (Grand Rapids, MI) is a different
+company at a different stage.
 
-Two other reconciliation notes:
-
-- **Pine Services Group has two Closed (Won) deals** (May 2026 and Oct 2025) — likely
-  a duplicate worth merging in the CRM.
-- `Heartland Home Services` (Grand Rapids, MI) *is* in the Client Pipeline but at a
-  different stage. It is a different company from Heartland Paving Partners.
+**Shore Capital** has no engagement of its own — it appears only as an associated
+company on the Skycrest record, so it is not a partner row. The relationship runs
+through Skycrest, and the Skycrest drawer notes this.
 
 ### HubSpot
 
