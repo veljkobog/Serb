@@ -94,9 +94,17 @@ partner; the tool keeps them as separate rows, because you route a deal to a
 platform, not to a fund. Bertram/Ridgeline, O2/Harley, Gauge/Commercial Fire
 Protection and Walk On/Blue Fox/Link 1 are each one relationship but several rows.
 
-**Duplicate records** carry a yellow "N records" marker on the card and list the other
-dates in the drawer: **Solidaire** (2 Mar and 18 Aug 2026 — merge, or confirm the
-second is a new scope) and **Pine Services Group** (16 Oct 2025 and 4 May 2026).
+**Duplicate records** carry a yellow "N CRM records" marker on the card and list the
+other dates in the drawer, each linking to its own deal: **Solidaire** (2 Mar and
+18 Aug 2026 — merge, or confirm the second is a new scope) and **Pine Services Group**
+(16 Oct 2025 and 4 May 2026).
+
+**Retainers** (Atlas Facilities Maintenance, Evergreen, Netstock, SubSplit) are marked
+with a blue chip on the card and noted beside the status in the drawer.
+
+All **73 deal IDs are on file** and every EL row links straight to its HubSpot record.
+Verified against the 8 Oct export: no date mismatches and no orphans in either
+direction.
 
 Sort by **Most recent EL** to see the newest signings first. American Landscaping
 Partners is the most recent (11 Aug 2026). There is no Engagement filter in the rail —
